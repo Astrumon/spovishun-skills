@@ -2,30 +2,75 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { parseArgs } from 'node:util';
+import { load as parseYaml } from 'js-yaml';
+import { validateManifest } from '../lib/manifest-validator.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
 
-const args = process.argv.slice(2);
+const [, , subcommand, ...rest] = process.argv;
 
-if (args.includes('--version') || args.includes('-v')) {
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
   console.log(pkg.version);
   process.exit(0);
 }
 
-if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-  process.stdout.write(
-    `spovishun-skills v${pkg.version}\n` +
-    `\n` +
-    `Usage:\n` +
-    `  spovishun-skills --version   Print the installed version\n` +
-    `  spovishun-skills --help      Show this help\n` +
-    `\n` +
-    `Commands will be added in upcoming tasks (init, install, sync, update, doctor).\n`
-  );
+if (!subcommand || subcommand === '--help' || subcommand === '-h') {
+  printHelp(pkg);
   process.exit(0);
 }
 
-process.stderr.write(`Unknown command: ${args.join(' ')}\n`);
-process.stderr.write(`Run 'spovishun-skills --help' for usage.\n`);
-process.exit(1);
+switch (subcommand) {
+  case 'validate':
+    process.exit(runValidate(rest));
+  default:
+    process.stderr.write(`Unknown command: ${subcommand}\n`);
+    process.stderr.write(`Run 'spovishun-skills --help' for usage.\n`);
+    process.exit(1);
+}
+
+function runValidate(args) {
+  const { positionals } = parseArgs({ args, allowPositionals: true });
+  const skillDir = positionals[0];
+  if (!skillDir) {
+    process.stderr.write(`Usage: spovishun-skills validate <skill-dir>\n`);
+    return 1;
+  }
+  const manifestPath = join(skillDir, 'manifest.yaml');
+  let raw;
+  try {
+    raw = readFileSync(manifestPath, 'utf8');
+  } catch (err) {
+    process.stderr.write(`Cannot read ${manifestPath}: ${err.message}\n`);
+    return 1;
+  }
+  let parsed;
+  try {
+    parsed = parseYaml(raw);
+  } catch (err) {
+    process.stderr.write(`Cannot parse ${manifestPath}: ${err.message}\n`);
+    return 1;
+  }
+  const result = validateManifest(parsed);
+  if (result.ok) {
+    process.stdout.write(`OK  ${manifestPath} is valid\n`);
+    return 0;
+  }
+  process.stderr.write(`ERR ${manifestPath} failed validation:\n`);
+  for (const e of result.errors) {
+    process.stderr.write(`  ${e.path}: ${e.message}\n`);
+  }
+  return 1;
+}
+
+function printHelp(pkg) {
+  process.stdout.write(
+    `spovishun-skills v${pkg.version}\n\n` +
+    `Usage:\n` +
+    `  spovishun-skills --version              Print the installed version\n` +
+    `  spovishun-skills --help                 Show this help\n` +
+    `  spovishun-skills validate <skill-dir>   Validate a skill's manifest.yaml\n\n` +
+    `More commands (init, install, sync, update, doctor) will be added in upcoming tasks.\n`
+  );
+}

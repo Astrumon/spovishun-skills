@@ -1,0 +1,12 @@
+id: debugging-wizard
+version: 1.0.0
+category: universal
+description: Diagnoses bugs, runtime errors, and unexpected behavior by analyzing stack traces and reproducing issues.
+triggers:
+  en:
+    - "bug"
+    - "error"
+    - "debug"
+  uk:
+    - "помилка"
+    - "не працює"

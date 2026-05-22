@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node --test test/manifest-validator.test.js)",
+      "Bash(git rm *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(node bin/spovishun-skills.js --version)",
+      "Bash(node bin/spovishun-skills.js --help)",
+      "Bash(node bin/spovishun-skills.js validate skills/commit)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(node bin/spovishun-skills.js validate /nonexistent/path)",
+      "Bash(mkdir -p /tmp/bad-skill)",
+      "Bash(echo 'id: BadID *)",
+      "Bash(node bin/spovishun-skills.js validate /tmp/bad-skill)",
+      "Bash(node bin/spovishun-skills.js bogus)",
+      "Bash(git restore *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

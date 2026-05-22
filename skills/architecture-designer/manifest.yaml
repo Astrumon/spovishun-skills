@@ -1,0 +1,12 @@
+id: architecture-designer
+version: 1.0.0
+category: universal
+description: Designs new system architecture, reviews existing designs, and evaluates technology trade-offs at module/system level.
+triggers:
+  en:
+    - "architecture"
+    - "design decision"
+    - "ADR"
+  uk:
+    - "архітектура"
+    - "дизайн рішення"

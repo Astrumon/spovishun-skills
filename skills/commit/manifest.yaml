@@ -1,0 +1,11 @@
+id: commit
+version: 1.0.0
+category: universal
+description: Commit staged or all current changes following Conventional Commits and the project's commit conventions.
+triggers:
+  en:
+    - "commit changes"
+    - "create a commit"
+  uk:
+    - "закоміть"
+    - "зроби коміт"

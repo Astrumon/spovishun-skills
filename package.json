@@ -24,8 +24,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "lint": "node --check bin/spovishun-skills.js",
-    "test": "node --test --test-reporter=spec test 2>/dev/null || echo \"no tests yet\""
+    "lint": "node --check bin/spovishun-skills.js && node scripts/validate-all-manifests.js",
+    "test": "node --test --test-reporter=spec"
   },
   "keywords": [
     "claude-code",
@@ -47,5 +47,10 @@
   "bugs": {
     "url": "https://github.com/Astrumon/spovishun-skills/issues"
   },
-  "homepage": "https://github.com/Astrumon/spovishun-skills#readme"
+  "homepage": "https://github.com/Astrumon/spovishun-skills#readme",
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "js-yaml": "^4.1.1"
+  }
 }

@@ -1,0 +1,12 @@
+id: code-reviewer
+version: 1.0.0
+category: universal
+description: Reviews code changes for correctness, security, performance, and adherence to project conventions.
+triggers:
+  en:
+    - "review this PR"
+    - "code review"
+    - "check this diff"
+  uk:
+    - "переглянь код"
+    - "код рев'ю"

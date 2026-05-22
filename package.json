@@ -24,7 +24,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "lint": "node --check bin/spovishun-skills.js",
+    "lint": "node --check bin/spovishun-skills.js && node scripts/validate-all-manifests.js",
     "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
   },
   "keywords": [

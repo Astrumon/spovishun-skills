@@ -1,0 +1,51 @@
+{
+  "name": "spovishun-skills",
+  "version": "0.0.1",
+  "description": "Portable Claude Code skills, agents, hooks and rules — bootstrapped from the Spovishun project. Installs into Claude Code, Codex, Windsurf and Cursor via per-assistant adapters.",
+  "type": "module",
+  "bin": {
+    "spovishun-skills": "bin/spovishun-skills.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "skills",
+    "agents",
+    "hooks",
+    "rules",
+    "scripts",
+    "adapters",
+    "schema",
+    ".claude-plugin",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "lint": "node --check bin/spovishun-skills.js",
+    "test": "node --test --test-reporter=spec test 2>/dev/null || echo \"no tests yet\""
+  },
+  "keywords": [
+    "claude-code",
+    "claude-plugin",
+    "skills",
+    "agents",
+    "hooks",
+    "ai-assistant",
+    "codex",
+    "windsurf",
+    "cursor"
+  ],
+  "author": "Danylo Bidnyk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Astrumon/spovishun-skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Astrumon/spovishun-skills/issues"
+  },
+  "homepage": "https://github.com/Astrumon/spovishun-skills#readme"
+}

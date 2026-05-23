@@ -1,0 +1,23 @@
+project:
+  name: "TestProject"
+  language: "uk"
+
+stack:
+  kotlin: true
+  postgres: true
+  telegram: true
+  notion: true
+
+git:
+  branch_prefix: "feature/test"
+  main_branch: "main"
+  dev_branch: "develop"
+
+notion:
+  token_env: "NOTION_TOKEN"
+  database_id: "3193462f68a980d69ec9c7ccc6329b88"
+  epics_database_id: "d0c00200abc1234567890abcdef12345"
+  root_page_id: "3183462f68a9803aa93ae34eb81d2659"
+  docs_root_id: "3193462f68a981b79936e2e45291df85"
+  claude_md_page_id: "31c3462f68a9803eaaa8c5dc2c128ff3"
+  epics_group_page_id: "3633462f68a981098385fa260e9ce132"

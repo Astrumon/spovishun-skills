@@ -1,0 +1,14 @@
+project:
+  name: "NotionProject"
+  language: "uk"
+
+stack:
+  kotlin: false
+  postgres: false
+  telegram: false
+  notion: true
+
+git:
+  branch_prefix: "feature/test"
+  main_branch: "main"
+  dev_branch: "develop"

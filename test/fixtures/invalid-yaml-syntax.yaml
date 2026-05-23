@@ -1,0 +1,4 @@
+project:
+  name: "BrokenProject"
+  language: uk
+  bad key: [unclosed

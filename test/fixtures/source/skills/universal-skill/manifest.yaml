@@ -1,0 +1,9 @@
+id: universal-skill
+version: 1.0.0
+category: universal
+description: A universal skill that installs for every stack configuration.
+triggers:
+  en:
+    - "run universal"
+  uk:
+    - "запусти universal"

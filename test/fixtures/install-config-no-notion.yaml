@@ -1,0 +1,14 @@
+project:
+  name: "FixtureProject"
+  language: "uk"
+
+stack:
+  kotlin: false
+  postgres: false
+  telegram: false
+  notion: false
+
+git:
+  branch_prefix: "feature/"
+  main_branch: "main"
+  dev_branch: "develop"

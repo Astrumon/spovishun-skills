@@ -7,6 +7,7 @@ import { load as parseYaml } from 'js-yaml';
 import { createPromptModule } from 'inquirer';
 import { validateManifest } from '../lib/manifest-validator.js';
 import { runInit } from './init.js';
+import { runInstall } from './install.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
@@ -35,6 +36,26 @@ switch (subcommand) {
         process.exit(1);
       });
     break;
+  case 'install': {
+    const { values: installOpts } = parseArgs({
+      args: rest,
+      options: { target: { type: 'string' } },
+      allowPositionals: false,
+    });
+    if (!installOpts.target) {
+      process.stderr.write(`Error: --target is required.\n`);
+      process.stderr.write(`Usage: spovishun-skills install --target=claude\n`);
+      process.exit(1);
+    }
+    runInstall({ target: installOpts.target, cwd: process.cwd(), out: process.stdout })
+      .then(() => process.exit(0))
+      .catch((err) => {
+        process.stderr.write(`install failed: ${err.message}\n`);
+        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
+        process.exit(1);
+      });
+    break;
+  }
   default:
     process.stderr.write(`Unknown command: ${subcommand}\n`);
     process.stderr.write(`Run 'spovishun-skills --help' for usage.\n`);
@@ -82,7 +103,8 @@ function printHelp(pkg) {
     `  spovishun-skills --version              Print the installed version\n` +
     `  spovishun-skills --help                 Show this help\n` +
     `  spovishun-skills validate <skill-dir>   Validate a skill's manifest.yaml\n` +
-    `  spovishun-skills init                   Create spovishun-skills.config.yaml interactively\n\n` +
-    `More commands (install, sync, update, doctor) will be added in upcoming tasks.\n`
+    `  spovishun-skills init                   Create spovishun-skills.config.yaml interactively\n` +
+    `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude)\n\n` +
+    `More commands (sync, update, doctor) will be added in upcoming tasks.\n`
   );
 }

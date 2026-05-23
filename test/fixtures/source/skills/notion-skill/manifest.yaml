@@ -1,0 +1,9 @@
+id: notion-skill
+version: 1.0.0
+category: stack-specific
+description: A skill that requires Notion integration to be active in the stack.
+requires:
+  - notion
+placeholders:
+  - key: NOTION_DATABASE_ID
+    description: Main Notion database ID

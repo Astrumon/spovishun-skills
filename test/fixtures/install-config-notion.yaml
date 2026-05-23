@@ -1,0 +1,19 @@
+project:
+  name: "NotionProject"
+  language: "uk"
+
+stack:
+  kotlin: false
+  postgres: false
+  telegram: false
+  notion: true
+
+git:
+  branch_prefix: "feature/"
+  main_branch: "main"
+  dev_branch: "develop"
+
+notion:
+  token_env: "NOTION_TOKEN"
+  database_id: "3193462f68a980d69ec9c7ccc6329b88"
+  epics_database_id: "d0c00200abc1234567890abcdef12345"

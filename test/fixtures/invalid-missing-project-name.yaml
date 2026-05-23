@@ -1,0 +1,13 @@
+project:
+  language: "uk"
+
+stack:
+  kotlin: false
+  postgres: false
+  telegram: false
+  notion: false
+
+git:
+  branch_prefix: "feature/test"
+  main_branch: "main"
+  dev_branch: "develop"

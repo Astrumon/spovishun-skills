@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Astrumon/spovishun-skills/schema/config.schema.json",
+  "title": "Spovishun Skills Consumer Config",
+  "description": "Schema for spovishun-skills.config.yaml placed in the consumer project root.",
+  "type": "object",
+  "required": ["project", "stack", "git"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name", "language"],
+      "properties": {
+        "name":     { "type": "string", "minLength": 1, "maxLength": 100 },
+        "language": { "type": "string", "enum": ["uk", "en"] }
+      },
+      "unevaluatedProperties": false
+    },
+    "stack": {
+      "type": "object",
+      "required": ["kotlin", "postgres", "telegram", "notion"],
+      "properties": {
+        "kotlin":   { "type": "boolean" },
+        "postgres": { "type": "boolean" },
+        "telegram": { "type": "boolean" },
+        "notion":   { "type": "boolean" }
+      },
+      "unevaluatedProperties": false
+    },
+    "git": {
+      "type": "object",
+      "required": ["branch_prefix", "main_branch", "dev_branch"],
+      "properties": {
+        "branch_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9/_-]*$" },
+        "main_branch":   { "type": "string", "minLength": 1 },
+        "dev_branch":    { "type": "string", "minLength": 1 }
+      },
+      "unevaluatedProperties": false
+    },
+    "notion": {
+      "type": "object",
+      "properties": {
+        "token_env":           { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "database_id":         { "type": "string", "pattern": "^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "root_page_id":        { "type": "string", "minLength": 1 },
+        "docs_root_id":        { "type": "string", "minLength": 1 },
+        "claude_md_page_id":   { "type": "string", "minLength": 1 },
+        "epics_database_id":   { "type": "string", "minLength": 1 },
+        "epics_group_page_id": { "type": "string", "minLength": 1 }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "stack": {
+            "type": "object",
+            "properties": { "notion": { "const": true } },
+            "required": ["notion"]
+          }
+        },
+        "required": ["stack"]
+      },
+      "then": {
+        "type": "object",
+        "required": ["notion"],
+        "properties": {
+          "notion": {
+            "type": "object",
+            "required": ["token_env", "database_id", "epics_database_id"],
+            "properties": {
+              "token_env":         true,
+              "database_id":       true,
+              "epics_database_id": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

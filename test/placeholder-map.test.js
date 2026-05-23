@@ -1,0 +1,64 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildPlaceholderMap } from '../lib/placeholder-map.js';
+
+const fullConfig = {
+  project: { name: 'TestProject', language: 'uk' },
+  stack: { kotlin: true, postgres: false, telegram: false, notion: true },
+  notion: {
+    token_env: 'NOTION_TOKEN',
+    database_id: 'aabbccdd1122334455667788aabbccdd',
+    epics_database_id: 'eeff00112233445566778899eeff0011',
+    root_page_id: '11223344556677889900aabbccddeeff',
+    docs_root_id: 'ffeeddccbbaa00998877665544332211',
+    claude_md_page_id: '00112233445566778899aabbccddeeff',
+    epics_group_page_id: 'aabbccddeeff00112233445566778899',
+  },
+  git: { branch_prefix: 'feature/test', main_branch: 'main', dev_branch: 'develop' },
+};
+
+const minimalConfig = {
+  project: { name: 'MinimalProject', language: 'en' },
+  stack: { kotlin: false, postgres: false, telegram: false, notion: false },
+  git: { branch_prefix: 'feature/min', main_branch: 'main', dev_branch: 'develop' },
+};
+
+test('full config → all keys including NOTION_* are present', () => {
+  const map = buildPlaceholderMap(fullConfig);
+
+  assert.equal(map.get('PROJECT_NAME'), 'TestProject');
+  assert.equal(map.get('PROJECT_LANGUAGE'), 'uk');
+  assert.equal(map.get('GIT_BRANCH_PREFIX'), 'feature/test');
+  assert.equal(map.get('BRANCH_PREFIX'), 'feature/test');
+  assert.equal(map.get('GIT_MAIN_BRANCH'), 'main');
+  assert.equal(map.get('GIT_DEV_BRANCH'), 'develop');
+  assert.equal(map.get('NOTION_TOKEN_ENV'), 'NOTION_TOKEN');
+  assert.equal(map.get('NOTION_DATABASE_ID'), 'aabbccdd1122334455667788aabbccdd');
+  assert.equal(map.get('NOTION_EPICS_DATABASE_ID'), 'eeff00112233445566778899eeff0011');
+});
+
+test('no-notion config → no NOTION_* keys in map', () => {
+  const map = buildPlaceholderMap(minimalConfig);
+
+  assert.equal(map.has('NOTION_TOKEN_ENV'), false);
+  assert.equal(map.has('NOTION_DATABASE_ID'), false);
+  assert.equal(map.has('NOTION_EPICS_DATABASE_ID'), false);
+  assert.equal(map.has('NOTION_ROOT_PAGE_ID'), false);
+});
+
+test('all values in map are strings', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  for (const [key, value] of map) {
+    assert.equal(typeof value, 'string', `Expected string for key ${key}, got ${typeof value}`);
+  }
+});
+
+test('GIT_BRANCH_PREFIX and BRANCH_PREFIX share the same value', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  assert.equal(map.get('GIT_BRANCH_PREFIX'), map.get('BRANCH_PREFIX'));
+});
+
+test('returns a Map instance', () => {
+  const map = buildPlaceholderMap(minimalConfig);
+  assert.ok(map instanceof Map);
+});

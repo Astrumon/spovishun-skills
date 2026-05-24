@@ -1,12 +1,15 @@
 id: write-a-skill
 version: 1.0.0
-category: universal
-description: Walks the user through creating a new spovishun-skills skill (SKILL.md + manifest.yaml) following the repo's schema, then validates the manifest. Use when the user wants to create, write, or add a new skill.
+category: configurable
+description: Guides the user through creating a new Claude Code skill in their own project's .claude/skills/ directory — drafts SKILL.md, decides structure, and reviews the result. Use when the user wants to create, write, build, or add a new skill.
+placeholders:
+  - key: PROJECT_LANGUAGE
+    description: Language for user-facing communication (e.g. "uk", "en"). Comes from project.language in the consumer config.
 triggers:
   en:
     - "write a skill"
     - "new skill"
-    - "create skill"
+    - "create a skill"
     - "add a skill"
     - "build a skill"
   uk:

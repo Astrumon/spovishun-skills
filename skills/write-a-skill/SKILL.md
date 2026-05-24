@@ -1,142 +1,165 @@
 ---
 name: write-a-skill
 description: >
-  Creates a new spovishun-skills skill following the repo's structure (SKILL.md + manifest.yaml).
-  Walks the user through the required fields, category choice, stack flags, placeholders, and triggers.
-  Validates the manifest at the end. Use when user wants to create, write, build, or add a new skill.
-  Triggers on: "write a skill", "new skill", "create skill", "add a skill",
-  "напиши скіл", "новий скіл", "створи скіл", "додай скіл".
+  Create a new Claude Code skill for the user's own project — drafts SKILL.md with proper frontmatter,
+  progressive disclosure structure, and optional bundled resources. Use when the user wants to create,
+  write, build, or add a new skill in their project (NOT for contributing to the spovishun-skills
+  package itself — for that, use the package's own contributor guide).
+  Triggers on: "write a skill", "create a skill", "new skill", "add a skill", "build a skill",
+  "напиши скіл", "створи скіл", "новий скіл", "додай скіл", "зроби скіл".
 ---
 
 # Write a Skill
 
-You are creating a new skill for the `spovishun-skills` plugin. Every skill in this repo is
-**exactly two files** in `skills/<id>/`: `SKILL.md` (the body) and `manifest.yaml` (metadata).
-No sub-directories, no extra files, no scripts inside the skill folder.
+Help the user create a new Claude Code skill inside **their own project's** `.claude/skills/` directory.
+The skill format below is the native Claude Code format — a single self-contained directory with
+`SKILL.md` at minimum, and optional reference files / scripts as needed.
 
-Communicate with the user in Ukrainian. Skill content itself must be written in English.
+Communicate with the user in {{PROJECT_LANGUAGE}}.
 
-## Step 1 — Gather requirements
+## Process
+
+### Step 1 — Gather requirements
 
 Ask one question at a time:
 
-1. **Skill id** — kebab-case, 2–64 chars, must match the directory name. Reject anything that does
-   not match `^[a-z][a-z0-9-]*[a-z0-9]$`.
-2. **What does the skill do?** — one or two sentences. This becomes the description.
-3. **Category** — exactly one of:
-   - `universal` — works in any project regardless of stack. Must NOT declare `requires`.
-   - `stack-specific` — needs specific stack flags. MUST declare `requires` with at least one of
-     `kotlin | postgres | telegram | notion | docker`.
-   - `configurable` — works in any project but uses Mustache placeholders that the consumer fills in.
-4. **Triggers** — phrases (EN + UK) that hint to Claude when to invoke the skill.
-5. **Placeholders** — only if the skill body uses `{{KEY}}` substitutions. Each placeholder must
-   be `UPPER_SNAKE_CASE`. Most common keys are already defined in `lib/placeholder-map.js`
-   (e.g. `PROJECT_NAME`, `NOTION_DATABASE_ID`, `GIT_BRANCH_PREFIX`) — reuse them.
+1. **Skill id** — kebab-case (lowercase, hyphens, no spaces). Must match the directory name.
+2. **What task or domain does the skill cover?** — one or two sentences.
+3. **What specific use cases should it handle?** — concrete examples of when the user would invoke it.
+4. **Does it need executable scripts?** — for deterministic operations (validation, formatting,
+   data transforms). If yes, scripts go in `scripts/` inside the skill directory.
+5. **Any reference material to bundle?** — large docs, schemas, examples that would bloat SKILL.md.
+6. **Trigger phrases** — what would the user say to make Claude pick this skill? Provide
+   examples in both English and {{PROJECT_LANGUAGE}}.
 
-## Step 2 — Draft SKILL.md
+### Step 2 — Decide structure
 
-Structure (no rigid template, but every skill should have):
+Default to a single `SKILL.md`. Split into multiple files only when:
 
-```md
+- `SKILL.md` would exceed ~100 lines
+- Content has distinct domains (e.g. finance schemas vs sales schemas)
+- Advanced features are rarely needed and would distract from the common path
+
+Recommended layout when splitting is needed:
+
+```
+.claude/skills/<skill-id>/
+├── SKILL.md           # Main instructions (REQUIRED)
+├── REFERENCE.md       # Detailed docs (optional)
+├── EXAMPLES.md        # Worked examples (optional)
+└── scripts/           # Utility scripts (optional)
+    └── helper.js
+```
+
+`SKILL.md` should link to siblings: `See [REFERENCE.md](REFERENCE.md) for full schema.`
+
+### Step 3 — Draft SKILL.md
+
+Use this template:
+
+```markdown
 ---
-name: <id>
-description: >
-  <1–2 sentence summary that ends with "Triggers on: ...">
+name: <skill-id>
+description: <1–2 sentences describing capability. Use when <specific triggers>.>
 ---
 
-# <Human Title>
+# <Human-Readable Title>
 
-<Short intro: who this skill is for, what it does, what it doesn't do.>
+## Quick start
 
-## Workflow / Process
+<Smallest working example — code snippet or 3-step recipe.>
 
-<Numbered steps. Be concrete — name files, commands, output formats.>
+## Workflow
 
-## Output / Deliverable
+<Numbered steps. Be concrete. For complex tasks, include a checklist.>
 
-<What the skill produces. Template if applicable.>
+## Examples / Common patterns
 
-## Critical Constraints (optional)
+<2–3 worked examples covering the main use cases.>
+
+## Advanced features
+
+<Link to REFERENCE.md / EXAMPLES.md if they exist. Otherwise inline.>
+
+## Constraints (optional)
 
 **MUST DO:** ...
 **MUST NOT DO:** ...
-
-## Related Skills (optional)
-
-- `other-skill` — how it fits in the chain
 ```
+
+### Step 4 — Write the `description` carefully
+
+The description is **the only thing Claude sees** when deciding whether to invoke the skill.
+It is surfaced in the system prompt alongside every other installed skill.
 
 Rules:
-- Write the body in English. If user-facing text needs to be in Ukrainian, say so explicitly
-  (e.g. "Respond to the user in Ukrainian").
-- Reference other skills by id when the workflow chains (`idea-brainstormer` → this → `task-decomposer`).
-- Use `{{PLACEHOLDER_KEY}}` Mustache syntax only for values declared in `manifest.yaml`.
-- Do NOT invent new top-level files (`REFERENCE.md`, `EXAMPLES.md`, `scripts/`) — the adapter
-  reads only `SKILL.md`.
 
-## Step 3 — Draft manifest.yaml
+- **≤ 1024 characters**
+- **Third person, present tense** (not "I create skills..." but "Creates skills...")
+- **First sentence:** what the skill does
+- **Second sentence:** when to trigger it — list specific keywords, file types, or contexts
 
-```yaml
-id: <same as directory name>
-version: 1.0.0
-category: universal | configurable | stack-specific
-description: <max 300 chars, third person, ends with a hint at when to trigger>
-requires:           # ONLY for stack-specific; must have ≥1 item
-  - notion
-placeholders:       # ONLY if SKILL.md uses {{KEY}}
-  - key: PROJECT_NAME
-    description: <what this value represents>
-triggers:
-  en:
-    - "create a skill"
-  uk:
-    - "створи скіл"
+✅ Good:
+
+```
+Extract text and tables from PDF files, fill forms, merge documents. Use when working with
+PDF files or when the user mentions PDFs, forms, or document extraction.
 ```
 
-Rules per schema (`schema/manifest.schema.json`):
-- `universal` → MUST NOT have `requires`.
-- `stack-specific` → MUST have `requires` with ≥1 item from
-  `kotlin | postgres | telegram | notion | docker`.
-- `description` length: 10–300 chars.
-- Unknown fields are rejected (the schema is strict). Common typos to avoid:
-  `tools`, `model`, `maxTurns`, `user_invocable` — none of these belong in a skill manifest.
+❌ Bad:
 
-## Step 4 — Validate
-
-Run from the repo root:
-
-```bash
-node bin/spovishun-skills.js validate skills/<id>
+```
+Helps with documents.
 ```
 
-Or validate every manifest at once:
+The bad version gives Claude no way to distinguish this from any other document skill.
 
-```bash
-node scripts/validate-all-manifests.js
-```
+### Step 5 — Decide on scripts
 
-If validation fails, fix the manifest and re-run. Do not move on until it passes.
+Add a script in `scripts/` only when:
 
-## Step 5 — Confirm with the user
+- The operation is **deterministic** (validation, formatting, parsing)
+- The same code would otherwise be regenerated on every invocation
+- Errors need explicit, predictable handling
 
-Show the user the two files and ask:
-- Does the description correctly hint at when this skill should trigger?
-- Are the triggers (EN + UK) phrases the user would actually say?
-- Does the workflow cover the use cases discussed in Step 1?
+Scripts save tokens and improve reliability versus inline-generated code.
+
+If a script is needed, name it clearly (`validate-config.js`, not `helper.js`), keep it
+self-contained, and document its CLI interface inside SKILL.md.
+
+### Step 6 — Review with the user
+
+Present the draft and ask:
+
+- Does the description correctly capture when this skill should fire?
+- Are the trigger phrases the actual phrases you would say?
+- Does the workflow cover the use cases from Step 1?
+- Anything missing, unclear, or over-detailed?
+
+Iterate based on feedback.
+
+### Step 7 — Save and confirm
+
+Write the skill to `.claude/skills/<skill-id>/SKILL.md` (plus any sibling files / scripts).
+Confirm the path with the user. Suggest they restart their Claude Code session so the new
+skill is picked up.
 
 ## Review Checklist
 
 Before declaring done, verify:
 
-- [ ] Directory name matches `manifest.yaml#id`
-- [ ] `category` correct and `requires` matches it (universal = none; stack-specific = ≥1)
-- [ ] `description` ≤ 300 chars, third person, mentions triggers
-- [ ] Triggers include both `en` and `uk` arrays (if relevant)
-- [ ] Every `{{KEY}}` in SKILL.md is declared in `placeholders`
-- [ ] `node scripts/validate-all-manifests.js` exits 0
-- [ ] No extra files in `skills/<id>/` besides SKILL.md and manifest.yaml
+- [ ] Frontmatter `name` matches the directory name
+- [ ] `description` includes both **what** and **when to trigger** (third person, ≤ 1024 chars)
+- [ ] `SKILL.md` has a Quick Start that works as written
+- [ ] Workflow steps are concrete (no vague "do the thing")
+- [ ] No time-sensitive info ("as of 2024..." rots fast)
+- [ ] Terminology is consistent throughout
+- [ ] If split into multiple files, all links resolve and references stay one level deep
+- [ ] If scripts are included, each has a documented CLI interface
 
-## Related Skills
+## Scope — IMPORTANT
 
-- `skill-security-auditor` — audit the skill once written
-- `discover-patterns` — find existing skills with similar workflows before drafting
+This skill produces skills for the **user's own project**, written to `.claude/skills/` in their
+working directory. It does NOT produce contributions to the `spovishun-skills` plugin package.
+The plugin uses a stricter schema (`manifest.yaml` + body, no extra files inside the skill
+directory) — those are authored differently and validated via the plugin's own tooling.

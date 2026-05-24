@@ -1,0 +1,18 @@
+id: dependency-injection-architecture
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+description: Clean Architecture layering and Koin DI patterns for Kotlin apps. Enforces layer boundary rules, constructor injection, interface bindings, and profile-based module switching.
+triggers:
+  en:
+    - "dependency injection"
+    - "Koin"
+    - "DI module"
+    - "layer architecture"
+    - "add new service"
+    - "repository pattern"
+  uk:
+    - "ін'єкція залежностей"
+    - "Koin модуль"
+    - "архітектура шарів"

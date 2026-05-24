@@ -1,0 +1,27 @@
+id: newtask
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Creates a new task on the project Notion board and prepares the corresponding git branch. Covers task numbering, branch naming, epic linking, blocker wiring, and 5-section page structure (Goal/Branch/Steps/DoD/prompt).
+placeholders:
+  - key: NOTION_BOARD_COLLECTION_ID
+    description: Notion data_source_id of the task board collection
+  - key: NOTION_CLAUDE_MD_PAGE_ID
+    description: Notion page ID of the CLAUDE.md page to fetch project context
+  - key: NOTION_EPICS_DATA_SOURCE_ID
+    description: Notion data_source_id of the Epics database
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject)
+  - key: GIT_DEVELOP_BRANCH
+    description: Name of the development base branch (e.g. develop or main)
+triggers:
+  en:
+    - "new task"
+    - "create task"
+    - "add task"
+  uk:
+    - "нова задача"
+    - "створи задачу"
+    - "додай таск"
+    - "нова таска"

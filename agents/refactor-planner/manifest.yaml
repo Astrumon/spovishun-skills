@@ -1,0 +1,15 @@
+id: refactor-planner
+version: 1.0.0
+category: universal
+description: Creates detailed refactoring plans saved to ./docs/refactoring/. Analyzes violations, proposes a sequenced plan with risk assessment. Planning only — does not apply changes.
+triggers:
+  en:
+    - "plan refactor"
+    - "create refactoring plan"
+    - "how to refactor"
+    - "refactoring strategy"
+  uk:
+    - "план рефакторингу"
+    - "як рефакторити"
+    - "стратегія рефакторингу"
+    - "сплануй рефакторинг"

@@ -1,0 +1,15 @@
+id: documentation-architect
+version: 1.0.0
+category: universal
+description: Creates structured markdown documentation under ./docs/ for later transfer to Notion or other knowledge bases. Does not call Notion MCP — output is local markdown files only.
+triggers:
+  en:
+    - "write documentation"
+    - "create docs"
+    - "document this feature"
+    - "generate architecture docs"
+  uk:
+    - "напиши документацію"
+    - "створи доку"
+    - "задокументуй фічу"
+    - "архітектурна документація"

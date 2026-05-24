@@ -1,12 +1,15 @@
 id: code-reviewer
-version: 1.0.0
+version: 1.1.0
 category: universal
-description: Reviews code changes for correctness, security, performance, and adherence to project conventions.
+description: Reviews pull requests and code changes for bugs, security vulnerabilities, performance issues, and architectural correctness. Produces prioritized Critical/Major/Minor findings.
 triggers:
   en:
     - "review this PR"
     - "code review"
     - "check this diff"
+    - "review this code"
   uk:
     - "переглянь код"
     - "код рев'ю"
+    - "перевір PR"
+    - "зроби рев'ю"

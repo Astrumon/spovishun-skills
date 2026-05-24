@@ -18,6 +18,10 @@ yarn-error.log*
 spovishun-skills.config.yaml
 spovishun-skills.config.yml
 
+# Per-developer Claude Code permissions and adapter-generated settings
+.claude/settings.local.json
+.claude/settings.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

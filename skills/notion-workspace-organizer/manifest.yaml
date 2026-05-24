@@ -1,0 +1,17 @@
+id: notion-workspace-organizer
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Reorganizes Notion workspaces — maps structure, proposes before/after plans, moves pages in bulk (up to 100 per call), enforces naming conventions, and enforces max 3-level page hierarchy.
+triggers:
+  en:
+    - "organize my Notion"
+    - "move this page to"
+    - "restructure my workspace"
+    - "create a hub page"
+    - "clean up Notion"
+  uk:
+    - "організуй Notion"
+    - "перемісти сторінку"
+    - "реструктуризуй простір"

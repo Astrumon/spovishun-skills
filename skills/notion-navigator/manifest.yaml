@@ -1,0 +1,38 @@
+id: notion-navigator
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Reference map of the project Notion workspace. Decision table for where to put new documentation by category, refresh workflow, and critical rule to never create standalone pages.
+placeholders:
+  - key: NOTION_CATEGORY_ARCHITECTURE_ID
+    description: Notion page ID of the Architecture category group page
+  - key: NOTION_CATEGORY_DATABASE_ID
+    description: Notion page ID of the Database category group page
+  - key: NOTION_CATEGORY_TESTING_ID
+    description: Notion page ID of the Testing category group page
+  - key: NOTION_CATEGORY_CICD_ID
+    description: Notion page ID of the CI/CD category group page
+  - key: NOTION_CATEGORY_FEATURES_ID
+    description: Notion page ID of the Features category group page
+  - key: NOTION_CATEGORY_AITOOLS_ID
+    description: Notion page ID of the AI Tools category group page
+  - key: NOTION_CATEGORY_EPICS_ID
+    description: Notion page ID of the Epics category group page
+  - key: NOTION_CLAUDE_MD_PAGE_ID
+    description: Notion page ID of the CLAUDE.md page
+  - key: NOTION_BOARD_COLLECTION_ID
+    description: Notion data_source_id of the task board collection
+  - key: NOTION_EPICS_DATA_SOURCE_ID
+    description: Notion data_source_id of the Epics database
+triggers:
+  en:
+    - "where in Notion"
+    - "notion page for"
+    - "find the notion page"
+    - "which page to update"
+  uk:
+    - "де в Notion"
+    - "яка сторінка"
+    - "куди додати документацію"
+    - "оновити карту"

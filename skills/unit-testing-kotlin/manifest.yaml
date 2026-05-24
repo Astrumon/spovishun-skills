@@ -1,0 +1,18 @@
+id: unit-testing-kotlin
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+description: Unit testing for Kotlin projects using JUnit 5, MockK, and Kotest. Covers AAA pattern, coroutine testing with runTest, MockK coEvery/coVerify, and test naming conventions.
+triggers:
+  en:
+    - "write tests for"
+    - "add unit test"
+    - "test this function"
+    - "TDD"
+    - "MockK"
+    - "runTest"
+  uk:
+    - "напиши тести"
+    - "unit тест"
+    - "протестуй функцію"

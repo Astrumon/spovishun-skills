@@ -1,0 +1,20 @@
+id: telegram-bot-development
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - telegram
+description: Kotlin Telegram bot development — command routing, inline keyboards, coroutine scope, BotMessages, and Command→Controller→Service layer enforcement.
+triggers:
+  en:
+    - "Telegram bot"
+    - "bot command"
+    - "inline keyboard"
+    - "callback query"
+    - "MessageHandler"
+    - "bot deployment"
+  uk:
+    - "команда бота"
+    - "інлайн клавіатура"
+    - "обробник повідомлень"
+    - "реєстрація бота"

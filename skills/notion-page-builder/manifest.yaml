@@ -1,0 +1,17 @@
+id: notion-page-builder
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Creates and updates Notion pages via MCP. Covers icon rules, content structure, replace_content limitations, image placeholders, and database schema fetching before entry creation.
+triggers:
+  en:
+    - "create a Notion page"
+    - "add content to Notion"
+    - "update Notion page content"
+    - "build a Notion page"
+    - "set icon on Notion page"
+  uk:
+    - "створи сторінку в Notion"
+    - "додай контент до Notion"
+    - "онови вміст Notion"

@@ -1,0 +1,21 @@
+id: idea-brainstormer
+version: 1.0.0
+category: configurable
+description: Structures raw ideas into actionable Idea Briefs with problem statement, scope, risks, and feasibility assessment. Produces structured output for handoff to solution-designer.
+placeholders:
+  - key: PROJECT_NAME
+    description: Project name used in the context section of the Idea Brief
+    default: "the project"
+triggers:
+  en:
+    - "idea"
+    - "what if we"
+    - "I want to add"
+    - "feature idea"
+    - "brainstorm"
+  uk:
+    - "нова ідея"
+    - "хочу додати"
+    - "що якщо"
+    - "давай обговоримо"
+    - "є ідея"

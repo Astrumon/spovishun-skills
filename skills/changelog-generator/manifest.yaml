@@ -1,0 +1,14 @@
+id: changelog-generator
+version: 1.0.0
+category: universal
+description: Generates CHANGELOG entries from git commit history using Conventional Commits and Keep a Changelog format. Detects semantic version bumps and renders structured release notes.
+triggers:
+  en:
+    - "generate changelog"
+    - "release notes"
+    - "what changed in v"
+    - "changelog for this release"
+  uk:
+    - "згенеруй changelog"
+    - "нотатки до релізу"
+    - "що змінилося у версії"

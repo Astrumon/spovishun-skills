@@ -1,0 +1,15 @@
+id: plan-reviewer
+version: 1.0.0
+category: universal
+description: Technical plan reviewer. Audits implementation plans for completeness, risk, and architecture alignment. Produces a 7-section review report.
+triggers:
+  en:
+    - "review plan"
+    - "audit implementation plan"
+    - "check plan"
+    - "is this plan good"
+  uk:
+    - "перевір план"
+    - "аудит плану"
+    - "чи гарний план"
+    - "ревʼю плану"

@@ -1,0 +1,20 @@
+id: newepic
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Creates a new Epic record in the Notion Epics database. The Epic page owns its full research/spec body — no stubs. Covers MCP vs CLI path selection, section structure, and Goal property rules.
+placeholders:
+  - key: NOTION_EPICS_DATA_SOURCE_ID
+    description: Notion data_source_id of the Epics database
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used for the originating task reference (e.g. myproject)
+triggers:
+  en:
+    - "new epic"
+    - "create epic"
+    - "add epic"
+  uk:
+    - "новий епік"
+    - "створи епік"
+    - "додай епік"

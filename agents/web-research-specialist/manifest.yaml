@@ -1,0 +1,17 @@
+id: web-research-specialist
+version: 1.0.0
+category: universal
+description: Internet research agent. Fetches URLs, searches the web, and synthesizes findings into a structured report with a direct recommendation.
+triggers:
+  en:
+    - "research"
+    - "look up"
+    - "find documentation"
+    - "compare libraries"
+    - "best practice for"
+  uk:
+    - "знайди інформацію"
+    - "дослідження"
+    - "порівняй бібліотеки"
+    - "знайди документацію"
+    - "кращі практики"

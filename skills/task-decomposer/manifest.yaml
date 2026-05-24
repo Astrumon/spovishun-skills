@@ -1,0 +1,28 @@
+id: task-decomposer
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Breaks a solution into atomic Notion tasks following clean-architecture decomposition rules. Covers Epic creation, overview table, 5-section task cards with English AI prompts, dependency wiring, and Notion creation on user confirmation.
+placeholders:
+  - key: NOTION_BOARD_COLLECTION_ID
+    description: Notion data_source_id of the task board collection
+  - key: NOTION_CLAUDE_MD_PAGE_ID
+    description: Notion page ID of the CLAUDE.md page
+  - key: NOTION_EPICS_DATA_SOURCE_ID
+    description: Notion data_source_id of the Epics database
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject)
+  - key: GIT_DEVELOP_BRANCH
+    description: Name of the development base branch (e.g. develop or main)
+triggers:
+  en:
+    - "break into tasks"
+    - "decompose"
+    - "task breakdown"
+    - "create tasks for"
+  uk:
+    - "розбий на задачі"
+    - "декомпозиція"
+    - "які задачі потрібні"
+    - "розклади на таски"

@@ -1,0 +1,17 @@
+id: write-a-skill
+version: 1.0.0
+category: universal
+description: Walks the user through creating a new spovishun-skills skill (SKILL.md + manifest.yaml) following the repo's schema, then validates the manifest. Use when the user wants to create, write, or add a new skill.
+triggers:
+  en:
+    - "write a skill"
+    - "new skill"
+    - "create skill"
+    - "add a skill"
+    - "build a skill"
+  uk:
+    - "напиши скіл"
+    - "новий скіл"
+    - "створи скіл"
+    - "додай скіл"
+    - "зроби скіл"

@@ -1,7 +1,11 @@
 id: commit
 version: 1.0.0
-category: universal
-description: Commit staged or all current changes following Conventional Commits and the project's commit conventions.
+category: configurable
+description: Commits staged or all current changes following Conventional Commits and project conventions. User-invocable via /commit or /commit -m "message".
+placeholders:
+  - key: PROJECT_NAME
+    description: Project name used in the commit assistant persona
+    default: "the project"
 triggers:
   en:
     - "commit changes"

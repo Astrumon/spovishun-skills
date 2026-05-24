@@ -1,0 +1,14 @@
+id: code-architecture-reviewer
+version: 1.0.0
+category: universal
+description: Full Clean Architecture reviewer. Audits layer boundaries, dependency direction, SOLID compliance, and module coupling. Saves report to ./docs/reviews/ and waits for approval before fixing.
+triggers:
+  en:
+    - "architecture review"
+    - "review architecture"
+    - "check clean architecture"
+    - "audit layers"
+  uk:
+    - "ревʼю архітектури"
+    - "перевір архітектуру"
+    - "аудит шарів"

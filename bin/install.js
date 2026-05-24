@@ -28,7 +28,7 @@ export async function runInstall({ target, cwd, out = process.stdout, now }) {
 
   let lockEntries;
   if (target === 'claude') {
-    lockEntries = await installClaude({ consumerCwd: cwd, config, artifacts });
+    lockEntries = await installClaude({ consumerCwd: cwd, pkgRoot, config, artifacts });
   } else {
     throw Object.assign(
       new Error(`Unknown target: "${target}". Supported targets: claude`),

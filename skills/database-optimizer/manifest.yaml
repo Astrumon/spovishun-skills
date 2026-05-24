@@ -1,0 +1,18 @@
+id: database-optimizer
+version: 1.1.0
+category: stack-specific
+requires:
+  - postgres
+description: PostgreSQL and SQLite performance optimization — EXPLAIN ANALYZE, index design, N+1 detection with Exposed ORM, pg_stat_statements, and HikariCP tuning.
+triggers:
+  en:
+    - "slow query"
+    - "EXPLAIN ANALYZE"
+    - "index"
+    - "N+1"
+    - "database performance"
+    - "pg_stat_statements"
+  uk:
+    - "повільний запит"
+    - "індекс"
+    - "продуктивність бази"

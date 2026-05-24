@@ -1,0 +1,26 @@
+id: doc-updater
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Documentation auditor subagent for update-doc-full. Maps changed files to Notion zones, proposes minimal updates per zone. Returns proposals only — does not apply changes.
+placeholders:
+  - key: NOTION_ZONE_DATABASE_URL
+    description: Notion page URL for the Database documentation zone
+  - key: NOTION_ZONE_ARCHITECTURE_URL
+    description: Notion page URL for the Architecture documentation zone
+  - key: NOTION_ZONE_FEATURES_URL
+    description: Notion page URL for the Features documentation zone
+  - key: NOTION_ZONE_AITOOLS_URL
+    description: Notion page URL for the AI Tools documentation zone
+  - key: NOTION_ZONE_CICD_URL
+    description: Notion page URL for the CI/CD documentation zone
+  - key: NOTION_ZONE_TESTING_URL
+    description: Notion page URL for the Testing documentation zone
+triggers:
+  en:
+    - "update documentation zones"
+    - "map changes to docs"
+  uk:
+    - "оновити зони документації"
+    - "зіставити зміни з документацією"

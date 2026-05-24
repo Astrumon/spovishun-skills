@@ -1,0 +1,21 @@
+id: solution-designer
+version: 1.0.0
+category: stack-specific
+description: Compares 2–3 implementation approaches for a feature and produces a Solution Decision document with a comparison matrix and recommendation. Operates between idea-brainstormer and task-decomposer.
+requires:
+  - notion
+placeholders:
+  - key: NOTION_CLAUDE_MD_PAGE_ID
+    description: Notion page ID of the project CLAUDE.md (fetched silently in Step 1)
+triggers:
+  en:
+    - "how should we implement"
+    - "compare approaches"
+    - "solution design"
+    - "which approach"
+    - "design options"
+  uk:
+    - "як реалізувати"
+    - "порівняй підходи"
+    - "який варіант краще"
+    - "як краще зробити"

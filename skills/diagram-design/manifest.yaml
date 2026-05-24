@@ -1,0 +1,19 @@
+id: diagram-design
+version: 1.0.0
+category: universal
+description: Generates editorial-quality technical diagrams as self-contained HTML+SVG files. Supports 13 types (architecture, flowchart, sequence, ER, state machine, swimlane, etc.) with a shared opinionated design system.
+triggers:
+  en:
+    - "architecture diagram"
+    - "flowchart"
+    - "sequence diagram"
+    - "ER schema"
+    - "state machine"
+    - "swimlane"
+    - "draw a diagram"
+  uk:
+    - "діаграма"
+    - "схема"
+    - "намалюй діаграму"
+    - "побудуй схему"
+    - "ER схема"

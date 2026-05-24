@@ -1,0 +1,17 @@
+id: notion-content-reader
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Reads, fetches, and searches Notion content. Prefers REST scripts for board/task/CLAUDE.md reads; falls back to MCP notion-search and notion-fetch for everything else.
+triggers:
+  en:
+    - "find in Notion"
+    - "read my Notion page"
+    - "search Notion for"
+    - "fetch from Notion"
+    - "what's on my Notion page"
+  uk:
+    - "знайди в Notion"
+    - "прочитай Notion сторінку"
+    - "пошукай в Notion"

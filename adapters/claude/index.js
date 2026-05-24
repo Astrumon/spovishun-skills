@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
@@ -11,11 +11,12 @@ import { mergeSettings } from '../../lib/settings-merger.js';
  *
  * @param {object} opts
  * @param {string}   opts.consumerCwd   — absolute path to consumer project root
+ * @param {string}   opts.pkgRoot       — absolute path to this package's root (for hooks/ and rules/)
  * @param {object}   opts.config        — validated consumer config object
  * @param {Array}    opts.artifacts     — all loaded artifacts from loadArtifacts()
  * @returns {Array<{kind, id, version, checksum}>}  — lockfile entries for installed artifacts
  */
-export async function installClaude({ consumerCwd, config, artifacts }) {
+export async function installClaude({ consumerCwd, pkgRoot, config, artifacts }) {
   const filtered = filterByStack(artifacts, config.stack ?? {});
   const configMap = buildPlaceholderMap(config);
 
@@ -24,9 +25,9 @@ export async function installClaude({ consumerCwd, config, artifacts }) {
   mkdirSync(join(claudeDir, 'skills'), { recursive: true });
   mkdirSync(join(claudeDir, 'agents'), { recursive: true });
   mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
+  mkdirSync(join(claudeDir, 'rules'), { recursive: true });
 
   const lockEntries = [];
-  const hookEntries = {};
 
   for (const artifact of filtered) {
     const rendered = renderTemplate(artifact.bodyText, { configMap });
@@ -38,24 +39,71 @@ export async function installClaude({ consumerCwd, config, artifacts }) {
     } else if (artifact.kind === 'agent') {
       const outPath = join(claudeDir, 'agents', `${artifact.id}.md`);
       writeFileSync(outPath, rendered, 'utf8');
-    } else if (artifact.kind === 'hook') {
-      // hooks go into .claude/hooks/ and also get registered in settings.json
-      const outPath = join(claudeDir, 'hooks', `${artifact.id}`);
-      writeFileSync(outPath, rendered, 'utf8');
-
-      const triggers = artifact.manifest.triggers ?? {};
-      for (const event of Object.keys(triggers)) {
-        if (!hookEntries[event]) hookEntries[event] = [];
-        hookEntries[event].push({ matcher: '.*', hooks: [{ type: 'command', command: outPath }] });
-      }
     }
 
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
   }
 
-  patchSettings(claudeDir, hookEntries);
+  // Always ensure settings.json exists, even with no plugin hooks
+  patchSettings(claudeDir, {});
+  installHooks(pkgRoot, claudeDir);
+  installRules(pkgRoot, claudeDir);
 
   return lockEntries;
+}
+
+/**
+ * Copies all hook scripts from hooks/ to .claude/hooks/ and merges hooks.json
+ * event mappings into .claude/settings.json.
+ */
+function installHooks(pkgRoot, claudeDir) {
+  const hooksDir = join(pkgRoot, 'hooks');
+  if (!existsSync(hooksDir)) return;
+
+  const hooksJsonPath = join(hooksDir, 'hooks.json');
+  if (!existsSync(hooksJsonPath)) return;
+
+  let hooksJson;
+  try {
+    hooksJson = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
+  } catch {
+    return;
+  }
+
+  // Copy all .js scripts verbatim
+  const scripts = readdirSync(hooksDir).filter((f) => f.endsWith('.js'));
+  for (const script of scripts) {
+    copyFileSync(join(hooksDir, script), join(claudeDir, 'hooks', script));
+  }
+
+  // Merge event entries from hooks.json into settings.json
+  const pluginHooks = hooksJson.hooks ?? {};
+  patchSettings(claudeDir, pluginHooks);
+}
+
+/**
+ * Copies all .md rule files from rules/ into .claude/rules/, preserving subdirectory structure.
+ */
+function installRules(pkgRoot, claudeDir) {
+  const rulesDir = join(pkgRoot, 'rules');
+  if (!existsSync(rulesDir)) return;
+
+  copyRulesRecursive(rulesDir, rulesDir, claudeDir);
+}
+
+function copyRulesRecursive(baseDir, currentDir, claudeDir) {
+  for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const srcPath = join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      copyRulesRecursive(baseDir, srcPath, claudeDir);
+    } else if (entry.name.endsWith('.md')) {
+      const rel = relative(baseDir, srcPath);
+      const destPath = join(claudeDir, 'rules', rel);
+      mkdirSync(join(destPath, '..'), { recursive: true });
+      copyFileSync(srcPath, destPath);
+    }
+  }
 }
 
 function patchSettings(claudeDir, pluginHooks) {

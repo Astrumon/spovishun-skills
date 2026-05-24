@@ -1,0 +1,18 @@
+id: notion-database-manager
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Creates Notion databases, designs schemas, adds records, updates properties, and builds relations. Covers property types, data_source_id usage, checkbox/date formatting, and self-relations.
+triggers:
+  en:
+    - "create a Notion database"
+    - "add to my Notion DB"
+    - "design a schema"
+    - "notion table"
+    - "notion tracker"
+    - "add records to Notion"
+  uk:
+    - "створи базу даних Notion"
+    - "додай до Notion DB"
+    - "схема бази Notion"

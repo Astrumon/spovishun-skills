@@ -5,6 +5,7 @@ import { loadConfig } from '../lib/config-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { installClaude } from '../adapters/claude/index.js';
 import { installCodex } from '../adapters/codex/index.js';
+import { installWindsurf } from '../adapters/windsurf/index.js';
 import { writeLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
 import { readFileSync } from 'node:fs';
 
@@ -41,10 +42,13 @@ export async function runInstall({ target, cwd, out = process.stdout, now }) {
       pluginVersion: pkg.version,
     });
     installedHint = 'AGENTS.md';
+  } else if (target === 'windsurf') {
+    lockEntries = await installWindsurf({ consumerCwd: cwd, pkgRoot, config, artifacts });
+    installedHint = '.windsurf/rules/';
   } else {
     throw Object.assign(
-      new Error(`Unknown target: "${target}". Supported targets: claude, codex`),
-      { actionable: `Use --target=claude or --target=codex (windsurf and cursor are planned for V1).` }
+      new Error(`Unknown target: "${target}". Supported targets: claude, codex, windsurf`),
+      { actionable: `Use --target=claude, --target=codex, or --target=windsurf (cursor is planned for V1).` }
     );
   }
 

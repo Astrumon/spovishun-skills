@@ -104,7 +104,7 @@ function printHelp(pkg) {
     `  spovishun-skills --help                 Show this help\n` +
     `  spovishun-skills validate <skill-dir>   Validate a skill's manifest.yaml\n` +
     `  spovishun-skills init                   Create spovishun-skills.config.yaml interactively\n` +
-    `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude, codex)\n\n` +
+    `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude, codex, windsurf)\n\n` +
     `More commands (sync, update, doctor) will be added in upcoming tasks.\n`
   );
 }

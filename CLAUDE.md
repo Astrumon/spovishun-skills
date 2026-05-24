@@ -13,6 +13,7 @@ node bin/spovishun-skills.js validate <dir>           # validates a skill's mani
 node bin/spovishun-skills.js init                     # init wizard → spovishun-skills.config.yaml (#85)
 node bin/spovishun-skills.js install --target=claude  # writes .claude/ + lockfile (#86)
 node bin/spovishun-skills.js install --target=codex   # writes AGENTS.md + lockfile (#88)
+node bin/spovishun-skills.js install --target=windsurf # writes .windsurf/rules/*.md + lockfile (#89)
 npm test                                              # node --test test/
 npm run lint                                          # syntax check + manifest validation across all skills
 ```
@@ -21,7 +22,7 @@ CLI commands planned for upcoming tasks (none yet wired):
 
 | Command | Task | Description |
 |---|---|---|
-| `install --target=windsurf\|cursor` | V1 | Generates text-only artefacts for Windsurf/Cursor |
+| `install --target=cursor` | V1 | Generates text-only artefacts for Cursor |
 | `sync` | V1 | Re-applies config without wizard |
 | `update [--skill X]` | V1 | Three-way merge against upstream |
 | `doctor` | V1 | Validates tokens, IDs, git config |
@@ -65,6 +66,8 @@ bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
 **Placeholder substitution.** Mustache `{{KEY}}` syntax. Keys come from consumer's `spovishun-skills.config.yaml`. Validator enforces `UPPER_SNAKE_CASE` keys. Tokens that don't match `UPPER_SNAKE_CASE` (e.g. `${{ runner.os }}` from GitHub Actions snippets) are preserved verbatim. Keys declared in a manifest's `placeholders:` list are treated as optional — missing values render to an empty string instead of failing the install.
 
 **Codex adapter (`adapters/codex/`).** Generates a single `AGENTS.md` at the consumer root by inlining filtered skills, agents (with YAML frontmatter stripped), and rule files. ATX headings inside bodies are demoted by 2 levels so they nest under `## Skills` / `## Agents` / `## Rules`. Code-fenced blocks are skipped during demotion. Hooks and other Claude-only artifacts are excluded entirely. If the rendered file exceeds the 32 KiB Codex soft limit, the adapter writes the file but emits a `stderr` warning suggesting a global/project split.
+
+**Windsurf adapter (`adapters/windsurf/`).** Generates one `.md` file per skill and per rule under `.windsurf/rules/` in the consumer project. Agents and hooks are excluded (Windsurf has no agent concept). Files exceeding 6 000 characters are automatically split into `<id>-part-1.md`, `<id>-part-2.md`, ... (char split, prefers newline boundary past the halfway mark). Rule files from `rules/` use `--` as path separator in their filename (e.g. `common/git-workflow.md` → `common--git-workflow.md`).
 
 **Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`.
 
@@ -166,7 +169,7 @@ Once we add the first packaged rule (likely in #5 — Migration), update the tab
 ## Phase roadmap
 
 - **MVP** (#83 → #87): bootstrap · manifest schema · config resolver + init wizard · `install --target=claude` · migrate ~62 artefacts.
-- **V1** (#88 → #92): codex / windsurf / cursor adapters · `sync` / `update` with three-way merge · `doctor` command.
+- **V1** (#88 → #92): codex (#88 ✓) / windsurf (#89 ✓) / cursor adapters · `sync` / `update` with three-way merge · `doctor` command.
 - **V2** (#93 → #94): Spovishun dogfoods the published plugin (replaces its inline `.claude/`) · public `npm publish v1.0.0`.
 
 ## References

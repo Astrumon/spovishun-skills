@@ -62,3 +62,18 @@ test('returns a Map instance', () => {
   const map = buildPlaceholderMap(minimalConfig);
   assert.ok(map instanceof Map);
 });
+
+test('PROJECT_PREFIX is derived from project.name as a lowercase kebab slug', () => {
+  const map = buildPlaceholderMap({
+    project: { name: 'My Test Project!', language: 'uk' },
+    stack: { kotlin: false, postgres: false, telegram: false, notion: false },
+    git: { branch_prefix: 'feature/', main_branch: 'main', dev_branch: 'develop' },
+  });
+  assert.equal(map.get('PROJECT_PREFIX'), 'my-test-project');
+});
+
+test('GIT_DEVELOP_BRANCH is an alias for git.dev_branch (back-compat)', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  assert.equal(map.get('GIT_DEVELOP_BRANCH'), 'develop');
+  assert.equal(map.get('GIT_DEVELOP_BRANCH'), map.get('GIT_DEV_BRANCH'));
+});

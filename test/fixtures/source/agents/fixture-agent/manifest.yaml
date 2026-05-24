@@ -1,0 +1,4 @@
+id: fixture-agent
+version: 1.0.0
+category: universal
+description: Fixture agent for testing the codex AGENTS.md adapter.

@@ -7,20 +7,21 @@
 ## Commands
 
 ```bash
-node bin/spovishun-skills.js --version          # prints package version
-node bin/spovishun-skills.js --help             # CLI usage
-node bin/spovishun-skills.js validate <dir>     # validates a skill's manifest.yaml (#84)
-npm test                                        # node --test test/
-npm run lint                                    # syntax check + manifest validation across all skills
+node bin/spovishun-skills.js --version                # prints package version
+node bin/spovishun-skills.js --help                   # CLI usage
+node bin/spovishun-skills.js validate <dir>           # validates a skill's manifest.yaml (#84)
+node bin/spovishun-skills.js init                     # init wizard → spovishun-skills.config.yaml (#85)
+node bin/spovishun-skills.js install --target=claude  # writes .claude/ + lockfile (#86)
+node bin/spovishun-skills.js install --target=codex   # writes AGENTS.md + lockfile (#88)
+npm test                                              # node --test test/
+npm run lint                                          # syntax check + manifest validation across all skills
 ```
 
 CLI commands planned for upcoming tasks (none yet wired):
 
 | Command | Task | Description |
 |---|---|---|
-| `init` | #85 | Interactive wizard → `spovishun-skills.config.yaml` |
-| `install --target=claude` | #86 | Generates `.claude-plugin/` and writes lockfile |
-| `install --target=codex\|windsurf\|cursor` | V1 | Generates text-only artefacts |
+| `install --target=windsurf\|cursor` | V1 | Generates text-only artefacts for Windsurf/Cursor |
 | `sync` | V1 | Re-applies config without wizard |
 | `update [--skill X]` | V1 | Three-way merge against upstream |
 | `doctor` | V1 | Validates tokens, IDs, git config |
@@ -61,7 +62,9 @@ bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
 
 **Manifest validation.** `lib/manifest-validator.js` uses Ajv 8 against `schema/manifest.schema.json` (JSON Schema 2020-12). Strict mode + `unevaluatedProperties: false` to catch typos. Custom `semver` format. Conditional `requires` rule via `if/then` — required for `category: stack-specific`, forbidden for `universal`.
 
-**Placeholder substitution.** Mustache `{{KEY}}` syntax. Keys come from consumer's `spovishun-skills.config.yaml`. Validator enforces `UPPER_SNAKE_CASE` keys.
+**Placeholder substitution.** Mustache `{{KEY}}` syntax. Keys come from consumer's `spovishun-skills.config.yaml`. Validator enforces `UPPER_SNAKE_CASE` keys. Tokens that don't match `UPPER_SNAKE_CASE` (e.g. `${{ runner.os }}` from GitHub Actions snippets) are preserved verbatim. Keys declared in a manifest's `placeholders:` list are treated as optional — missing values render to an empty string instead of failing the install.
+
+**Codex adapter (`adapters/codex/`).** Generates a single `AGENTS.md` at the consumer root by inlining filtered skills, agents (with YAML frontmatter stripped), and rule files. ATX headings inside bodies are demoted by 2 levels so they nest under `## Skills` / `## Agents` / `## Rules`. Code-fenced blocks are skipped during demotion. Hooks and other Claude-only artifacts are excluded entirely. If the rendered file exceeds the 32 KiB Codex soft limit, the adapter writes the file but emits a `stderr` warning suggesting a global/project split.
 
 **Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`.
 

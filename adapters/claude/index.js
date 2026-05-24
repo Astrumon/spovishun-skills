@@ -30,7 +30,8 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts })
   const lockEntries = [];
 
   for (const artifact of filtered) {
-    const rendered = renderTemplate(artifact.bodyText, { configMap });
+    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
+    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
     const checksum = sha256(rendered);
 
     if (artifact.kind === 'skill') {

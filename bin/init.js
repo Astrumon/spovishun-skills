@@ -2,6 +2,8 @@ import { writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { dump as dumpYaml } from 'js-yaml';
 import { validateConfig } from '../lib/config-validator.js';
+import { bootstrapNotion } from '../lib/notion-bootstrap.js';
+import { generateFallbackPrompt } from '../lib/notion-fallback-prompt.js';
 
 const CONFIG_FILENAME = 'spovishun-skills.config.yaml';
 
@@ -85,5 +87,47 @@ export async function runInit({ cwd, prompter, out = process.stdout }) {
 
   writeFileSync(destPath, yamlContent, 'utf8');
   write(`Created ${destPath}\n`);
+
+  if (config.stack?.notion) {
+    await runNotionBootstrap({ cwd, config, write });
+  }
+
   return destPath;
+}
+
+/**
+ * Variant A: attempt Notion REST API bootstrap.
+ * Variant C (fallback): write NOTION_SETUP.md with manual instructions + MCP prompt.
+ */
+async function runNotionBootstrap({ cwd, config, write }) {
+  const tokenEnv = config.notion?.token_env ?? 'NOTION_TOKEN';
+  const token = process.env[tokenEnv];
+  const taskBoardId = config.notion?.database_id;
+  const parentPageId = config.notion?.root_page_id;
+
+  if (!token || !taskBoardId || !parentPageId) {
+    write(`Notion bootstrap skipped — ${tokenEnv}, database_id, or root_page_id not available.\n`);
+    writeFallbackDoc(cwd, { taskBoardId, parentPageId, tokenEnv, epicsDbId: null, write });
+    return;
+  }
+
+  write('Bootstrapping Notion workspace...\n');
+  let epicsDbId = null;
+  try {
+    const result = await bootstrapNotion({ token, parentPageId, taskBoardId });
+    epicsDbId = result.epicsDbId;
+    write(`Notion workspace ready — Epics DB: ${epicsDbId}\n`);
+    write(`Add this to your config:\n  notion:\n    epics_database_id: "${epicsDbId}"\n`);
+  } catch (err) {
+    write(`Notion bootstrap failed: ${err.message}\n`);
+    write('Writing NOTION_SETUP.md with manual instructions...\n');
+    writeFallbackDoc(cwd, { taskBoardId, parentPageId, tokenEnv, epicsDbId, write });
+  }
+}
+
+function writeFallbackDoc(cwd, { taskBoardId, parentPageId, tokenEnv, epicsDbId, write }) {
+  const content = generateFallbackPrompt({ taskBoardId, parentPageId, tokenEnv, epicsDbId });
+  const setupPath = join(cwd, 'NOTION_SETUP.md');
+  writeFileSync(setupPath, content, 'utf8');
+  write(`NOTION_SETUP.md written — follow instructions inside to complete Notion setup.\n`);
 }

@@ -1,12 +1,17 @@
 id: architecture-designer
-version: 1.0.0
-category: universal
-description: Designs new system architecture, reviews existing designs, and evaluates technology trade-offs at module/system level.
+version: 1.1.0
+category: stack-specific
+requires:
+  - kotlin
+description: Designs system architecture with Kotlin Clean Architecture layer rules, ADR templates, and Koin/Exposed boundary enforcement.
 triggers:
   en:
     - "architecture"
     - "design decision"
     - "ADR"
+    - "module structure"
+    - "trade-off"
   uk:
     - "архітектура"
     - "дизайн рішення"
+    - "структура модуля"

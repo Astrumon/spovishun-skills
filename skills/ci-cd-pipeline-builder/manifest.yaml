@@ -1,0 +1,18 @@
+id: ci-cd-pipeline-builder
+version: 1.0.0
+category: configurable
+description: Generates CI/CD pipelines (GitHub Actions, GitLab CI) for Kotlin/Gradle projects. Includes caching, test, build, and SSH deploy stages with a validation checklist.
+placeholders:
+  - key: PROJECT_NAME
+    description: Project directory name used in the deploy script (cd /app/PROJECT_NAME)
+triggers:
+  en:
+    - "GitHub Actions"
+    - "CI pipeline"
+    - "build workflow"
+    - "deploy automation"
+    - "continuous integration"
+  uk:
+    - "налаштуй CI"
+    - "пайплайн"
+    - "автоматичне деплоювання"

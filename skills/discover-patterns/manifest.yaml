@@ -1,0 +1,12 @@
+id: discover-patterns
+version: 1.0.0
+category: universal
+description: Retrospectively scans Claude Code session JSONL logs for correction signals missed by the capture-learning hook, and pushes candidates to the learnings queue for /reflect to process.
+triggers:
+  en:
+    - "discover patterns"
+    - "scan past sessions"
+    - "find missed corrections"
+  uk:
+    - "знайди патерни"
+    - "перегляньcтарі сесії"

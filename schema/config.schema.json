@@ -22,7 +22,8 @@
         "kotlin":   { "type": "boolean" },
         "postgres": { "type": "boolean" },
         "telegram": { "type": "boolean" },
-        "notion":   { "type": "boolean" }
+        "notion":   { "type": "boolean" },
+        "docker":   { "type": "boolean" }
       },
       "unevaluatedProperties": false
     },

@@ -1,0 +1,17 @@
+id: code-refactor-master
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+description: Large-scale Kotlin refactoring agent. Runs a 4-phase process (Discovery, Planning, Execution, Verification) and enforces 300-line class / 20-line function limits.
+triggers:
+  en:
+    - "refactor kotlin"
+    - "large refactor"
+    - "split class"
+    - "extract responsibilities"
+  uk:
+    - "рефакторинг kotlin"
+    - "великий рефакторинг"
+    - "розбити клас"
+    - "виділи відповідальності"

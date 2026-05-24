@@ -1,0 +1,20 @@
+id: postgresql-exposed-orm
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - postgres
+description: Kotlin Exposed ORM with PostgreSQL — table design, query patterns, safeDbQuery enforcement, Flyway migrations, and HikariCP configuration.
+triggers:
+  en:
+    - "Exposed ORM"
+    - "Flyway"
+    - "safeDbQuery"
+    - "HikariCP"
+    - "database schema"
+    - "migration"
+  uk:
+    - "таблиця Exposed"
+    - "міграція Flyway"
+    - "запит до бази"
+    - "HikariCP пул"

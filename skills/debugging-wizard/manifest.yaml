@@ -1,12 +1,16 @@
 id: debugging-wizard
-version: 1.0.0
+version: 1.1.0
 category: universal
-description: Diagnoses bugs, runtime errors, and unexpected behavior by analyzing stack traces and reproducing issues.
+description: Diagnoses bugs, runtime errors, and unexpected behavior through hypothesis-driven investigation. Produces a Root Cause Report with a fix and prevention strategy.
 triggers:
   en:
     - "bug"
     - "error"
     - "debug"
+    - "not working"
+    - "exception"
   uk:
     - "помилка"
     - "не працює"
+    - "баг"
+    - "відлагодь"

@@ -1,0 +1,23 @@
+id: notion-task-to-code
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Converts a Notion task into a ready-to-use AI agent prompt. Fetches task from cache or Notion API, extracts Goal/Branch/Steps/DoD, injects Epic and blocker context, outputs a fenced prompt, and enters Plan Mode.
+placeholders:
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject)
+  - key: PROJECT_NAME
+    description: Human-readable project name for the generated prompt header
+triggers:
+  en:
+    - "create prompt for task"
+    - "generate prompt"
+    - "prompt for Claude Code"
+    - "prepare task for agent"
+    - "run agent on task"
+  uk:
+    - "зроби промпт для задачі"
+    - "згенеруй промпт"
+    - "промпт для Claude Code"
+    - "підготуй задачу для агента"

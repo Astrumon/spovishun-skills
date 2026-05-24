@@ -1,0 +1,28 @@
+id: docker-deployment
+version: 1.0.0
+category: stack-specific
+requires:
+  - docker
+description: Containerize Kotlin apps with multi-stage Dockerfile (installDist), docker-compose with dev profile, ghcr.io push workflow, and SSH deploy to low-RAM servers.
+placeholders:
+  - key: PROJECT_NAME
+    description: Project name used in Dockerfile ENTRYPOINT, container name, and dev DB name
+  - key: DOCKER_IMAGE
+    description: Full Docker image reference (e.g. ghcr.io/org/project)
+  - key: DEPLOY_HOST
+    description: SSH hostname or IP of the production server
+  - key: DEPLOY_DIR
+    description: Directory on the server where docker-compose.yml lives (e.g. Spovishun)
+triggers:
+  en:
+    - "Dockerfile"
+    - "docker-compose"
+    - "containerize"
+    - "deploy"
+    - "ghcr.io"
+    - "GitHub Container Registry"
+    - "Oracle Cloud"
+  uk:
+    - "докерфайл"
+    - "контейнер"
+    - "деплой"

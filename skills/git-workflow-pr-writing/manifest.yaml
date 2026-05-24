@@ -1,12 +1,14 @@
 id: git-workflow-pr-writing
 version: 1.0.0
 category: universal
-description: Writes commit messages, pull request descriptions, and changelogs following Conventional Commits and Keep a Changelog conventions.
+description: Writes commit messages, pull request descriptions, and changelogs following Conventional Commits and Keep a Changelog conventions. Includes GitFlow branching guidance.
 triggers:
   en:
     - "write a commit"
     - "create PR description"
     - "write release notes"
+    - "PR template"
   uk:
     - "напиши коміт"
     - "опис PR"
+    - "нотатки до релізу"

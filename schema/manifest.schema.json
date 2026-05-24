@@ -31,7 +31,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["kotlin", "postgres", "telegram", "notion"]
+        "enum": ["kotlin", "postgres", "telegram", "notion", "docker"]
       },
       "uniqueItems": true,
       "description": "Stack flags that must all be active for this skill to be installed."
@@ -48,6 +48,11 @@
         "en": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "uk": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Output filename for template artifacts (required for kind=template)."
     },
     "placeholders": {
       "type": "array",

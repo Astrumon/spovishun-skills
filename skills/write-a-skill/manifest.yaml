@@ -1,0 +1,20 @@
+id: write-a-skill
+version: 1.0.0
+category: configurable
+description: Guides the user through creating a new Claude Code skill in their own project's .claude/skills/ directory — drafts SKILL.md, decides structure, and reviews the result. Use when the user wants to create, write, build, or add a new skill.
+placeholders:
+  - key: PROJECT_LANGUAGE
+    description: Language for user-facing communication (e.g. "uk", "en"). Comes from project.language in the consumer config.
+triggers:
+  en:
+    - "write a skill"
+    - "new skill"
+    - "create a skill"
+    - "add a skill"
+    - "build a skill"
+  uk:
+    - "напиши скіл"
+    - "новий скіл"
+    - "створи скіл"
+    - "додай скіл"
+    - "зроби скіл"

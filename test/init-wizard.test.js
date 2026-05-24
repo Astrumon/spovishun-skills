@@ -6,6 +6,22 @@ import { join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { runInit } from '../bin/init.js';
 
+// Answers that include a root_page_id to trigger bootstrap attempt
+const notionWithPageAnswers = {
+  project_name: 'BootstrapProject',
+  project_language: 'en',
+  stack_kotlin: false,
+  stack_postgres: false,
+  stack_telegram: false,
+  stack_notion: true,
+  notion_token_env: 'NOTION_TOKEN',
+  notion_database_id: 'aabbccdd1122334455667788aabbccdd',
+  notion_epics_database_id: 'eeff00112233445566778899eeff0011',
+  git_branch_prefix: 'feature/bp',
+  git_main_branch: 'main',
+  git_dev_branch: 'develop',
+};
+
 function makeTmpDir() {
   return mkdtempSync(join(tmpdir(), 'spovishun-init-'));
 }
@@ -122,4 +138,22 @@ test('generated file has header comment', async () => {
   const content = readFileSync(dest, 'utf8');
   assert.ok(content.startsWith('#'), 'File should start with a comment header');
   assert.ok(content.includes('npx spovishun-skills init'), 'Header should mention the init command');
+});
+
+test('notion: NOTION_SETUP.md written when token env var is not set', async () => {
+  const cwd = makeTmpDir();
+  // Ensure env var is absent
+  const saved = process.env.NOTION_TOKEN;
+  delete process.env.NOTION_TOKEN;
+
+  try {
+    await runInit({ cwd, prompter: makePrompter(notionWithPageAnswers), out: silentOut() });
+    const setupPath = join(cwd, 'NOTION_SETUP.md');
+    assert.ok(existsSync(setupPath), 'NOTION_SETUP.md should be written when token is missing');
+    const content = readFileSync(setupPath, 'utf8');
+    assert.ok(content.includes('Notion Setup'), 'File should contain setup instructions');
+    assert.ok(content.includes('Claude Code prompt'), 'File should include MCP fallback prompt');
+  } finally {
+    if (saved !== undefined) process.env.NOTION_TOKEN = saved;
+  }
 });

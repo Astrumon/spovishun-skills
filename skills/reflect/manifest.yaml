@@ -1,0 +1,14 @@
+id: reflect
+version: 1.0.0
+category: universal
+description: Processes the learnings queue from the capture-learning hook and proposes memory-file entries for user approval. Also provides /view-queue and /skip-reflect sub-commands.
+triggers:
+  en:
+    - "reflect"
+    - "process the queue"
+    - "view queue"
+    - "skip reflect"
+  uk:
+    - "рефлект"
+    - "обробити чергу"
+    - "переглянути чергу"

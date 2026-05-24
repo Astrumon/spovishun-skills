@@ -1,0 +1,21 @@
+id: kotlin-specialist
+version: 2.0.0
+category: stack-specific
+requires:
+  - kotlin
+description: Expert Kotlin development — coroutines, Flow, sealed classes, Gradle Kotlin DSL, and idiomatic patterns. Includes structured concurrency rules and dispatcher enforcement.
+triggers:
+  en:
+    - "coroutine"
+    - "suspend"
+    - "Flow"
+    - "launch"
+    - "withContext"
+    - "sealed class"
+    - "Gradle DSL"
+  uk:
+    - "корутина"
+    - "flow"
+    - "сілд клас"
+    - "нульова безпека"
+    - "Gradle DSL"

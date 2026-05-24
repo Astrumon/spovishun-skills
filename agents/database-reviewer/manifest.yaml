@@ -1,0 +1,15 @@
+id: database-reviewer
+version: 1.0.0
+category: stack-specific
+requires:
+  - postgres
+description: Database layer code reviewer. Audits migrations, transaction safety, index coverage, N+1 patterns, and data access isolation.
+triggers:
+  en:
+    - "review database layer"
+    - "check migrations"
+    - "audit db changes"
+  uk:
+    - "перевір бд"
+    - "ревʼю міграцій"
+    - "аудит бази даних"

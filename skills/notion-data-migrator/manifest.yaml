@@ -1,0 +1,17 @@
+id: notion-data-migrator
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Migrates or imports data into Notion from Telegram messages, JSON, CSV, or Markdown. Handles classification, topic grouping, batch page creation, and database record migration.
+triggers:
+  en:
+    - "import to Notion"
+    - "migrate my notes"
+    - "add these to Notion"
+    - "convert this to Notion"
+    - "create Notion pages from this"
+  uk:
+    - "імпортуй в Notion"
+    - "перенеси нотатки"
+    - "створи сторінки в Notion"

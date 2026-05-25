@@ -18,6 +18,7 @@ node bin/spovishun-skills.js sync                     # re-applies install from 
 node bin/spovishun-skills.js update --upstream=<dir>  # 3-way merge against upstream copy (#91)
   # [--skill <id>]   limit to one artifact
   # [--dry-run]      print planned actions, write nothing
+node bin/spovishun-skills.js doctor                   # validate installation integrity (#92)
 npm test                                              # node --test test/
 npm run lint                                          # syntax check + manifest validation across all skills
 ```
@@ -27,7 +28,6 @@ CLI commands planned for upcoming tasks:
 | Command | Task | Description |
 |---|---|---|
 | `install --target=cursor` | V1 | Generates text-only artefacts for Cursor |
-| `doctor` | V1 | Validates tokens, IDs, git config |
 
 **`update` codex limitation (V1):** `AGENTS.md` is a monolithic file that inlines all artifacts — per-artifact 3-way merge requires boundary reconstruction that is not implemented. Running `update --target=codex` (derived from the lockfile) will print a warning and exit 0 without changes. Workaround: edit `AGENTS.md` by hand, then run `install --target=codex` to regenerate.
 

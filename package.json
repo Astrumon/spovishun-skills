@@ -1,8 +1,11 @@
 {
   "name": "spovishun-skills",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Portable Claude Code skills, agents, hooks and rules — bootstrapped from the Spovishun project. Installs into Claude Code, Codex, Windsurf and Cursor via per-assistant adapters.",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "spovishun-skills": "bin/spovishun-skills.js"
   },
@@ -18,7 +21,8 @@
     "schema",
     ".claude-plugin",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"

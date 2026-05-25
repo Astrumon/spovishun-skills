@@ -10,6 +10,7 @@ import { runInit } from './init.js';
 import { runInstall } from './install.js';
 import { runSync } from './sync.js';
 import { runUpdate } from './update.js';
+import { runDoctor } from './doctor.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
@@ -97,6 +98,15 @@ switch (subcommand) {
       });
     break;
   }
+  case 'doctor':
+    runDoctor({ cwd: process.cwd(), env: process.env, out: process.stdout })
+      .then((ok) => process.exit(ok ? 0 : 1))
+      .catch((err) => {
+        process.stderr.write(`doctor failed: ${err.message}\n`);
+        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
+        process.exit(1);
+      });
+    break;
   default:
     process.stderr.write(`Unknown command: ${subcommand}\n`);
     process.stderr.write(`Run 'spovishun-skills --help' for usage.\n`);
@@ -150,8 +160,8 @@ function printHelp(pkg) {
     `  spovishun-skills update --upstream=<d>  Diff installed artifacts against an upstream copy\n` +
     `    [--skill <id>]                         Limit update to one artifact\n` +
     `    [--dry-run]                            Print planned actions, write nothing\n` +
+    `  spovishun-skills doctor                 Validate installation integrity (config, lockfile, Notion, .gitignore, settings.json)\n` +
     `  Note: update is not supported for --target=codex (AGENTS.md is monolithic);\n` +
-    `        run install --target=codex to regenerate.\n\n` +
-    `More commands (doctor) will be added in upcoming tasks.\n`
+    `        run install --target=codex to regenerate.\n`
   );
 }

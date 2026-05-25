@@ -17,12 +17,13 @@ const here = dirname(fileURLToPath(import.meta.url));
  * @param {string}   opts.cwd        — consumer project directory
  * @param {object}   [opts.out]      — writable stream for messages (default: process.stdout)
  * @param {Function} [opts.now]      — injectable clock for lockfile timestamp
+ * @param {string}   [opts.pkgRoot]  — override package root (for tests)
  */
-export async function runInstall({ target, cwd, out = process.stdout, now }) {
+export async function runInstall({ target, cwd, out = process.stdout, now, pkgRoot: pkgRootOverride }) {
   const write = (msg) => out.write(msg);
 
   const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
-  const pkgRoot = join(here, '..');
+  const pkgRoot = pkgRootOverride ?? join(here, '..');
   const configPath = join(cwd, 'spovishun-skills.config.yaml');
 
   const config = loadConfig(configPath);

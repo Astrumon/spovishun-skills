@@ -8,6 +8,8 @@ import { createPromptModule } from 'inquirer';
 import { validateManifest } from '../lib/manifest-validator.js';
 import { runInit } from './init.js';
 import { runInstall } from './install.js';
+import { runSync } from './sync.js';
+import { runUpdate } from './update.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
@@ -51,6 +53,45 @@ switch (subcommand) {
       .then(() => process.exit(0))
       .catch((err) => {
         process.stderr.write(`install failed: ${err.message}\n`);
+        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
+        process.exit(1);
+      });
+    break;
+  }
+  case 'sync':
+    runSync({ cwd: process.cwd(), out: process.stdout })
+      .then(() => process.exit(0))
+      .catch((err) => {
+        process.stderr.write(`sync failed: ${err.message}\n`);
+        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
+        process.exit(1);
+      });
+    break;
+  case 'update': {
+    const { values: updateOpts } = parseArgs({
+      args: rest,
+      options: {
+        upstream: { type: 'string' },
+        skill: { type: 'string' },
+        'dry-run': { type: 'boolean' },
+      },
+      allowPositionals: false,
+    });
+    if (!updateOpts.upstream) {
+      process.stderr.write(`Error: --upstream is required.\n`);
+      process.stderr.write(`Usage: spovishun-skills update --upstream=<dir>\n`);
+      process.exit(1);
+    }
+    runUpdate({
+      cwd: process.cwd(),
+      upstreamRoot: updateOpts.upstream,
+      skillId: updateOpts.skill,
+      dryRun: updateOpts['dry-run'] ?? false,
+      out: process.stdout,
+    })
+      .then(() => process.exit(0))
+      .catch((err) => {
+        process.stderr.write(`update failed: ${err.message}\n`);
         if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
         process.exit(1);
       });
@@ -104,7 +145,13 @@ function printHelp(pkg) {
     `  spovishun-skills --help                 Show this help\n` +
     `  spovishun-skills validate <skill-dir>   Validate a skill's manifest.yaml\n` +
     `  spovishun-skills init                   Create spovishun-skills.config.yaml interactively\n` +
-    `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude, codex, windsurf)\n\n` +
-    `More commands (sync, update, doctor) will be added in upcoming tasks.\n`
+    `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude, codex, windsurf)\n` +
+    `  spovishun-skills sync                   Re-apply install using existing config + lockfile (no wizard)\n` +
+    `  spovishun-skills update --upstream=<d>  Diff installed artifacts against an upstream copy\n` +
+    `    [--skill <id>]                         Limit update to one artifact\n` +
+    `    [--dry-run]                            Print planned actions, write nothing\n` +
+    `  Note: update is not supported for --target=codex (AGENTS.md is monolithic);\n` +
+    `        run install --target=codex to regenerate.\n\n` +
+    `More commands (doctor) will be added in upcoming tasks.\n`
   );
 }

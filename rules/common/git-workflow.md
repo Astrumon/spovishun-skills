@@ -8,7 +8,7 @@ ALWAYS use Conventional Commits. Format: `type: short description`
 - Co-author line when Claude-assisted: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
 
 ## Branch Naming
-Format: `{{GIT_BRANCH_PREFIX}}{{PROJECT_PREFIX}}-{N}-short-slug`
+Format: `{{GIT_BRANCH_PREFIX}}-{N}-short-slug`
 - `{N}` = task number from your task tracker
 - slug = max 3 words, kebab-case, describes the change
 - NEVER branch directly from `main` — always from `{{GIT_DEV_BRANCH}}`

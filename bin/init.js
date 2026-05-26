@@ -7,6 +7,17 @@ import { generateFallbackPrompt } from '../lib/notion-fallback-prompt.js';
 
 const CONFIG_FILENAME = 'spovishun-skills.config.yaml';
 
+// Notion documentation categories consumed by notion-navigator / doc-updater.
+const DOC_CATEGORIES = ['architecture', 'database', 'testing', 'cicd', 'features', 'aitools', 'epics'];
+
+const CATEGORY_QUESTIONS = DOC_CATEGORIES.map((c) => ({
+  type: 'input',
+  name: `notion_category_${c}`,
+  message: `Category page ID — ${c} (blank to skip):`,
+  when: (a) => a.stack_notion && a.notion_configure_categories,
+  validate: notionIdOptional,
+}));
+
 const QUESTIONS = [
   { type: 'input', name: 'project_name', message: 'Project name:', validate: (v) => v.trim() ? true : 'Required' },
   { type: 'list',  name: 'project_language', message: 'Default language:', choices: ['uk', 'en'], default: 'uk' },
@@ -17,6 +28,8 @@ const QUESTIONS = [
   { type: 'input', name: 'notion_token_env', message: 'Env var name for Notion token:', default: 'NOTION_TOKEN', when: (a) => a.stack_notion },
   { type: 'input', name: 'notion_database_id', message: 'Notion main database ID:', when: (a) => a.stack_notion, validate: notionIdOrEmpty },
   { type: 'input', name: 'notion_epics_database_id', message: 'Notion epics database ID:', when: (a) => a.stack_notion, validate: notionIdOrEmpty },
+  { type: 'confirm', name: 'notion_configure_categories', message: 'Configure documentation category page IDs? (notion-navigator / doc-updater)', default: false, when: (a) => a.stack_notion },
+  ...CATEGORY_QUESTIONS,
   { type: 'input', name: 'git_branch_prefix', message: 'Git branch prefix:', default: 'feature/' },
   { type: 'input', name: 'git_main_branch',   message: 'Main branch name:', default: 'main' },
   { type: 'input', name: 'git_dev_branch',    message: 'Dev branch name:', default: 'develop' },
@@ -24,8 +37,16 @@ const QUESTIONS = [
 
 function notionIdOrEmpty(v) {
   if (!v.trim()) return 'Required';
-  const uuidPattern = /^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidPattern.test(v.trim()) ? true : 'Must be a 32-char hex ID or UUID format';
+  return isNotionId(v.trim()) ? true : 'Must be a 32-char hex ID or UUID format';
+}
+
+function notionIdOptional(v) {
+  if (!v.trim()) return true;
+  return isNotionId(v.trim()) ? true : 'Must be a 32-char hex ID or UUID format';
+}
+
+function isNotionId(v) {
+  return /^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
 function answersToConfig(a) {
@@ -49,6 +70,12 @@ function answersToConfig(a) {
       database_id: a.notion_database_id.trim(),
       epics_database_id: a.notion_epics_database_id.trim(),
     };
+    const categories = {};
+    for (const c of DOC_CATEGORIES) {
+      const v = (a[`notion_category_${c}`] ?? '').trim();
+      if (v) categories[c] = v;
+    }
+    if (Object.keys(categories).length > 0) config.notion.categories = categories;
   }
   return config;
 }

@@ -3,10 +3,22 @@ import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../lib/config-loader.js';
+import { validateConfig } from '../lib/config-validator.js';
 import { ConfigError } from '../lib/errors.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fix = (name) => join(here, 'fixtures', name);
+
+const baseNotionConfig = () => ({
+  project: { name: 'P', language: 'uk' },
+  stack: { kotlin: false, postgres: false, telegram: false, notion: true },
+  git: { branch_prefix: 'feature/', main_branch: 'main', dev_branch: 'develop' },
+  notion: {
+    token_env: 'NOTION_TOKEN',
+    database_id: '3193462f68a980d69ec9c7ccc6329b88',
+    epics_database_id: 'd0c00200abc1234567890abcdef12345',
+  },
+});
 
 test('happy: valid full config loads and returns all sections', () => {
   const cfg = loadConfig(fix('valid-full.yaml'));
@@ -15,6 +27,25 @@ test('happy: valid full config loads and returns all sections', () => {
   assert.equal(cfg.stack.notion, true);
   assert.equal(cfg.notion.token_env, 'NOTION_TOKEN');
   assert.equal(cfg.git.branch_prefix, 'feature/test');
+  assert.equal(cfg.notion.categories.architecture, '33c3462f68a9819894a4df73c3b7d9fe');
+});
+
+test('happy: notion.categories with valid keys and IDs passes validation', () => {
+  const cfg = baseNotionConfig();
+  cfg.notion.categories = { features: '35f3462f68a981419511fb0ea80d1bb4' };
+  assert.doesNotThrow(() => validateConfig(cfg));
+});
+
+test('fail: unknown notion.categories key is rejected', () => {
+  const cfg = baseNotionConfig();
+  cfg.notion.categories = { bogus: '35f3462f68a981419511fb0ea80d1bb4' };
+  assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
+});
+
+test('fail: malformed notion.categories ID is rejected', () => {
+  const cfg = baseNotionConfig();
+  cfg.notion.categories = { features: 'not-a-valid-id' };
+  assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
 });
 
 test('happy: minimal config (all stack=false, no notion section) loads ok', () => {

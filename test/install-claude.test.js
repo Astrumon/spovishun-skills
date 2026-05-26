@@ -192,7 +192,7 @@ test('hooks settings entries are tagged with _spovishun for idempotent re-instal
   assert.equal(settings.hooks.SessionStart.length, 1, 'SessionStart hook should appear exactly once after re-install');
 });
 
-test('rule files are copied to .claude/rules/ preserving subdirectory structure', async () => {
+test('rule files are rendered into .claude/rules/ preserving subdirectory structure', async () => {
   const consumer = makeConsumerDir();
   copyConfig(consumer, 'install-config-no-notion.yaml');
   const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
@@ -207,4 +207,17 @@ test('rule files are copied to .claude/rules/ preserving subdirectory structure'
   assert.ok(existsSync(join(rulesDir, 'common', 'testing.md')));
   assert.ok(existsSync(join(rulesDir, 'common', 'feature-documentation.md')));
   assert.ok(existsSync(join(rulesDir, 'kotlin', 'kotlin-style.md')));
+});
+
+test('rule placeholders are rendered from config (not copied verbatim)', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml'); // branch_prefix "feature/", dev_branch "develop"
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: PKG_ROOT, config, artifacts });
+
+  const gitWorkflow = readFileSync(join(consumer, '.claude', 'rules', 'common', 'git-workflow.md'), 'utf8');
+  assert.ok(!gitWorkflow.includes('{{'), 'no unrendered Mustache placeholders should remain in a rule');
+  assert.ok(gitWorkflow.includes('feature/'), 'GIT_BRANCH_PREFIX should be substituted into the branch-naming rule');
+  assert.ok(gitWorkflow.includes('always from `develop`'), 'GIT_DEV_BRANCH should be substituted');
 });

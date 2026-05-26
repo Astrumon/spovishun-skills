@@ -69,9 +69,21 @@ notion:
   token_env: "NOTION_TOKEN"      # env var name, NOT the token value
   database_id: "<32-hex-chars>"
   epics_database_id: "<32-hex-chars>"
+  # Optional — Notion documentation category page IDs (notion-navigator, doc-updater).
+  # Each id also derives a zone URL https://www.notion.so/<id>.
+  categories:
+    architecture: "<32-hex-chars>"
+    database: "<32-hex-chars>"
+    testing: "<32-hex-chars>"
+    cicd: "<32-hex-chars>"
+    features: "<32-hex-chars>"
+    aitools: "<32-hex-chars>"
+    epics: "<32-hex-chars>"
 ```
 
 Schema is validated against [`schema/config.schema.json`](./schema/config.schema.json). Edit by hand or re-run `init` to overwrite.
+
+**Gitignore `spovishun-skills.config.yaml`** — it holds your Notion IDs, so it should not be committed (`doctor` checks this). Commit a sanitized `spovishun-skills.config.example.yaml` instead, plus the generated `spovishun-skills.lock.yaml`.
 
 ## Commands
 
@@ -148,7 +160,7 @@ your-project/
 │   ├── hooks/
 │   ├── rules/
 │   └── settings.json
-├── spovishun-skills.config.yaml     ← editable, commit it
+├── spovishun-skills.config.yaml     ← editable; gitignore it (holds Notion IDs)
 └── spovishun-skills.lock.yaml       ← generated, commit it
 ```
 

@@ -77,3 +77,26 @@ test('GIT_DEVELOP_BRANCH is an alias for git.dev_branch (back-compat)', () => {
   assert.equal(map.get('GIT_DEVELOP_BRANCH'), 'develop');
   assert.equal(map.get('GIT_DEVELOP_BRANCH'), map.get('GIT_DEV_BRANCH'));
 });
+
+test('notion.categories → NOTION_CATEGORY_<K>_ID and derived NOTION_ZONE_<K>_URL', () => {
+  const map = buildPlaceholderMap({
+    ...fullConfig,
+    notion: {
+      ...fullConfig.notion,
+      categories: {
+        architecture: '33c3462f68a9819894a4df73c3b7d9fe',
+        cicd: '33c3462f68a98146bf26cc0e5f5c2799',
+      },
+    },
+  });
+  assert.equal(map.get('NOTION_CATEGORY_ARCHITECTURE_ID'), '33c3462f68a9819894a4df73c3b7d9fe');
+  assert.equal(map.get('NOTION_CATEGORY_CICD_ID'), '33c3462f68a98146bf26cc0e5f5c2799');
+  assert.equal(map.get('NOTION_ZONE_ARCHITECTURE_URL'), 'https://www.notion.so/33c3462f68a9819894a4df73c3b7d9fe');
+  assert.equal(map.get('NOTION_ZONE_CICD_URL'), 'https://www.notion.so/33c3462f68a98146bf26cc0e5f5c2799');
+});
+
+test('no categories → no NOTION_CATEGORY_* keys', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  assert.equal(map.has('NOTION_CATEGORY_ARCHITECTURE_ID'), false);
+  assert.equal(map.has('NOTION_ZONE_ARCHITECTURE_URL'), false);
+});

@@ -21,3 +21,6 @@ notion:
   docs_root_id: "3193462f68a981b79936e2e45291df85"
   claude_md_page_id: "31c3462f68a9803eaaa8c5dc2c128ff3"
   epics_group_page_id: "3633462f68a981098385fa260e9ce132"
+  categories:
+    architecture: "33c3462f68a9819894a4df73c3b7d9fe"
+    database: "33c3462f68a9817e83aef4f1a912a8dd"

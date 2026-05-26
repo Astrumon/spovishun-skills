@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-05-26
+
+Surfaced by dogfooding the published plugin in the Spovishun project (spovishun-93): bug fixes plus
+an additive `notion.categories` config field (hence a minor bump).
+
+### Fixed
+
+- **Claude adapter now renders rule files** instead of copying them verbatim. Mustache placeholders
+  in `rules/` (e.g. `git-workflow.md`) previously landed in `.claude/rules/` as literal `{{…}}`.
+  Now consistent with the Codex and Windsurf adapters.
+- **`rules/common/git-workflow.md`** branch-naming template no longer double-prefixes the branch
+  (`{{GIT_BRANCH_PREFIX}}{{PROJECT_PREFIX}}` → `{{GIT_BRANCH_PREFIX}}`).
+- **`notion-task-inject.js` hook** now resolves the task board ID, project prefix, and dev branch
+  from `spovishun-skills.config.yaml` when the corresponding env vars are unset, so a plain
+  `install` yields a working task picker without extra environment setup. Env vars still take precedence.
+- **README** corrected: `spovishun-skills.config.yaml` should be **gitignored** (holds Notion IDs),
+  not committed — matching the `doctor` check.
+
+### Added
+
+- **`notion.categories`** config block — documentation category page IDs (`architecture`, `database`,
+  `testing`, `cicd`, `features`, `aitools`, `epics`). Each derives `NOTION_CATEGORY_<KEY>_ID` and
+  `NOTION_ZONE_<KEY>_URL` (`https://www.notion.so/<id>`) placeholders used by `notion-navigator` and
+  `doc-updater`. Optional `init` wizard prompts added.
+
 ## [1.0.0] — 2026-05-25
 
 First public release on npm.

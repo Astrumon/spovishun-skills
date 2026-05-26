@@ -18,11 +18,12 @@
  *    Called by Claude after user picks task(s) via AskUserQuestion.
  *    Exits 1 on error so Claude can surface it; all other modes exit 0.
  *
- * Configuration (env vars — set in .env or consumer config):
- *   NOTION_TOKEN or NOTION_SKILLS_TOKEN  — Notion API token (required)
- *   NOTION_BOARD_COLLECTION_ID           — Notion database ID of the task board (required)
- *   PROJECT_PREFIX                       — branch prefix, e.g. "myproject" → feature/myproject-N (required)
- *   GIT_DEVELOP_BRANCH                   — base branch name, default "develop"
+ * Configuration. Env vars take precedence; otherwise resolved from the consumer's
+ * spovishun-skills.config.yaml (so a plain `install` works without extra env setup):
+ *   NOTION_TOKEN or NOTION_SKILLS_TOKEN  — Notion API token (required; from env/.env)
+ *   NOTION_BOARD_COLLECTION_ID  ⟵ notion.database_id   — task board database ID (required)
+ *   PROJECT_PREFIX              ⟵ slug(project.name)    — branch prefix → feature/<prefix>-N
+ *   GIT_DEVELOP_BRANCH          ⟵ git.dev_branch        — base branch name, default "develop"
  *
  * State files (in consumer project, under .dev-context/):
  *   .dev-context/{branch}_prd/branch.txt      — exact branch name
@@ -51,10 +52,31 @@ function loadEnv() {
 
 loadEnv();
 
+// Minimal one-level-nested scalar reader for spovishun-skills.config.yaml — avoids a
+// js-yaml dependency in the standalone hook. Returns '' when the section/key is absent.
+function readConfigValue(section, key) {
+  const configFile = path.join(process.cwd(), 'spovishun-skills.config.yaml');
+  if (!fs.existsSync(configFile)) return '';
+  const lines = fs.readFileSync(configFile, 'utf8').split('\n');
+  let inSection = false;
+  for (const line of lines) {
+    if (/^[A-Za-z0-9_]+:/.test(line)) inSection = line.startsWith(`${section}:`);
+    else if (inSection) {
+      const m = line.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
+      if (m && m[1] === key) return m[2].replace(/^["']|["']$/g, '');
+    }
+  }
+  return '';
+}
+
+function slug(name) {
+  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 const NOTION_TOKEN = process.env.NOTION_SKILLS_TOKEN || process.env.NOTION_TOKEN;
-const DATABASE_ID = process.env.NOTION_BOARD_COLLECTION_ID;
-const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'project';
-const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH || 'develop';
+const DATABASE_ID = process.env.NOTION_BOARD_COLLECTION_ID || readConfigValue('notion', 'database_id');
+const PROJECT_PREFIX = process.env.PROJECT_PREFIX || slug(readConfigValue('project', 'name')) || 'project';
+const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH || readConfigValue('git', 'dev_branch') || 'develop';
 
 const DEV_CONTEXT_DIR = '.dev-context';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;

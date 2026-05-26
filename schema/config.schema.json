@@ -46,7 +46,13 @@
         "docs_root_id":        { "type": "string", "minLength": 1 },
         "claude_md_page_id":   { "type": "string", "minLength": 1 },
         "epics_database_id":   { "type": "string", "minLength": 1 },
-        "epics_group_page_id": { "type": "string", "minLength": 1 }
+        "epics_group_page_id": { "type": "string", "minLength": 1 },
+        "categories": {
+          "type": "object",
+          "description": "Notion documentation category page IDs. Each maps to NOTION_CATEGORY_<KEY>_ID and NOTION_ZONE_<KEY>_URL placeholders (zone URL derived as https://www.notion.so/<id>). Used by notion-navigator and doc-updater.",
+          "propertyNames": { "enum": ["architecture", "database", "testing", "cicd", "features", "aitools", "epics"] },
+          "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+        }
       },
       "unevaluatedProperties": false
     }

@@ -35,7 +35,7 @@ test('AUTO_APPLY: v2 body written to disk, lockfile checksum updated', async () 
 
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
   const v1Content = readFileSync(skillPath, 'utf8');
   assert.ok(v1Content.includes('all projects.'), 'v1 body should be on disk initially');
 
@@ -62,7 +62,7 @@ test('CONFLICT: conflict markers written, lockfile version unchanged', async () 
 
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
   // Simulate local edit
   writeFileSync(skillPath, readFileSync(skillPath, 'utf8') + '\nlocal edit here', 'utf8');
 
@@ -91,7 +91,7 @@ test('LOCAL_ONLY: local edit with same upstream version leaves file untouched', 
 
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
   const localEdit = readFileSync(skillPath, 'utf8') + '\nmy local addition';
   writeFileSync(skillPath, localEdit, 'utf8');
 
@@ -114,8 +114,8 @@ test('--skill filter applies update only to specified artifact', async () => {
 
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  const universalPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
-  const notionPath = join(consumer, '.claude', 'skills', 'notion-skill.md');
+  const universalPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
+  const notionPath = join(consumer, '.claude', 'skills', 'notion-skill', 'SKILL.md');
 
   const notionContentBefore = readFileSync(notionPath, 'utf8');
 
@@ -145,7 +145,7 @@ test('--dry-run: no files changed, no lockfile updated', async () => {
 
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
   // Add local edit so we get CONFLICT action in dry-run
   writeFileSync(skillPath, readFileSync(skillPath, 'utf8') + '\nlocal edit', 'utf8');
   const contentBefore = readFileSync(skillPath, 'utf8');
@@ -182,7 +182,7 @@ test('NEW: artifact present in upstream but not in lockfile is written', async (
   const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
 
   assert.equal(summary.newArtifacts, 1, 'universal-skill should be treated as NEW');
-  const content = readFileSync(join(consumer, '.claude', 'skills', 'universal-skill.md'), 'utf8');
+  const content = readFileSync(join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md'), 'utf8');
   assert.ok(content.includes('v2'), 'NEW artifact should have v2 body');
 });
 

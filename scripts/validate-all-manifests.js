@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { validateManifest } from '../lib/manifest-validator.js';
 
-const ARTIFACT_DIRS = ['skills', 'agents'];
+const ARTIFACT_DIRS = ['skills', 'agents', 'templates'];
 let failed = 0;
 
 for (const artifactDir of ARTIFACT_DIRS) {

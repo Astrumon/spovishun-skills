@@ -47,6 +47,8 @@ notion-update-page(
 
 Status flow: `Not started -> In progress -> Done`
 
+For Board v2 (Scrum) Stage model and migration from v1, see `references/board-v2-stages.md`.
+
 <details>
 <summary>Extended: creating a task (full 4-step workflow), common mistakes</summary>
 

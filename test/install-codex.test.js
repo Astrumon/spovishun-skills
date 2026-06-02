@@ -287,3 +287,34 @@ test('buildAgentsMd is pure and deterministic for the same inputs', () => {
   assert.match(out1, /### a-skill \(v1\.0\.0\)/);
   assert.match(out1, /Hello TestProj/);
 });
+
+test('renders templates under ## Templates section with sub-headings for supporting files', () => {
+  const config = {
+    project: { name: 'P', language: 'uk' },
+    stack: { kotlin: false, postgres: false, telegram: false, notion: false },
+    git: { branch_prefix: 'feature/' },
+  };
+  const configMap = buildPlaceholderMap(config);
+  const artifacts = [
+    {
+      kind: 'template',
+      id: 'epic-page',
+      version: '1.0.0',
+      manifest: {},
+      bodyText: '# Epic\nUse {{PROJECT_NAME}}\n',
+      files: [
+        { relPath: 'references/notes.md', contents: '# notes', encoding: 'utf8' },
+        { relPath: 'assets/diagram.png', contents: 'AAA=', encoding: 'base64' },
+      ],
+    },
+  ];
+  const warn = new CapturingWriter();
+  const out = buildAgentsMd({ artifacts, config, configMap, pluginVersion: '1.0.0', warn });
+  assert.match(out, /## Templates/);
+  assert.match(out, /### epic-page \(v1\.0\.0\)/);
+  assert.match(out, /#### epic-page — references\/notes\.md/);
+  assert.match(out, /Use P/);
+  // Binary asset emits a warning, not a heading.
+  assert.match(warn.text, /assets\/diagram\.png/);
+  assert.doesNotMatch(out, /assets\/diagram\.png/);
+});

@@ -1,22 +1,29 @@
 import { renderTemplate } from '../../lib/template-renderer.js';
 
 const HEADING_DEMOTE = 2;
+const SUPPORTING_DEMOTE = 3;
 
 /**
  * Builds the AGENTS.md content string for Codex from filtered artifacts.
  * Pure function — no filesystem access.
  *
+ * Skills, agents, and templates render their canonical body and then inline
+ * each text supporting file (from artifact.files[]) as a sub-section. Binary
+ * files (encoding === 'base64') are skipped with a stderr warning.
+ *
  * @param {object} opts
- * @param {Array}   opts.artifacts     — stack-filtered artifacts (skills, agents)
+ * @param {Array}   opts.artifacts     — stack-filtered artifacts (skills, agents, templates)
  * @param {Array}   [opts.rules]       — rule files: { id, body }; sorted by id
  * @param {object}  opts.config        — validated consumer config
  * @param {Map}     opts.configMap     — placeholder map from buildPlaceholderMap()
  * @param {string}  opts.pluginVersion — version string for the header
+ * @param {object}  [opts.warn]        — writable stream for warnings (default: process.stderr)
  * @returns {string}                   — full AGENTS.md text
  */
-export function buildAgentsMd({ artifacts, rules = [], config, configMap, pluginVersion }) {
+export function buildAgentsMd({ artifacts, rules = [], config, configMap, pluginVersion, warn = process.stderr }) {
   const skills = artifacts.filter((a) => a.kind === 'skill');
   const agents = artifacts.filter((a) => a.kind === 'agent');
+  const templates = artifacts.filter((a) => a.kind === 'template');
 
   const lines = [];
   lines.push(...renderHeader(config, pluginVersion));
@@ -25,14 +32,21 @@ export function buildAgentsMd({ artifacts, rules = [], config, configMap, plugin
   if (skills.length > 0) {
     lines.push('## Skills', '');
     for (const skill of skills) {
-      lines.push(...renderArtifact(skill, configMap));
+      lines.push(...renderArtifact(skill, configMap, warn));
     }
   }
 
   if (agents.length > 0) {
     lines.push('## Agents', '');
     for (const agent of agents) {
-      lines.push(...renderArtifact(agent, configMap));
+      lines.push(...renderArtifact(agent, configMap, warn));
+    }
+  }
+
+  if (templates.length > 0) {
+    lines.push('## Templates', '');
+    for (const template of templates) {
+      lines.push(...renderArtifact(template, configMap, warn));
     }
   }
 
@@ -80,17 +94,32 @@ function renderProjectContext(config) {
   return lines;
 }
 
-function renderArtifact(artifact, configMap) {
+function renderArtifact(artifact, configMap, warn) {
   const body = prepareBody(artifact);
   const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
   const rendered = renderTemplate(body, { configMap, manifestPlaceholders });
   const demoted = demoteHeadings(rendered, HEADING_DEMOTE);
-  return [
+  const out = [
     `### ${artifact.id} (v${artifact.version})`,
     '',
     demoted.trimEnd(),
     '',
   ];
+
+  for (const file of artifact.files ?? []) {
+    if (file.encoding !== 'utf8') {
+      warn.write(
+        `Warning: skipping binary supporting file ${artifact.id}/${file.relPath} ` +
+          `(Codex AGENTS.md is markdown-only).\n`
+      );
+      continue;
+    }
+    const fileRendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+    const fileDemoted = demoteHeadings(fileRendered, SUPPORTING_DEMOTE);
+    out.push(`#### ${artifact.id} — ${file.relPath}`, '', fileDemoted.trimEnd(), '');
+  }
+
+  return out;
 }
 
 /**

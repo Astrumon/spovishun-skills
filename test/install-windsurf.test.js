@@ -218,3 +218,31 @@ test('lockfile entries include rule entries when pkgRoot has rules/', async () =
     assert.equal(e.version, '0.0.0');
   }
 });
+
+test('writes template artifacts as templates--{id}.md with supporting files', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  const tmpPkg = mkdtempSync(join(tmpdir(), 'wt-pkg-'));
+  const tDir = join(tmpPkg, 'templates', 'sample');
+  mkdirSync(tDir, { recursive: true });
+  writeFileSync(
+    join(tDir, 'manifest.yaml'),
+    'id: sample\nversion: "1.0.0"\ncategory: universal\ndescription: Sample template fixture.\n',
+    'utf8'
+  );
+  writeFileSync(join(tDir, 'TEMPLATE.md'), '# {{PROJECT_NAME}}\n', 'utf8');
+  mkdirSync(join(tDir, 'references'), { recursive: true });
+  writeFileSync(join(tDir, 'references', 'note.md'), '# note', 'utf8');
+
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(tmpPkg);
+  await installWindsurf({ consumerCwd: consumer, pkgRoot: tmpPkg, config, artifacts, warn: { write: () => {} } });
+
+  const rulesDir = join(consumer, '.windsurf', 'rules');
+  assert.ok(existsSync(join(rulesDir, 'templates--sample.md')), 'main template body should be written under templates-- prefix');
+  assert.ok(existsSync(join(rulesDir, 'templates--sample--references--note.md')), 'supporting file should be written with chained -- separators');
+  const body = readFileSync(join(rulesDir, 'templates--sample.md'), 'utf8');
+  assert.ok(body.includes('FixtureProject'), 'Mustache must render template body');
+});

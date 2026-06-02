@@ -1,0 +1,4 @@
+id: epic-page
+version: 1.0.0
+category: universal
+description: Notion Epic page skeleton — TL;DR, research, architecture, risks, phased roadmap, task decomposition. Used by newepic/task-decomposer.

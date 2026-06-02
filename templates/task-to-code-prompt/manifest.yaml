@@ -1,0 +1,4 @@
+id: task-to-code-prompt
+version: 1.0.0
+category: universal
+description: Skeleton for converting a Notion task into a self-contained English coding prompt for Claude Code / Windsurf / Codex.

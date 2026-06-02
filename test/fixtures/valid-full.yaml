@@ -24,3 +24,5 @@ notion:
   categories:
     architecture: "33c3462f68a9819894a4df73c3b7d9fe"
     database: "33c3462f68a9817e83aef4f1a912a8dd"
+  picker:
+    stage_filter: "Sprint"

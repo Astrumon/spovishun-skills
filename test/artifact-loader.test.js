@@ -145,3 +145,47 @@ test('manifest object is attached to the artifact', () => {
   assert.equal(artifacts[0].manifest.category, 'stack-specific');
   assert.deepEqual(artifacts[0].manifest.requires, ['notion']);
 });
+
+test('artifact carries artifactDir and supporting files', () => {
+  const root = makePkgRoot();
+  const skillDir = join(root, 'skills', 'multi');
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(
+    join(skillDir, 'manifest.yaml'),
+    'id: multi\nversion: "1.0.0"\ncategory: universal\ndescription: "Multi-file test fixture."\n',
+    'utf8'
+  );
+  writeFileSync(join(skillDir, 'SKILL.md'), '# main', 'utf8');
+  mkdirSync(join(skillDir, 'references'), { recursive: true });
+  writeFileSync(join(skillDir, 'references', 'note.md'), '# note', 'utf8');
+  mkdirSync(join(skillDir, 'assets'), { recursive: true });
+  writeFileSync(join(skillDir, 'assets', 'pic.bin'), Buffer.from([1, 2, 3, 4]));
+
+  const artifacts = loadArtifacts(root);
+  const skill = artifacts.find((a) => a.id === 'multi');
+  assert.equal(skill.artifactDir, skillDir);
+  assert.equal(skill.files.length, 2);
+  const note = skill.files.find((f) => f.relPath === 'references/note.md');
+  assert.equal(note.encoding, 'utf8');
+  assert.ok(note.contents.includes('# note'));
+  const pic = skill.files.find((f) => f.relPath === 'assets/pic.bin');
+  assert.equal(pic.encoding, 'base64');
+  assert.equal(pic.contents, Buffer.from([1, 2, 3, 4]).toString('base64'));
+});
+
+test('loads template kind from templates/ directory', () => {
+  const root = makePkgRoot();
+  const tmplDir = join(root, 'templates', 'sample');
+  mkdirSync(tmplDir, { recursive: true });
+  writeFileSync(
+    join(tmplDir, 'manifest.yaml'),
+    'id: sample\nversion: "1.0.0"\ncategory: universal\ndescription: "Sample template fixture."\n',
+    'utf8'
+  );
+  writeFileSync(join(tmplDir, 'TEMPLATE.md'), '# Sample template\n{{PROJECT_NAME}}', 'utf8');
+  const artifacts = loadArtifacts(root);
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].kind, 'template');
+  assert.equal(artifacts[0].id, 'sample');
+  assert.ok(artifacts[0].bodyText.includes('Sample template'));
+});

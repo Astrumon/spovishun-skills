@@ -8,23 +8,28 @@ import { sha256 } from '../../lib/checksum.js';
 export const RULES_DIR = '.windsurf/rules';
 export const CHAR_LIMIT = 6000;
 
-const WINDSURF_KINDS = new Set(['skill']);
+const WINDSURF_KINDS = new Set(['skill', 'template']);
 
 /**
- * Generates .windsurf/rules/*.md for Windsurf from stack-filtered skills and rules.
+ * Generates .windsurf/rules/*.md for Windsurf from stack-filtered skills, templates, and rules.
  *
- * Each skill and rule gets its own .md file. If a rendered file would exceed
- * CHAR_LIMIT characters it is split into <id>-part-1.md, <id>-part-2.md, ...
- * Agent and hook artifacts are skipped (Windsurf has no agent concept).
+ * Each skill, template, and rule gets its own .md file. Skills/templates with
+ * supporting `references/` or `assets/` files generate additional rule files
+ * named `{id}--{relpath-with-double-dash}.md`. Templates are prefixed with
+ * `templates--` to keep them visually grouped. If a rendered file exceeds
+ * CHAR_LIMIT characters it is split into `<id>-part-1.md`, `<id>-part-2.md`, ...
+ * Agent and hook artifacts are skipped (Windsurf has no agent concept). Binary
+ * supporting files are skipped with a stderr warning.
  *
  * @param {object} opts
  * @param {string}   opts.consumerCwd   — absolute path to consumer project root
  * @param {string}   opts.pkgRoot       — absolute path to the spovishun-skills package root (for rules/)
  * @param {object}   opts.config        — validated consumer config
  * @param {Array}    opts.artifacts     — all loaded artifacts from loadArtifacts()
+ * @param {object}   [opts.warn]        — writable stream for warnings (default: process.stderr)
  * @returns {Array<{kind, id, version, checksum}>} — lockfile entries for installed artifacts
  */
-export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts }) {
+export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts, warn = process.stderr }) {
   const stackFiltered = filterByStack(artifacts, config.stack ?? {});
   const included = stackFiltered.filter((a) => WINDSURF_KINDS.has(a.kind));
   const rules = collectRules(pkgRoot);
@@ -40,7 +45,22 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts 
     const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
     const checksum = sha256(rendered);
 
-    writeChunked(rulesDir, artifact.id, rendered);
+    const ruleBaseId = artifact.kind === 'template' ? `templates--${artifact.id}` : artifact.id;
+    writeChunked(rulesDir, ruleBaseId, rendered);
+
+    for (const file of artifact.files ?? []) {
+      if (file.encoding !== 'utf8') {
+        warn.write(
+          `Warning: skipping binary supporting file ${artifact.id}/${file.relPath} ` +
+            `(Windsurf rules are markdown-only).\n`
+        );
+        continue;
+      }
+      const fileRendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+      const fileRuleId = `${ruleBaseId}--${file.relPath.replace(/\//g, '--').replace(/\.md$/, '')}`;
+      writeChunked(rulesDir, fileRuleId, fileRendered);
+    }
+
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
   }
 

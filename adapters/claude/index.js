@@ -1,10 +1,18 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
+import { join, relative, dirname } from 'node:path';
+import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { sha256 } from '../../lib/checksum.js';
 import { mergeSettings } from '../../lib/settings-merger.js';
+import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
+
+const KIND_LAYOUT = {
+  skill: { subdir: 'skills', bodyFilename: 'SKILL.md' },
+  agent: { subdir: 'agents', bodyFilename: 'AGENT.md' },
+  template: { subdir: '_templates', bodyFilename: 'TEMPLATE.md' },
+};
 
 /**
  * Installs filtered artifacts into the consumer's .claude/ directory.
@@ -14,9 +22,10 @@ import { mergeSettings } from '../../lib/settings-merger.js';
  * @param {string}   opts.pkgRoot       — absolute path to this package's root (for hooks/ and rules/)
  * @param {object}   opts.config        — validated consumer config object
  * @param {Array}    opts.artifacts     — all loaded artifacts from loadArtifacts()
+ * @param {object}   [opts.warn]        — writable stream for warnings (default: process.stderr)
  * @returns {Array<{kind, id, version, checksum}>}  — lockfile entries for installed artifacts
  */
-export async function installClaude({ consumerCwd, pkgRoot, config, artifacts }) {
+export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, warn = process.stderr }) {
   const filtered = filterByStack(artifacts, config.stack ?? {});
   const configMap = buildPlaceholderMap(config);
 
@@ -24,22 +33,35 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts })
   mkdirSync(claudeDir, { recursive: true });
   mkdirSync(join(claudeDir, 'skills'), { recursive: true });
   mkdirSync(join(claudeDir, 'agents'), { recursive: true });
+  mkdirSync(join(claudeDir, '_templates'), { recursive: true });
   mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
   mkdirSync(join(claudeDir, 'rules'), { recursive: true });
+
+  reconcileLegacyArtifacts(consumerCwd, claudeDir, filtered, warn);
 
   const lockEntries = [];
 
   for (const artifact of filtered) {
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    const checksum = sha256(rendered);
+    const layout = KIND_LAYOUT[artifact.kind];
+    if (!layout) continue;
 
-    if (artifact.kind === 'skill') {
-      const outPath = join(claudeDir, 'skills', `${artifact.id}.md`);
-      writeFileSync(outPath, rendered, 'utf8');
-    } else if (artifact.kind === 'agent') {
-      const outPath = join(claudeDir, 'agents', `${artifact.id}.md`);
-      writeFileSync(outPath, rendered, 'utf8');
+    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
+    const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    const checksum = sha256(renderedBody);
+
+    const artifactDir = join(claudeDir, layout.subdir, artifact.id);
+    mkdirSync(artifactDir, { recursive: true });
+    writeFileSync(join(artifactDir, layout.bodyFilename), renderedBody, 'utf8');
+
+    for (const file of artifact.files ?? []) {
+      const destPath = join(artifactDir, file.relPath);
+      mkdirSync(dirname(destPath), { recursive: true });
+      if (file.encoding === 'utf8') {
+        const rendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+        writeFileSync(destPath, rendered, 'utf8');
+      } else {
+        writeFileSync(destPath, Buffer.from(file.contents, 'base64'));
+      }
     }
 
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
@@ -51,6 +73,53 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts })
   installRules(pkgRoot, claudeDir, configMap);
 
   return lockEntries;
+}
+
+/**
+ * Removes stale artifact files from prior plugin layouts:
+ *
+ *   1. Flat `.claude/{subdir}/{id}.md` files from pre-v1.2.0 installs (always
+ *      stale: every artifact now uses the folder layout).
+ *   2. `.claude/{subdir}/{id}/` folders for ids that were in the prior lockfile
+ *      but are no longer in the filtered artifact set (e.g. removed skill,
+ *      stack-flag toggled off).
+ *
+ * Reads the prior lockfile to drive (2); skips silently if absent.
+ */
+function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, warn) {
+  const wantById = new Map();
+  for (const artifact of filteredArtifacts) {
+    wantById.set(`${artifact.kind}:${artifact.id}`, true);
+  }
+
+  for (const [kind, layout] of Object.entries(KIND_LAYOUT)) {
+    const subdirPath = join(claudeDir, layout.subdir);
+    // Drop flat {id}.md files (legacy layout).
+    if (existsSync(subdirPath)) {
+      for (const entry of readdirSync(subdirPath, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const flatPath = join(subdirPath, entry.name);
+          rmSync(flatPath, { force: true });
+          warn.write(`Removed legacy flat file: ${relative(consumerCwd, flatPath)}\n`);
+        }
+      }
+    }
+  }
+
+  const lockPath = join(consumerCwd, LOCKFILE_NAME);
+  const lock = readLockfile(lockPath);
+  if (!lock || !Array.isArray(lock.artifacts)) return;
+
+  for (const entry of lock.artifacts) {
+    const layout = KIND_LAYOUT[entry.kind];
+    if (!layout) continue;
+    if (wantById.has(`${entry.kind}:${entry.id}`)) continue;
+    const stalePath = join(claudeDir, layout.subdir, entry.id);
+    if (existsSync(stalePath)) {
+      rmSync(stalePath, { recursive: true, force: true });
+      warn.write(`Removed stale artifact folder: ${relative(consumerCwd, stalePath)}\n`);
+    }
+  }
 }
 
 /**

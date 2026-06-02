@@ -73,20 +73,14 @@ presentation  →  domain  ←  data
 
 ## Visual Diagrams
 
-For any architecture component diagram, layer stack, or flow — use the `diagram-design` skill instead of Mermaid. Mermaid is a fallback only when the user explicitly asks for it or when no Notion upload is needed.
+Use Mermaid for component diagrams, layer stacks, and sequence flows — it renders inline in Markdown and Notion. For richer visuals or screenshots, render externally (Excalidraw, draw.io) and link the source alongside the doc.
 
 **When to produce a visual diagram:**
 - New architectural layer or module is introduced
 - Cross-layer dependency or data flow needs explaining
 - Decision involves more than 3 components
 
-**Workflow:**
-
-1. Identify the diagram type from the `diagram-design` selection guide (most common: `architecture`, `layer stack`, `flowchart`, `sequence`)
-2. Invoke the `diagram-design` skill — it produces a self-contained `.html` in `docs/diagrams/`
-3. If the result should go to Notion (default: yes), follow the screenshot + upload flow described in the `diagram-design` skill
-
-**Layer stack reference (diagram-design type: `layers`):**
+**Layer stack reference:**
 ```
 Presentation  →  Domain  ←  Data
                    ↑

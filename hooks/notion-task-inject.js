@@ -52,19 +52,70 @@ function loadEnv() {
 
 loadEnv();
 
-// Minimal one-level-nested scalar reader for spovishun-skills.config.yaml — avoids a
-// js-yaml dependency in the standalone hook. Returns '' when the section/key is absent.
-function readConfigValue(section, key) {
+// Minimal scalar reader for spovishun-skills.config.yaml — avoids a js-yaml
+// dependency in the standalone hook. Supports both 1-level (`section`, `'key'`)
+// and 2-level dotted (`section`, `'sub.key'`) lookups. Returns '' when the
+// section/key is absent.
+function readConfigValue(section, keyPath) {
   const configFile = path.join(process.cwd(), 'spovishun-skills.config.yaml');
   if (!fs.existsSync(configFile)) return '';
   const lines = fs.readFileSync(configFile, 'utf8').split('\n');
+  const segments = keyPath.split('.');
+
   let inSection = false;
-  for (const line of lines) {
-    if (/^[A-Za-z0-9_]+:/.test(line)) inSection = line.startsWith(`${section}:`);
-    else if (inSection) {
-      const m = line.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
-      if (m && m[1] === key) return m[2].replace(/^["']|["']$/g, '');
+  let subIndent = -1;
+  let inSubsection = false;
+  let subIndentInner = -1;
+
+  for (const rawLine of lines) {
+    // Top-level section boundary.
+    if (/^[A-Za-z0-9_]+:/.test(rawLine)) {
+      inSection = rawLine.startsWith(`${section}:`);
+      subIndent = -1;
+      inSubsection = false;
+      subIndentInner = -1;
+      continue;
     }
+    if (!inSection) continue;
+
+    const indentMatch = rawLine.match(/^(\s+)/);
+    const indent = indentMatch ? indentMatch[1].length : 0;
+    if (indent === 0) continue;
+
+    if (segments.length === 1) {
+      const m = rawLine.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
+      if (m && m[1] === segments[0]) return m[2].replace(/^["']|["']$/g, '');
+      continue;
+    }
+
+    // 2-level path: first find the subsection header, then a scalar within it
+    // at a deeper indent.
+    if (!inSubsection) {
+      const mHeader = rawLine.match(/^(\s+)([A-Za-z0-9_]+):\s*$/);
+      if (mHeader && mHeader[2] === segments[0]) {
+        subIndent = mHeader[1].length;
+        inSubsection = true;
+        subIndentInner = -1;
+      }
+      continue;
+    }
+
+    // Inside subsection: exit when indentation returns to subIndent or shallower
+    // and the line declares a different key.
+    if (indent <= subIndent) {
+      inSubsection = false;
+      subIndentInner = -1;
+      // Re-check this same line as a potential subsection header for segments[0].
+      const mHeader = rawLine.match(/^(\s+)([A-Za-z0-9_]+):\s*$/);
+      if (mHeader && mHeader[2] === segments[0]) {
+        subIndent = mHeader[1].length;
+        inSubsection = true;
+      }
+      continue;
+    }
+
+    const mVal = rawLine.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
+    if (mVal && mVal[1] === segments[1]) return mVal[2].replace(/^["']|["']$/g, '');
   }
   return '';
 }
@@ -77,6 +128,22 @@ const NOTION_TOKEN = process.env.NOTION_SKILLS_TOKEN || process.env.NOTION_TOKEN
 const DATABASE_ID = process.env.NOTION_BOARD_COLLECTION_ID || readConfigValue('notion', 'database_id');
 const PROJECT_PREFIX = process.env.PROJECT_PREFIX || slug(readConfigValue('project', 'name')) || 'project';
 const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH || readConfigValue('git', 'dev_branch') || 'develop';
+// Board v2 (Scrum) optional Stage select filter. Empty string = unset = no filter (Board v1).
+const STAGE_FILTER = process.env.NOTION_PICKER_STAGE_FILTER || readConfigValue('notion', 'picker.stage_filter');
+
+function stageFilterClause() {
+  if (!STAGE_FILTER) return null;
+  return { property: 'Stage', select: { equals: STAGE_FILTER } };
+}
+
+function withStageFilter(baseFilter) {
+  const stage = stageFilterClause();
+  if (!stage) return baseFilter;
+  if (baseFilter && Array.isArray(baseFilter.and)) {
+    return { and: [...baseFilter.and, stage] };
+  }
+  return { and: [baseFilter, stage] };
+}
 
 const DEV_CONTEXT_DIR = '.dev-context';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -309,12 +376,12 @@ async function queryByPriorityTier(token, status) {
   const priorities = ['High', 'Medium', 'Low', 'Normal'];
   for (const priority of priorities) {
     const result = await notionRequest(token, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
-      filter: {
+      filter: withStageFilter({
         and: [
           { property: 'Status', status: { equals: status } },
           { property: 'Priority', select: { equals: priority } },
         ]
-      },
+      }),
       sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
       page_size: PICKER_TIER_LIMIT,
     });
@@ -323,7 +390,7 @@ async function queryByPriorityTier(token, status) {
   }
   // Fallback: any priority
   const result = await notionRequest(token, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
-    filter: { property: 'Status', status: { equals: status } },
+    filter: withStageFilter({ property: 'Status', status: { equals: status } }),
     sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     page_size: PICKER_TIER_LIMIT,
   });
@@ -378,7 +445,7 @@ async function runPicker(token, currentBranch, isForce) {
   }
 
   const inProgressResult = await notionRequest(token, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
-    filter: { property: 'Status', status: { equals: 'In progress' } },
+    filter: withStageFilter({ property: 'Status', status: { equals: 'In progress' } }),
     page_size: PICKER_TIER_LIMIT,
   });
   const orphanedInProgress = (inProgressResult?.results || []).filter(
@@ -604,12 +671,12 @@ async function main() {
 
   try {
     const queryResult = await notionRequest(NOTION_TOKEN, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
-      filter: {
+      filter: withStageFilter({
         or: [
           { property: 'Status', status: { equals: 'To do' } },
           { property: 'Status', status: { equals: 'In progress' } },
         ]
-      },
+      }),
       page_size: 1,
     });
 

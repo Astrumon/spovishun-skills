@@ -57,8 +57,8 @@ test('generated skill file contains rendered placeholder', async () => {
   const artifacts = loadArtifacts(FIXTURES_SOURCE);
   await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill.md');
-  assert.ok(existsSync(skillPath), '.claude/skills/universal-skill.md should exist');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
+  assert.ok(existsSync(skillPath), '.claude/skills/universal-skill/SKILL.md should exist');
   const content = readFileSync(skillPath, 'utf8');
   assert.ok(content.includes('FixtureProject'), 'PROJECT_NAME placeholder should be substituted');
   assert.ok(!content.includes('{{PROJECT_NAME}}'), 'raw placeholder should not remain');
@@ -71,7 +71,7 @@ test('notion skill has database ID rendered', async () => {
   const artifacts = loadArtifacts(FIXTURES_SOURCE);
   await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
 
-  const skillPath = join(consumer, '.claude', 'skills', 'notion-skill.md');
+  const skillPath = join(consumer, '.claude', 'skills', 'notion-skill', 'SKILL.md');
   assert.ok(existsSync(skillPath));
   const content = readFileSync(skillPath, 'utf8');
   assert.ok(content.includes('3193462f68a980d69ec9c7ccc6329b88'));
@@ -220,4 +220,105 @@ test('rule placeholders are rendered from config (not copied verbatim)', async (
   assert.ok(!gitWorkflow.includes('{{'), 'no unrendered Mustache placeholders should remain in a rule');
   assert.ok(gitWorkflow.includes('feature/'), 'GIT_BRANCH_PREFIX should be substituted into the branch-naming rule');
   assert.ok(gitWorkflow.includes('always from `develop`'), 'GIT_DEV_BRANCH should be substituted');
+});
+
+test('skill supporting files (references/, assets/) are installed under the skill folder', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { Buffer } = await import('node:buffer');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  // Build a tmp fixture with a supporting-files skill.
+  const tmpPkg = mkdtempSync(join(tmpdir(), 'multi-file-pkg-'));
+  const skillDir = join(tmpPkg, 'skills', 'multi-file');
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(
+    join(skillDir, 'manifest.yaml'),
+    'id: multi-file\nversion: "1.0.0"\ncategory: universal\ndescription: Multi-file skill test fixture.\n',
+    'utf8'
+  );
+  writeFileSync(join(skillDir, 'SKILL.md'), '# Multi-file\nProject: {{PROJECT_NAME}}\n', 'utf8');
+  mkdirSync(join(skillDir, 'references'), { recursive: true });
+  writeFileSync(join(skillDir, 'references', 'guide.md'), '# Guide\n{{PROJECT_NAME}} guide.\n', 'utf8');
+  mkdirSync(join(skillDir, 'assets'), { recursive: true });
+  writeFileSync(join(skillDir, 'assets', 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(tmpPkg);
+  await installClaude({ consumerCwd: consumer, pkgRoot: tmpPkg, config, artifacts, warn: { write: () => {} } });
+
+  const base = join(consumer, '.claude', 'skills', 'multi-file');
+  assert.ok(existsSync(join(base, 'SKILL.md')), 'SKILL.md should exist');
+  assert.ok(existsSync(join(base, 'references', 'guide.md')), 'references/guide.md should exist');
+  assert.ok(existsSync(join(base, 'assets', 'logo.png')), 'assets/logo.png should exist');
+
+  const guide = readFileSync(join(base, 'references', 'guide.md'), 'utf8');
+  assert.ok(guide.includes('FixtureProject'), 'text supporting files must be Mustache-rendered');
+
+  const png = readFileSync(join(base, 'assets', 'logo.png'));
+  assert.equal(png[0], 0x89, 'binary asset must be copied verbatim');
+  assert.equal(png[1], 0x50, 'binary asset must be copied verbatim');
+});
+
+test('reinstall removes legacy flat .md files', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+
+  // Simulate a pre-v1.2.0 install with a flat skill file.
+  const skillsDir = join(consumer, '.claude', 'skills');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  mkdirSync(skillsDir, { recursive: true });
+  writeFileSync(join(skillsDir, 'legacy.md'), 'old flat content', 'utf8');
+
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, warn: { write: () => {} } });
+
+  assert.ok(!existsSync(join(skillsDir, 'legacy.md')), 'legacy flat file should be removed');
+  assert.ok(existsSync(join(skillsDir, 'universal-skill', 'SKILL.md')), 'new folder layout should be in place');
+});
+
+test('installs template kind into .claude/_templates/{id}/TEMPLATE.md', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  const tmpPkg = mkdtempSync(join(tmpdir(), 'template-pkg-'));
+  const tDir = join(tmpPkg, 'templates', 'sample');
+  mkdirSync(tDir, { recursive: true });
+  writeFileSync(
+    join(tDir, 'manifest.yaml'),
+    'id: sample\nversion: "1.0.0"\ncategory: universal\ndescription: Sample template fixture.\n',
+    'utf8'
+  );
+  writeFileSync(join(tDir, 'TEMPLATE.md'), '# {{PROJECT_NAME}} template\n', 'utf8');
+
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(tmpPkg);
+  await installClaude({ consumerCwd: consumer, pkgRoot: tmpPkg, config, artifacts, warn: { write: () => {} } });
+
+  const tpath = join(consumer, '.claude', '_templates', 'sample', 'TEMPLATE.md');
+  assert.ok(existsSync(tpath), 'TEMPLATE.md should exist under _templates/sample/');
+  const body = readFileSync(tpath, 'utf8');
+  assert.ok(body.includes('FixtureProject template'), 'template Mustache must render');
+});
+
+test('reinstall removes stale artifact folder when lockfile entry disappears from filtered set', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-notion.yaml');
+
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifactsAll = loadArtifacts(FIXTURES_SOURCE);
+
+  const lockEntries = await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts: artifactsAll });
+  const pkgVersion = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version;
+  writeLockfile(join(consumer, LOCKFILE_NAME), { pluginVersion: pkgVersion, target: 'claude', artifacts: lockEntries, now: FIXED_NOW });
+
+  assert.ok(existsSync(join(consumer, '.claude', 'skills', 'notion-skill', 'SKILL.md')));
+
+  // Drop notion-skill from the artifact list (e.g. removed from upstream)
+  const filtered = artifactsAll.filter((a) => a.id !== 'notion-skill');
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts: filtered, warn: { write: () => {} } });
+
+  assert.ok(!existsSync(join(consumer, '.claude', 'skills', 'notion-skill')), 'stale folder should be removed');
 });

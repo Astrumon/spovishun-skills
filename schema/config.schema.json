@@ -52,6 +52,18 @@
           "description": "Notion documentation category page IDs. Each maps to NOTION_CATEGORY_<KEY>_ID and NOTION_ZONE_<KEY>_URL placeholders (zone URL derived as https://www.notion.so/<id>). Used by notion-navigator and doc-updater.",
           "propertyNames": { "enum": ["architecture", "database", "testing", "cicd", "features", "aitools", "epics"] },
           "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+        },
+        "picker": {
+          "type": "object",
+          "description": "Task picker configuration. Optional — picker is backward-compatible with boards that have no Stage field.",
+          "properties": {
+            "stage_filter": {
+              "type": "string",
+              "minLength": 1,
+              "description": "If set, picker queries filter by Stage select value (e.g. 'Sprint' for Board v2). When unset, no Stage filter is applied (Board v1 behavior)."
+            }
+          },
+          "unevaluatedProperties": false
         }
       },
       "unevaluatedProperties": false

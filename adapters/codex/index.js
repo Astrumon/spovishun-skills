@@ -9,7 +9,7 @@ import { buildAgentsMd } from './build-agents-md.js';
 export const AGENTS_MD_FILENAME = 'AGENTS.md';
 export const SIZE_LIMIT_BYTES = 32 * 1024;
 
-const CODEX_KINDS = new Set(['skill', 'agent']);
+const CODEX_KINDS = new Set(['skill', 'agent', 'template']);
 
 /**
  * Generates AGENTS.md for Codex at the consumer project root.
@@ -46,6 +46,7 @@ export async function installCodex({
     config,
     configMap,
     pluginVersion,
+    warn,
   });
 
   const outPath = join(consumerCwd, AGENTS_MD_FILENAME);

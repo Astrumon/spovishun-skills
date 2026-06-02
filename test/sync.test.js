@@ -32,14 +32,14 @@ test('sync re-applies after config change (notion flip)', async () => {
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: FIXTURES_SOURCE, out: { write: () => {} } });
 
   // Notion skill should not be installed initially
-  assert.ok(!existsSync(join(consumer, '.claude', 'skills', 'notion-skill.md')));
+  assert.ok(!existsSync(join(consumer, '.claude', 'skills', 'notion-skill', 'SKILL.md')));
 
   // Replace config with the notion-enabled version
   copyConfig(consumer, 'install-config-notion.yaml');
 
   await runSync({ cwd: consumer, pkgRoot: FIXTURES_SOURCE, out: { write: () => {} } });
 
-  assert.ok(existsSync(join(consumer, '.claude', 'skills', 'notion-skill.md')), 'notion-skill.md should exist after sync with notion=true');
+  assert.ok(existsSync(join(consumer, '.claude', 'skills', 'notion-skill', 'SKILL.md')), 'notion-skill SKILL.md should exist after sync with notion=true');
 });
 
 test('sync fails without config', async () => {

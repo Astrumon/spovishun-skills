@@ -100,3 +100,24 @@ test('no categories → no NOTION_CATEGORY_* keys', () => {
   assert.equal(map.has('NOTION_CATEGORY_ARCHITECTURE_ID'), false);
   assert.equal(map.has('NOTION_ZONE_ARCHITECTURE_URL'), false);
 });
+
+test('notion.picker.stage_filter → NOTION_PICKER_STAGE_FILTER is exposed', () => {
+  const map = buildPlaceholderMap({
+    ...fullConfig,
+    notion: { ...fullConfig.notion, picker: { stage_filter: 'Sprint' } },
+  });
+  assert.equal(map.get('NOTION_PICKER_STAGE_FILTER'), 'Sprint');
+});
+
+test('no notion.picker → NOTION_PICKER_STAGE_FILTER absent (Board v1 backward compat)', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  assert.equal(map.has('NOTION_PICKER_STAGE_FILTER'), false);
+});
+
+test('stack.notion=false → NOTION_PICKER_STAGE_FILTER not surfaced even if picker block present', () => {
+  const map = buildPlaceholderMap({
+    ...minimalConfig,
+    notion: { picker: { stage_filter: 'Sprint' } },
+  });
+  assert.equal(map.has('NOTION_PICKER_STAGE_FILTER'), false);
+});

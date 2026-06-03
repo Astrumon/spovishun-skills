@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] — 2026-06-03
+
+Patch release. Fixes a Claude-adapter bug surfaced by dogfooding the published plugin in the
+Spovishun project: the Claude install was writing 24 of 36 skills without any YAML frontmatter,
+which silently degraded Claude Code's skill triggering (it fell back to the body's first H1
+instead of the manifest's `description`).
+
+### Fixed
+
+- **`adapters/claude/index.js`** now synthesizes a `---\nname: <id>\ndescription: ...\n---`
+  frontmatter block at the top of every `.claude/skills/<id>/SKILL.md` when the canonical body
+  does not already start with one. Bodies that ship with their own inline frontmatter (e.g.
+  `code-reviewer`) are written verbatim — no double-wrap. Agents and templates are unchanged.
+- **`adapters/claude/update.js`** mirrors the install behavior so `update --target=claude` and
+  `sync` produce byte-identical output to a fresh install for the same upstream commit.
+- **`bin/update.js`** prepends the same synthesized frontmatter when building its upstream
+  checksum map, so the three-way classifier sees AUTO_APPLY (not "drifted") once a re-install
+  with the new adapter has run.
+
+### Added
+
+- **`lib/skill-frontmatter.js`** — small pure helper module. `composeSkillDescription(manifest)`
+  appends a `Triggers: <en+uk joined>.` suffix to the manifest's `description` so triggering
+  matches the convention used by hand-authored inline-frontmatter skills like `code-reviewer`.
+  `ensureSkillFrontmatter(body, manifest)` is the no-op-if-present write-side guard.
+- Tests: `test/skill-frontmatter.test.js` (unit) + new `manifest-only` / `inline-frontmatter`
+  / `agent-unchanged` cases in `test/install-claude.test.js`. New fixture
+  `test/fixtures/source/skills/inline-frontmatter-skill/` covers the no-double-wrap path.
+
+### Known follow-ups (not addressed in this patch)
+
+- Pruning hand-authored artifacts the lockfile never owned. A first install over a hand-authored
+  `.claude/` cannot remove pre-existing files (e.g. a deprecated `diagram-design/` skill folder,
+  or a legacy `.claude/skills/_templates/` directory) because they have no provenance. Likely
+  fix: teach `install` to prune known-removed skill ids and detect the legacy template location.
+
 ## [1.2.0] — 2026-06-02
 
 Folder-layout supporting files across all adapters, templates as a first-class artifact kind,

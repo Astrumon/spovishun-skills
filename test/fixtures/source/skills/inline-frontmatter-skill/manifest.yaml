@@ -1,0 +1,7 @@
+id: inline-frontmatter-skill
+version: 1.0.0
+category: universal
+description: A skill whose body already carries its own YAML frontmatter block.
+triggers:
+  en:
+    - "inline frontmatter"

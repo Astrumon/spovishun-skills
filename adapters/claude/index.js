@@ -7,6 +7,7 @@ import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { sha256 } from '../../lib/checksum.js';
 import { mergeSettings } from '../../lib/settings-merger.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
+import { ensureSkillFrontmatter } from '../../lib/skill-frontmatter.js';
 
 const KIND_LAYOUT = {
   skill: { subdir: 'skills', bodyFilename: 'SKILL.md' },
@@ -47,11 +48,14 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
 
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
     const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    const checksum = sha256(renderedBody);
+    const bodyToWrite = artifact.kind === 'skill'
+      ? ensureSkillFrontmatter(renderedBody, artifact.manifest)
+      : renderedBody;
+    const checksum = sha256(bodyToWrite);
 
     const artifactDir = join(claudeDir, layout.subdir, artifact.id);
     mkdirSync(artifactDir, { recursive: true });
-    writeFileSync(join(artifactDir, layout.bodyFilename), renderedBody, 'utf8');
+    writeFileSync(join(artifactDir, layout.bodyFilename), bodyToWrite, 'utf8');
 
     for (const file of artifact.files ?? []) {
       const destPath = join(artifactDir, file.relPath);

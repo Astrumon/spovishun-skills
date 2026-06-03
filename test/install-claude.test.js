@@ -303,6 +303,65 @@ test('installs template kind into .claude/_templates/{id}/TEMPLATE.md', async ()
   assert.ok(body.includes('FixtureProject template'), 'template Mustache must render');
 });
 
+test('manifest-only skill gets synthesized YAML frontmatter with name + description', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
+
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
+  const content = readFileSync(skillPath, 'utf8');
+
+  assert.ok(content.startsWith('---\n'), 'file should start with a frontmatter fence');
+  const fmEnd = content.indexOf('\n---', 4);
+  assert.ok(fmEnd !== -1, 'frontmatter should be closed by a second fence');
+  const fmBlock = content.slice(0, fmEnd + 4);
+
+  assert.match(fmBlock, /\nname: universal-skill\b/, 'name should match the manifest id');
+  const descMatch = fmBlock.match(/\ndescription: (.+)/);
+  assert.ok(descMatch, 'description line should be present');
+  assert.ok(descMatch[1].trim().length > 0, 'description must be non-empty');
+  assert.match(fmBlock, /Triggers:/, 'composed description should append a Triggers: clause');
+});
+
+test('skill with inline frontmatter is not double-wrapped', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
+
+  const skillPath = join(consumer, '.claude', 'skills', 'inline-frontmatter-skill', 'SKILL.md');
+  const content = readFileSync(skillPath, 'utf8');
+
+  // Exactly one opening fence + exactly one closing fence == one block.
+  const fenceCount = (content.match(/^---$/gm) ?? []).length;
+  assert.equal(fenceCount, 2, 'inline-frontmatter skill must keep exactly one fenced block');
+  assert.ok(
+    content.includes('Hand-authored description'),
+    'original inline description must be preserved verbatim'
+  );
+});
+
+test('agent body is written verbatim — no skill-style frontmatter added', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
+
+  const agentPath = join(consumer, '.claude', 'agents', 'fixture-agent', 'AGENT.md');
+  const installed = readFileSync(agentPath, 'utf8');
+  // The fixture agent already ships with its own frontmatter that includes
+  // `tools:` and `model:` — Claude-specific keys the synthesizer never emits.
+  assert.match(installed, /^---\n/, 'agent file should still start with its own frontmatter');
+  assert.match(installed, /\ntools: /, 'agent tools: line must be preserved');
+  assert.match(installed, /\nmodel: /, 'agent model: line must be preserved');
+  const fenceCount = (installed.match(/^---$/gm) ?? []).length;
+  assert.equal(fenceCount, 2, 'agent must keep exactly its own single fenced block');
+});
+
 test('reinstall removes stale artifact folder when lockfile entry disappears from filtered set', async () => {
   const consumer = makeConsumerDir();
   copyConfig(consumer, 'install-config-notion.yaml');

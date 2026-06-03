@@ -15,6 +15,7 @@ import { sha256 } from '../lib/checksum.js';
 import { classifyArtifact, ACTIONS } from '../lib/update-classifier.js';
 import { updateClaude } from '../adapters/claude/update.js';
 import { updateWindsurf } from '../adapters/windsurf/update.js';
+import { ensureSkillFrontmatter } from '../lib/skill-frontmatter.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -97,7 +98,13 @@ export async function runUpdate({
   const upstreamMap = new Map();
   for (const artifact of upstreamArtifacts) {
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    // Claude installs prepend a synthesized YAML frontmatter to every skill
+    // body (see adapters/claude/index.js). Mirror that here so the
+    // upstream checksum matches what is actually on disk after install/sync.
+    const rendered = target === 'claude' && artifact.kind === 'skill'
+      ? ensureSkillFrontmatter(renderedBody, artifact.manifest)
+      : renderedBody;
     const checksum = sha256(rendered);
     upstreamMap.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum });
   }

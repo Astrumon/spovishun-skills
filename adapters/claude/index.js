@@ -75,6 +75,7 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
   patchSettings(claudeDir, {});
   installHooks(pkgRoot, claudeDir);
   installRules(pkgRoot, claudeDir, configMap);
+  installScripts(pkgRoot, claudeDir, config, warn);
 
   return lockEntries;
 }
@@ -180,6 +181,43 @@ function copyRulesRecursive(baseDir, currentDir, claudeDir, configMap) {
       // Rules carry no manifest, so every UPPER_SNAKE_CASE token must resolve from config.
       const rendered = renderTemplate(readFileSync(srcPath, 'utf8'), { configMap, manifestPlaceholders: [] });
       writeFileSync(destPath, rendered, 'utf8');
+    }
+  }
+}
+
+/**
+ * Copies CLI scripts that skill bodies invoke (e.g. `node .claude/scripts/notion/get-board.js`)
+ * into the consumer's `.claude/scripts/` tree. The whole `scripts/` subtree is
+ * mirrored recursively, preserving subdirectories. Each `notion/` script is
+ * gated on `stack.notion` — if the consumer is not running Notion, no scripts
+ * are copied at all.
+ *
+ * Codex / Windsurf adapters do not call this — those targets surface skills
+ * as inline text where shell-script delivery makes no sense.
+ */
+function installScripts(pkgRoot, claudeDir, config, warn) {
+  const scriptsRoot = join(pkgRoot, 'scripts');
+  if (!existsSync(scriptsRoot)) return;
+
+  const notionDir = join(scriptsRoot, 'notion');
+  if (existsSync(notionDir)) {
+    if (!config.stack?.notion) return;
+    const dest = join(claudeDir, 'scripts', 'notion');
+    mkdirSync(dest, { recursive: true });
+    copyDirRecursive(notionDir, dest);
+  }
+}
+
+function copyDirRecursive(srcDir, destDir) {
+  for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const srcPath = join(srcDir, entry.name);
+    const destPath = join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      mkdirSync(destPath, { recursive: true });
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile()) {
+      copyFileSync(srcPath, destPath);
     }
   }
 }

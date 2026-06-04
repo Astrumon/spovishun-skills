@@ -121,3 +121,31 @@ test('stack.notion=false → NOTION_PICKER_STAGE_FILTER not surfaced even if pic
   });
   assert.equal(map.has('NOTION_PICKER_STAGE_FILTER'), false);
 });
+
+// Regression: a 1.2.0/1.2.1 bug aliased database_id under
+// NOTION_BOARD_COLLECTION_ID / NOTION_EPICS_DATA_SOURCE_ID, but a database id
+// and a data_source (collection) id are different UUIDs in Notion's
+// data-sources model. Skills that interpolated the aliases into MCP
+// `type: "data_source_id"` parents failed with 404 object_not_found.
+test('removed aliases NOTION_BOARD_COLLECTION_ID / NOTION_EPICS_DATA_SOURCE_ID are not surfaced', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  assert.equal(map.has('NOTION_BOARD_COLLECTION_ID'), false);
+  assert.equal(map.has('NOTION_EPICS_DATA_SOURCE_ID'), false);
+});
+
+test('no placeholder key matching *_COLLECTION_ID or *_DATA_SOURCE_ID is mapped from a database_id', () => {
+  const map = buildPlaceholderMap(fullConfig);
+  const dbIds = new Set([
+    fullConfig.notion.database_id,
+    fullConfig.notion.epics_database_id,
+  ]);
+  for (const [key, value] of map) {
+    if (/(COLLECTION_ID|DATA_SOURCE_ID)$/.test(key)) {
+      assert.ok(
+        !dbIds.has(value),
+        `Placeholder ${key} must not be a database_id alias (got "${value}"). ` +
+          `data_source_id is a distinct UUID — fetch it live or omit the key.`
+      );
+    }
+  }
+});

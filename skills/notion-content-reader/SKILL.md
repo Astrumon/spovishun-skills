@@ -1,9 +1,9 @@
 # Notion Content Reader
 
 > **Prefer scripts for these common reads** (faster, no MCP round-trip):
-> - Board overview `node scripts/notion/get-board.js`
-> - Task by number or pageId `node scripts/notion/get-task.js <N-or-pageId>`
-> - CLAUDE.md page `node scripts/notion/get-claude-md.js`
+> - Board overview `node .claude/scripts/notion/get-board.js`
+> - Task by number or pageId `node .claude/scripts/notion/get-task.js <N-or-pageId>`
+> - CLAUDE.md page `node .claude/scripts/notion/get-claude-md.js`
 >
 > Use MCP (notion-search, notion-fetch) for everything else.
 

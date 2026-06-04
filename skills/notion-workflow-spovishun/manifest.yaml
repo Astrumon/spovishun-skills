@@ -1,5 +1,5 @@
 id: notion-workflow-spovishun
-version: 1.0.0
+version: 1.0.1
 category: stack-specific
 requires:
   - notion

@@ -5,6 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] — 2026-06-04
+
+Patch release with two breaking-but-necessary changes:
+
+1. Fixes a runtime-breaking confusion between Notion `database_id` and
+   `data_source_id` in five bundled skills (4xx from the Notion API).
+2. Closes a long-standing self-inconsistency: skills referenced
+   `scripts/notion/*.js` CLI helpers that **did not ship with the plugin**, so
+   every freshly-installed consumer hit `MODULE_NOT_FOUND` the moment a skill
+   tried to read the board. The scripts are now part of the plugin and the
+   Claude adapter installs them into `.claude/scripts/notion/`.
+
+### Fixed
+
+- **`lib/placeholder-map.js`** — removed two false aliases that mapped the configured
+  `database_id` / `epics_database_id` under `*_COLLECTION_ID` / `*_DATA_SOURCE_ID` names.
+  In Notion's data-sources model a database id and its data_source (collection) id are
+  different UUIDs. Skills that interpolated those aliases into MCP
+  `parent: { type: "data_source_id", data_source_id: "<value>" }` parents failed at
+  runtime with `404 object_not_found` — proven against the live Notion API during the
+  spovishun-93 dogfooding.
+- **`skills/newtask`**, **`skills/newepic`**, **`skills/notion-spovishun-task-manager`**,
+  **`skills/task-decomposer`** — the MCP create-page examples now use
+  `parent: { type: "database_id", database_id: "{{NOTION_DATABASE_ID}}" }` (or
+  `{{NOTION_EPICS_DATABASE_ID}}` for epics). Inline notes flag the single-data-source
+  prerequisite of the `database_id` parent and point to `notion-task-board-manager`
+  for the multi-source / live-fetched `data_source_id` pattern.
+- **`skills/task-decomposer`** — Step 0 board lookup no longer constructs a broken
+  `data_source_url: "collection://<database_id>"` URL; switched to
+  `node scripts/notion/get-board.js`, which uses the REST `/databases/{id}/query`
+  endpoint that is consistent with the rest of the consumer-side tooling.
+- **`skills/notion-navigator`** — prose now references `{{NOTION_DATABASE_ID}}` /
+  `{{NOTION_EPICS_DATABASE_ID}}` and clarifies they are database_ids, not collection
+  ids, with a pointer to live-fetching the data_source_id when MCP needs it.
+- **`hooks/notion-task-inject.js`** — renamed the misleading `NOTION_BOARD_COLLECTION_ID`
+  env-var reference to `NOTION_DATABASE_ID` (the value was always a `database_id`; the
+  hook calls `/v1/databases/{id}/query`). The old name is still accepted as a
+  deprecated alias so existing consumer `.env` files keep working.
+
+### Changed
+
+- **Board v2 (Scrum) Stage default flipped to explicit `Backlog`.** Pre-v1.2.2, the
+  `notion-spovishun-task-manager/references/board-v2-stages.md` doc told `newtask` to
+  leave `Stage` empty — that left new tasks invisible to the `Stage = Backlog` Backlog
+  view filter unless you also kept the `Stage is empty` clause around forever. New tasks
+  now set `Stage: "Backlog"` explicitly in the MCP create body (omit the property
+  entirely on Board v1 / when `notion.picker.stage_filter` is unset). Doc and skill
+  guidance updated together; the Backlog view filter clause is unchanged for
+  backward compatibility with pre-v1.2.2 tasks.
+
+### Removed
+
+- **Placeholders `NOTION_BOARD_COLLECTION_ID` and `NOTION_EPICS_DATA_SOURCE_ID`** —
+  no longer surfaced by the placeholder map; dropped from every manifest that declared
+  them (`newtask`, `newepic`, `notion-navigator`, `notion-spovishun-task-manager`,
+  `task-decomposer`). Any skill body still referencing one will fail install with a
+  clear `UNKNOWN_PLACEHOLDER` error — intended, surfaces the bug.
+
+### Added — Notion CLI scripts now ship with the plugin
+
+- **`scripts/notion/`** — 7 CLI helpers (`get-board.js`, `get-task.js`,
+  `get-claude-md.js`, `create-task.js`, `create-epic.js`, `list-epics.js`,
+  `update-status.js`) plus 12 shared `lib/` modules. Ported from the Spovishun
+  project and generalized: no hard-coded Notion UUIDs, no hard-coded
+  `spovishun-` task-id prefix. All values resolve at run time:
+  - `NOTION_DATABASE_ID` / `NOTION_EPICS_DATABASE_ID` / `NOTION_CLAUDE_MD_PAGE_ID`
+    env vars take precedence; otherwise read from `spovishun-skills.config.yaml`.
+  - `PROJECT_PREFIX` env var or a slugified `project.name` drives the task-id
+    regex (e.g. `myapp-42` for `project.name: "MyApp"`).
+- **`adapters/claude/index.js`** — new `installScripts()` step that mirrors
+  `scripts/notion/` into the consumer's `.claude/scripts/notion/` when
+  `stack.notion` is true. No-op otherwise. Codex / Windsurf targets do not
+  receive scripts (those adapters surface skills as inline text).
+- **`scripts/notion/create-task.js`** — supports a new `stage` field on stdin
+  for Board v2 (Scrum). Default `"Backlog"`; pass `null` to omit the Stage
+  column entirely on Board v1.
+- **`scripts/notion/lib/config-reader.js`** — strips a UTF-8 BOM before
+  scanning the consumer config so `Out-File -Encoding utf8` (PowerShell 5.1)
+  configs don't silently parse to empty.
+
+### Changed — skill bodies use installed script path
+
+- All eight skills that invoke a Notion CLI helper (`newtask`, `newepic`,
+  `task-decomposer`, `notion-spovishun-task-manager`, `notion-task-to-code`,
+  `notion-workflow-spovishun`, `notion-content-reader`) now reference
+  `node .claude/scripts/notion/<script>.js` instead of the un-prefixed
+  `node scripts/notion/<script>.js` that pointed nowhere on a fresh install.
+
+### Manifests bumped
+
+- `newtask` 1.0.0 → 1.0.1
+- `newepic` 1.0.0 → 1.0.1
+- `notion-navigator` 1.0.0 → 1.0.1
+- `notion-spovishun-task-manager` 1.0.0 → 1.0.1
+- `task-decomposer` 1.0.0 → 1.0.1
+- `notion-task-to-code` 1.0.0 → 1.0.1
+- `notion-workflow-spovishun` 1.0.0 → 1.0.1
+- `notion-content-reader` 1.0.0 → 1.0.1
+
+### Migration notes for consumers
+
+1. Re-run `npx spovishun-skills install --target=<target>` after upgrading.
+2. The `NOTION_BOARD_COLLECTION_ID` env var in `.env` keeps working but is deprecated;
+   rename it to `NOTION_DATABASE_ID` at your convenience.
+3. Board v2 users on Notion: new tasks created via these skills will explicitly land
+   in `Stage = "Backlog"` (was: empty). If you have a Backlog view filtering on
+   `Stage is empty` only, broaden it to `Stage = Backlog OR Stage is empty`.
+
+### Known follow-ups (not addressed in this patch)
+
+- First-install pruning over hand-authored `.claude/` (carried over from v1.2.1). A
+  deprecated `diagram-design/` skill folder and a legacy `.claude/skills/_templates/`
+  directory are not removed because the pre-existing install has no provenance.
+
 ## [1.2.1] — 2026-06-03
 
 Patch release. Fixes a Claude-adapter bug surfaced by dogfooding the published plugin in the

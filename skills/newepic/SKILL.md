@@ -44,7 +44,7 @@ Use MCP so the full markdown body is parsed into native Notion blocks (callouts,
 
 ```
 notion-create-pages(
-  parent: { type: "data_source_id", data_source_id: "{{NOTION_EPICS_DATA_SOURCE_ID}}" },
+  parent: { type: "database_id", database_id: "{{NOTION_EPICS_DATABASE_ID}}" },
   pages: [{
     properties: {
       "Name": "<Name>",
@@ -60,6 +60,8 @@ notion-create-pages(
 
 Property names are case-sensitive: `Name`, `Status`, `Goal`, `Related task`.
 
+⚠️ MCP `type: "database_id"` parent works only when the epics database has exactly **one** data source. For multi-source databases, fetch the live `data_source_id` first (`<data-source url="collection://...">`) and use `type: "data_source_id"`.
+
 ### Fallback (CLI — only for short / programmatic creates)
 
 If the body is just a short paragraph (no tables / callouts / toggles), the CLI path is fine:
@@ -72,7 +74,7 @@ echo '{
   "relatedTask": "<URL or omit>",
   "icon": "<emoji>",
   "content": "<plain paragraph text>"
-}' | node scripts/notion/create-epic.js
+}' | node .claude/scripts/notion/create-epic.js
 ```
 
 The CLI wraps `content` in a single paragraph block — it does NOT parse markdown. For rich bodies use MCP.
@@ -93,7 +95,7 @@ Report:
 - Do NOT create a Stub Epic (short body + `Related task` pointing to a "real" page elsewhere). The Epic page must own its content.
 - Do NOT create an Epic for a single isolated task — use `newtask` directly
 - Do NOT skip the Goal property — every Epic needs a clear "why"
-- Do NOT duplicate an existing Epic — run `node scripts/notion/list-epics.js --format=text` first if unsure
+- Do NOT duplicate an existing Epic — run `node .claude/scripts/notion/list-epics.js --format=text` first if unsure
 - Do NOT use the CLI path for bodies with tables, callouts, or toggles — they will be flattened into raw text
 
 ---

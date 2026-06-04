@@ -21,14 +21,16 @@ The `notion-task-inject` hook applies the filter to every picker query when set;
 | `Sprint`  | Committed to the active sprint. Visible to the picker.               |
 | `Archive` | Frozen — done, cancelled, or moved out of active scope. Hidden.      |
 
-Tasks created via `newtask` skill MUST leave `Stage` empty (= Backlog). Only the sprint planning ritual moves tasks into `Sprint`. The "Archive" stage is the explicit "do not re-pick" mark.
+Tasks created via `newtask` / `notion-spovishun-task-manager` MUST set `Stage = "Backlog"` explicitly on creation. Only the sprint planning ritual promotes tasks to `Stage = "Sprint"`. The "Archive" stage is the explicit "do not re-pick" mark.
+
+(Prior to v1.2.2, this doc said new tasks must leave `Stage` empty. That left tasks invisible to the Backlog view filter `Stage = Backlog` and required a manual cleanup pass — explicit `Backlog` avoids that.)
 
 ## Board views
 
 | View         | Filter                                       | Purpose                                              |
 |--------------|----------------------------------------------|------------------------------------------------------|
 | Sprint Board | `Stage = Sprint`                             | Day-to-day execution view. Mirrors picker scope.     |
-| Backlog      | `Stage = Backlog` OR `Stage` is empty        | Prioritisation queue, grooming candidates.           |
+| Backlog      | `Stage = Backlog` OR `Stage` is empty        | Prioritisation queue, grooming candidates. (`empty` clause kept only to catch pre-v1.2.2 tasks; v1.2.2+ creators always set Backlog explicitly.) |
 | Archive      | `Stage = Archive`                            | Historical record, post-mortem reference.            |
 
 ## Picker query shape

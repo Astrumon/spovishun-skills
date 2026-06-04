@@ -14,17 +14,17 @@ Entry point for all Notion operations in this project. Routes to the correct ski
 Fetch silently before responding — no need to announce it:
 
 ```
-node scripts/notion/get-claude-md.js --section commands       # architecture / commands
-node scripts/notion/get-claude-md.js --section testing        # testing conventions
-node scripts/notion/get-claude-md.js --section architecture   # source structure / layers
-node scripts/notion/get-claude-md.js                          # full read — only when overview needed
+node .claude/scripts/notion/get-claude-md.js --section commands       # architecture / commands
+node .claude/scripts/notion/get-claude-md.js --section testing        # testing conventions
+node .claude/scripts/notion/get-claude-md.js --section architecture   # source structure / layers
+node .claude/scripts/notion/get-claude-md.js                          # full read — only when overview needed
 ```
 
 Use targeted `--section` reads to load only the relevant part and save tokens.
 
 ## REST-first hot path
 
-The start-task flow (`scripts/notion/*.js`) is 100% Notion REST via the project's HTTP client. Task content, status updates, and CLAUDE.md reads all happen through these scripts — no MCP is involved. The hook writes the result to `.dev-context/{branch}_prd/` and injects it via `additionalContext`.
+The start-task flow (`.claude/scripts/notion/*.js`) is 100% Notion REST via the project's HTTP client. Task content, status updates, and CLAUDE.md reads all happen through these scripts — no MCP is involved. The hook writes the result to `.dev-context/{branch}_prd/` and injects it via `additionalContext`.
 
 **Do NOT add MCP calls to this path.** MCP is for operations the scripts cannot cover.
 
@@ -32,8 +32,8 @@ The start-task flow (`scripts/notion/*.js`) is 100% Notion REST via the project'
 
 | Operation | Tool |
 |---|---|
-| Read task / board / CLAUDE.md (hot path) | `scripts/notion/*.js` (REST) |
-| Update task status (hot path) | `scripts/notion/update-status.js` or hook PATCH |
+| Read task / board / CLAUDE.md (hot path) | `.claude/scripts/notion/*.js` (REST) |
+| Update task status (hot path) | `.claude/scripts/notion/update-status.js` or hook PATCH |
 | Free-form semantic search across Notion | MCP `notion-search` |
 | Create / update arbitrary page content | MCP via `notion-page-builder` skill |
 | Create / query databases | MCP via `notion-database-manager` skill |
@@ -62,7 +62,7 @@ The start-task flow (`scripts/notion/*.js`) is 100% Notion REST via the project'
 
 - If no row in the Decision Table matches, ask the user to clarify the operation type.
 - If a reference file is missing, stop and report the exact path.
-- If `node scripts/notion/get-claude-md.js` fails, check that `NOTION_API_TOKEN` is set in the environment.
+- If `node .claude/scripts/notion/get-claude-md.js` fails, check that `NOTION_API_TOKEN` is set in the environment.
 
 ## Related Skills
 

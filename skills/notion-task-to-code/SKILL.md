@@ -17,15 +17,15 @@ git rev-parse --abbrev-ref HEAD
 
 **1d.** Otherwise (standalone invocation or no cache) → fetch from Notion:
 ```
-node scripts/notion/get-task.js <N-or-pageId>
+node .claude/scripts/notion/get-task.js <N-or-pageId>
 ```
 Accepts `{{PROJECT_PREFIX}}-19`, bare `19`, or a 32-char compact pageId.
 
 ### Step 2: Fetch CLAUDE.md (targeted)
 ```
-node scripts/notion/get-claude-md.js --section commands       # just the Commands section
-node scripts/notion/get-claude-md.js --section testing        # just Testing section
-node scripts/notion/get-claude-md.js                          # full read — only when overview needed
+node .claude/scripts/notion/get-claude-md.js --section commands       # just the Commands section
+node .claude/scripts/notion/get-claude-md.js --section testing        # just Testing section
+node .claude/scripts/notion/get-claude-md.js                          # full read — only when overview needed
 ```
 
 ### Step 3: Extract task fields

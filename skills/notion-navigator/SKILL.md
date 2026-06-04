@@ -36,9 +36,11 @@ New documentation articles are created as records in the category inline databas
 Fetch via `notion-fetch` using the workspace root URL to discover top-level structure.
 
 Key resources:
-- Board (task kanban) — fetched via `{{NOTION_BOARD_COLLECTION_ID}}`
-- Epics database — fetched via `{{NOTION_EPICS_DATA_SOURCE_ID}}`
+- Board (task kanban) — `{{NOTION_DATABASE_ID}}` (database_id; queried via REST `/databases/{id}/query`)
+- Epics database — `{{NOTION_EPICS_DATABASE_ID}}` (database_id; same REST path)
 - CLAUDE.md — `{{NOTION_CLAUDE_MD_PAGE_ID}}`
+
+For MCP create flows that need a `data_source_id`, fetch the live collection id from the database first (`<data-source url="collection://...">`); the IDs above are database_ids, not collection ids — they are not interchangeable.
 
 ## When to Refresh
 

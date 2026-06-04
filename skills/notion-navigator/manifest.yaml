@@ -1,5 +1,5 @@
 id: notion-navigator
-version: 1.0.0
+version: 1.0.1
 category: stack-specific
 requires:
   - notion
@@ -21,10 +21,6 @@ placeholders:
     description: Notion page ID of the Epics category group page
   - key: NOTION_CLAUDE_MD_PAGE_ID
     description: Notion page ID of the CLAUDE.md page
-  - key: NOTION_BOARD_COLLECTION_ID
-    description: Notion data_source_id of the task board collection
-  - key: NOTION_EPICS_DATA_SOURCE_ID
-    description: Notion data_source_id of the Epics database
 triggers:
   en:
     - "where in Notion"

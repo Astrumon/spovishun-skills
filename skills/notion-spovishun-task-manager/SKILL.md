@@ -2,7 +2,7 @@
 
 Task management for a project board in Notion with project-specific conventions — task numbering, branch naming, and documentation auto-update.
 
-**I/O rule:** Reads go through `scripts/notion/` CLI scripts. Writes use MCP (`notion-create-pages`, `notion-update-page`) or `scripts/notion/create-task.js` / `scripts/notion/update-status.js` interchangeably.
+**I/O rule:** Reads go through `.claude/scripts/notion/` CLI scripts. Writes use MCP (`notion-create-pages`, `notion-update-page`) or `.claude/scripts/notion/create-task.js` / `.claude/scripts/notion/update-status.js` interchangeably.
 
 ## Project Conventions
 
@@ -19,9 +19,9 @@ Task management for a project board in Notion with project-specific conventions 
 ## Reading the Board
 
 ```
-node scripts/notion/get-board.js                       # JSON (default) — use when processing data
-node scripts/notion/get-board.js --format=md           # markdown table — use when displaying to user
-node scripts/notion/get-board.js --epic "<name|id>"    # only tasks linked to that epic
+node .claude/scripts/notion/get-board.js                       # JSON (default) — use when processing data
+node .claude/scripts/notion/get-board.js --format=md           # markdown table — use when displaying to user
+node .claude/scripts/notion/get-board.js --epic "<name|id>"    # only tasks linked to that epic
 ```
 
 Display statuses: In progress / Not started / Done (last 3). The board table includes `Epic` and `Blocked by` columns.
@@ -29,9 +29,9 @@ Display statuses: In progress / Not started / Done (last 3). The board table inc
 ## Epics
 
 ```
-node scripts/notion/list-epics.js --format=md          # list all epics
-node scripts/notion/list-epics.js --status=Active      # filter by status
-echo '{"name":"…","goal":"…","status":"Planned"}' | node scripts/notion/create-epic.js
+node .claude/scripts/notion/list-epics.js --format=md          # list all epics
+node .claude/scripts/notion/list-epics.js --status=Active      # filter by status
+echo '{"name":"…","goal":"…","status":"Planned"}' | node .claude/scripts/notion/create-epic.js
 ```
 
 To re-assign a task's epic, use `notion-update-page` with the property `Epic` set to `[{"id": "<epic-page-id>"}]`. To clear it, pass an empty array.
@@ -88,20 +88,27 @@ prompt  (toggle/collapsible)
 
 ```
 notion-create-pages(
-  parent: { type: "data_source_id", data_source_id: "{{NOTION_BOARD_COLLECTION_ID}}" },
+  parent: { type: "database_id", database_id: "{{NOTION_DATABASE_ID}}" },
   pages: [{
-    properties: { "Name": "feature/{{PROJECT_PREFIX}}-N: task name", "Status": "Not started" },
+    properties: {
+      "Name": "feature/{{PROJECT_PREFIX}}-N: task name",
+      "Status": "Not started",
+      "Stage": "Backlog"   // Board v2 only — omit on Board v1
+    },
     icon: "...",
     content: "..."
   }]
 )
 ```
 
+⚠️ `type: "database_id"` parent works only when the database has a single data source. For multi-source databases use the live-fetched `data_source_id` pattern from `notion-task-board-manager`.
+
 ## Common Mistakes
 - Property name is **Name**, not Title
 - Missing any of the five page sections (Goal / Branch / Steps / DoD / prompt)
 - prompt toggle must be in English, professional tone
 - Only one task In progress at a time — remind the user if they try to start another
+- Board v2: forgetting to set `Stage = "Backlog"` on creation — task ends up with empty Stage and falls outside both Backlog and Sprint views
 
 </details>
 

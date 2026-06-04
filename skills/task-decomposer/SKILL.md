@@ -7,12 +7,17 @@ Break a solution into atomic, Notion-compatible tasks. Input: Solution Decision 
 ### Step 0: Load Context (silently)
 Fetch CLAUDE.md and the current board state to determine the next task number. Do not announce this step.
 
-```
-notion-fetch(id: "{{NOTION_CLAUDE_MD_PAGE_ID}}")
-notion-search(query: "", data_source_url: "collection://{{NOTION_BOARD_COLLECTION_ID}}")
+```bash
+node .claude/scripts/notion/get-board.js          # JSON board snapshot — use to find max task number
 ```
 
-Find the highest existing task number N. New tasks start at N+1.
+```
+notion-fetch(id: "{{NOTION_CLAUDE_MD_PAGE_ID}}")
+```
+
+`get-board.js` queries the board via REST `/databases/{{NOTION_DATABASE_ID}}/query` and returns a JSON list of tasks with their `Name` property, from which the highest existing task number N is extracted. New tasks start at N+1.
+
+(MCP `notion-search` with `data_source_url: "collection://<id>"` is an alternative, but it requires the live data_source_id of the board — fetch it from the database first; do not interpolate it from config.)
 
 ### Step 0.5: Determine Epic context
 
@@ -20,7 +25,7 @@ If the decomposition produces **3 or more tasks**, an Epic is required.
 
 1. List existing epics:
    ```bash
-   node scripts/notion/list-epics.js --format=text
+   node .claude/scripts/notion/list-epics.js --format=text
    ```
 2. Ask the user: "Link to an existing epic (enter number) or create a new one?"
 3. If user picks an existing one → save its `id` as `epicId`.
@@ -31,7 +36,7 @@ If the decomposition produces **3 or more tasks**, an Epic is required.
    - Create via MCP so callouts/tables/toggles render correctly:
      ```
      notion-create-pages(
-       parent: { type: "data_source_id", data_source_id: "{{NOTION_EPICS_DATA_SOURCE_ID}}" },
+       parent: { type: "database_id", database_id: "{{NOTION_EPICS_DATABASE_ID}}" },
        pages: [{
          properties: { "Name": "<Epic name>", "Status": "Active", "Goal": "<1–2 sentences>" },
          icon: "🧩",
@@ -39,6 +44,7 @@ If the decomposition produces **3 or more tasks**, an Epic is required.
        }]
      )
      ```
+     (`type: "database_id"` requires the epics DB to have a single data source. For multi-source DBs fetch the live `data_source_id` first.)
    - Save the returned `id` as `epicId`
    - Never create a stub-with-link — the Epic page must own the content
 
@@ -79,7 +85,7 @@ For each task in order:
    - `content` = the full 5-section markdown
 2. Call:
    ```bash
-   echo '<json>' | node scripts/notion/create-task.js
+   echo '<json>' | node .claude/scripts/notion/create-task.js
    ```
 3. Record the returned `id` so later tasks can reference it as a blocker.
 

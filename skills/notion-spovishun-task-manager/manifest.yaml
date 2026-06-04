@@ -1,12 +1,10 @@
 id: notion-spovishun-task-manager
-version: 1.0.0
+version: 1.0.1
 category: stack-specific
 requires:
   - notion
 description: Project-specific Notion task manager. Covers task numbering, branch naming, epic linking, board reading via CLI scripts, status updates via MCP, and auto-doc update on task completion.
 placeholders:
-  - key: NOTION_BOARD_COLLECTION_ID
-    description: Notion data_source_id of the task board collection
   - key: PROJECT_PREFIX
     description: Project branch prefix used in task numbering (e.g. myproject)
   - key: GIT_DEVELOP_BRANCH

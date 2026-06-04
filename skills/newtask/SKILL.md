@@ -28,7 +28,7 @@ If the user already supplied both in their message, use them directly — do NOT
 
 Query the 10 most recently created tasks:
 ```bash
-node scripts/notion/get-board.js --latest --format json
+node .claude/scripts/notion/get-board.js --latest --format json
 ```
 
 Iterate through the returned array in order. Find the first `title` that matches the pattern
@@ -59,7 +59,7 @@ Ask the user if they want to link this task to an existing epic.
 
 If yes — list available epics:
 ```bash
-node scripts/notion/list-epics.js --format=text
+node .claude/scripts/notion/list-epics.js --format=text
 ```
 
 Show the numbered list and ask which one (`1`, `2`, …) or `skip`. Save the chosen epic's `id` as `epicId`. If the user says `skip` or the list is empty, `epicId = null`.
@@ -74,7 +74,7 @@ Ask if there are blocker tasks already on the board that must complete before th
 
 If yes — accept task numbers (e.g. `84, 86`) or full page IDs. For each number, resolve to a page ID:
 ```bash
-node scripts/notion/get-task.js {{PROJECT_PREFIX}}-<N> --format=json
+node .claude/scripts/notion/get-task.js {{PROJECT_PREFIX}}-<N> --format=json
 ```
 Collect the resolved page IDs into `blockedBy` (array). If the user skips, `blockedBy = []`.
 
@@ -121,15 +121,19 @@ echo '{
   "epicId": "<page-id from Step 3.5 or null>",
   "blockedBy": ["<page-id>", ...],
   "content": "{full page content from Step 4}"
-}' | node scripts/notion/create-task.js
+}' | node .claude/scripts/notion/create-task.js
 ```
 
 Alternatively (MCP path, if no relations needed):
 ```
 notion-create-pages(
-  parent: { type: "data_source_id", data_source_id: "{{NOTION_BOARD_COLLECTION_ID}}" },
+  parent: { type: "database_id", database_id: "{{NOTION_DATABASE_ID}}" },
   pages: [{
-    properties: { "Name": "feature/{{PROJECT_PREFIX}}-{N}: {task title}", "Status": "Not started" },
+    properties: {
+      "Name": "feature/{{PROJECT_PREFIX}}-{N}: {task title}",
+      "Status": "Not started",
+      "Stage": "Backlog"   // omit if the board has no Stage property (Board v1)
+    },
     icon: "✨",
     content: "{full page content from Step 4}"
   }]
@@ -137,6 +141,10 @@ notion-create-pages(
 ```
 
 ⚠️ The property name is **Name** (not Title) — case-sensitive.
+
+⚠️ MCP `type: "database_id"` parent works only when the database has exactly **one** data source. Multi-source databases require a live-fetched `data_source_id` — use `notion-task-board-manager` for that pattern.
+
+⚠️ Board v2 (Scrum) only: new tasks must land in `Stage = "Backlog"` (visible to grooming, hidden from the Sprint picker until promoted). Skip the `Stage` property entirely on Board v1 / unset `notion.picker.stage_filter`.
 
 ---
 

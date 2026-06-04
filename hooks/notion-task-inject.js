@@ -21,7 +21,10 @@
  * Configuration. Env vars take precedence; otherwise resolved from the consumer's
  * spovishun-skills.config.yaml (so a plain `install` works without extra env setup):
  *   NOTION_TOKEN or NOTION_SKILLS_TOKEN  — Notion API token (required; from env/.env)
- *   NOTION_BOARD_COLLECTION_ID  ⟵ notion.database_id   — task board database ID (required)
+ *   NOTION_DATABASE_ID          ⟵ notion.database_id   — task board database ID (required)
+ *                                  (NOTION_BOARD_COLLECTION_ID is accepted as a
+ *                                  deprecated alias; it was a misnamed pre-1.2.2
+ *                                  env var that actually held the database id.)
  *   PROJECT_PREFIX              ⟵ slug(project.name)    — branch prefix → feature/<prefix>-N
  *   GIT_DEVELOP_BRANCH          ⟵ git.dev_branch        — base branch name, default "develop"
  *
@@ -125,7 +128,12 @@ function slug(name) {
 }
 
 const NOTION_TOKEN = process.env.NOTION_SKILLS_TOKEN || process.env.NOTION_TOKEN;
-const DATABASE_ID = process.env.NOTION_BOARD_COLLECTION_ID || readConfigValue('notion', 'database_id');
+// NOTION_BOARD_COLLECTION_ID is the deprecated 1.2.0/1.2.1 alias — it was always
+// a misnomer (the hook queries /v1/databases/{id}/query, not a data source).
+// Keep accepting it so existing consumer .env files keep working.
+const DATABASE_ID = process.env.NOTION_DATABASE_ID
+  || process.env.NOTION_BOARD_COLLECTION_ID
+  || readConfigValue('notion', 'database_id');
 const PROJECT_PREFIX = process.env.PROJECT_PREFIX || slug(readConfigValue('project', 'name')) || 'project';
 const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH || readConfigValue('git', 'dev_branch') || 'develop';
 // Board v2 (Scrum) optional Stage select filter. Empty string = unset = no filter (Board v1).
@@ -627,7 +635,7 @@ async function main() {
   if (!hasTrigger) process.exit(0);
 
   if (!DATABASE_ID) {
-    process.stderr.write('[notion-task-inject] NOTION_BOARD_COLLECTION_ID not set, skipping\n');
+    process.stderr.write('[notion-task-inject] NOTION_DATABASE_ID not set, skipping\n');
     process.exit(0);
   }
 

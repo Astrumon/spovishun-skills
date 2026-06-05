@@ -10,7 +10,7 @@ const { toDashed } = require('./lib/page-id');
 const { resolveRelationIds, extractRelationIds } = require('./lib/resolve-relations');
 const { taskIdRegex, projectPrefix } = require('./lib/project-prefix');
 
-const VALID_FORMATS = ['json', 'md'];
+const VALID_FORMATS = ['json', 'md', 'text'];
 
 function parseArgs(argv) {
   let format = 'json';
@@ -23,7 +23,18 @@ function parseArgs(argv) {
   return { format, arg: positional[0] };
 }
 
-async function resolvePageId(token, arg) {
+// A bare task number ("93") is shorthand for "<prefix>-93". Without this
+// normalization the arg would fall through to toDashed() in resolvePageId
+// and be sent as an invalid Notion page_id, producing
+// "path.page_id should be a valid uuid".
+function normalizeTaskArg(arg) {
+  if (typeof arg !== 'string') return arg;
+  if (/^\d+$/.test(arg)) return `${projectPrefix()}-${arg}`;
+  return arg;
+}
+
+async function resolvePageId(token, rawArg) {
+  const arg = normalizeTaskArg(rawArg);
   if (taskIdRegex().test(arg)) {
     const result = await http.post(token, `/v1/databases/${constants.DATABASE_ID}/query`, {
       filter: { property: 'Name', title: { contains: arg } },
@@ -56,6 +67,22 @@ function renderMd(task) {
   return parts.join('\n\n');
 }
 
+function renderText(task) {
+  const lines = [task.title];
+  const meta = [task.status, task.priority, task.branch].filter(Boolean).join(' | ');
+  if (meta) lines.push(meta);
+  if (task.epic) lines.push(`Epic: ${task.epic.title ?? task.epic.id}`);
+  if (task.blockedBy && task.blockedBy.length > 0) {
+    const list = task.blockedBy.map(b => `  - ${b.title ?? b.id}`).join('\n');
+    lines.push(`Blocked by:\n${list}`);
+  }
+  if (task.content) {
+    lines.push('');
+    lines.push(task.content);
+  }
+  return lines.join('\n');
+}
+
 async function main() {
   const token = loadToken();
   if (!token) {
@@ -71,7 +98,8 @@ async function main() {
   const { format, arg } = parseArgs(process.argv.slice(2));
 
   if (!arg) {
-    process.stderr.write(`Usage: get-task.js <pageId | ${projectPrefix()}-N> [--format=json|md]\n`);
+    const p = projectPrefix();
+    process.stderr.write(`Usage: get-task.js <${p}-N | N | pageId> [--format=json|md|text]\n`);
     process.exit(1);
   }
 
@@ -114,12 +142,20 @@ async function main() {
 
   if (format === 'md') {
     process.stdout.write(renderMd(task) + '\n');
+  } else if (format === 'text') {
+    process.stdout.write(renderText(task) + '\n');
   } else {
     process.stdout.write(JSON.stringify(task) + '\n');
   }
 }
 
-main().catch(err => {
-  process.stderr.write(`Error: ${err.message}\n`);
-  process.exit(1);
-});
+// Exported for unit tests. The CLI entry runs main() unconditionally below;
+// the require.main guard keeps tests from triggering it.
+module.exports = { normalizeTaskArg, renderMd, renderText, resolvePageId, VALID_FORMATS };
+
+if (require.main === module) {
+  main().catch(err => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exit(1);
+  });
+}

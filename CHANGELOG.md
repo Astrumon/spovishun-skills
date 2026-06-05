@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] — 2026-06-05
+
+Patch release. Fixes a contract drift between `scripts/notion/get-task.js` and the
+`notion-task-to-code` skill surfaced during Spovishun dogfooding: the skill documented
+a `<N-or-pageId>` shorthand that the script never actually supported.
+
+### Fixed
+
+- **`scripts/notion/get-task.js`** now accepts a bare numeric arg (`get-task.js 93`) and
+  normalizes it to `<projectPrefix()>-93` before resolving via the board query. Previously
+  a bare number fell through to `toDashed()` and Notion rejected it with
+  `path.page_id should be a valid uuid`.
+- **`scripts/notion/get-task.js`** gains the `text` output format (`--format=text`), matching
+  the parity already offered by `get-board.js` and `list-epics.js`. Default remains `json`.
+- **`skills/notion-task-to-code/SKILL.md`** Step 1d now spells out the three accepted forms
+  (`<prefix>-N` / `N` / `pageId`) and the available formats. The misleading `<N-or-pageId>`
+  shorthand is gone.
+
+### Changed
+
+- **`scripts/notion/get-task.js`** is now a dual CLI + module: it exports
+  `normalizeTaskArg`, `renderText`, `renderMd`, `resolvePageId`, and `VALID_FORMATS` for
+  unit testing while keeping its `main()` entrypoint behind a `require.main === module`
+  guard.
+
+### Added
+
+- **`test/scripts-notion-get-task.test.js`** — unit coverage for `normalizeTaskArg`
+  (bare-number rewrite, prefixed pass-through, pageId untouched, config-derived prefix),
+  for the regex contract with `lib/project-prefix.js`, for the new `text` format, and for
+  `renderText` body shape (with and without optional fields).
+
+### Manifests bumped
+
+- `notion-task-to-code` 1.0.1 → 1.0.2
+- `scripts/notion/package.json` 1.0.0 → 1.0.1
+
 ## [1.2.2] — 2026-06-04
 
 Patch release with two breaking-but-necessary changes:

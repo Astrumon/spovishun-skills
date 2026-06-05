@@ -17,9 +17,13 @@ git rev-parse --abbrev-ref HEAD
 
 **1d.** Otherwise (standalone invocation or no cache) → fetch from Notion:
 ```
-node .claude/scripts/notion/get-task.js <N-or-pageId>
+node .claude/scripts/notion/get-task.js <{{PROJECT_PREFIX}}-N | N | pageId> [--format=json|md|text]
 ```
-Accepts `{{PROJECT_PREFIX}}-19`, bare `19`, or a 32-char compact pageId.
+- `{{PROJECT_PREFIX}}-19` — fully-qualified task id (board lookup by name).
+- `19` — bare number; resolves to `{{PROJECT_PREFIX}}-19` automatically.
+- 32-char compact (or dashed) Notion `pageId` — direct fetch.
+
+Default `--format=json`. Use `md` for a rendered markdown card or `text` for a plain human-readable summary.
 
 ### Step 2: Fetch CLAUDE.md (targeted)
 ```

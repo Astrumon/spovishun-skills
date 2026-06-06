@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/session-end.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.js\"",
             "timeout": 30
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/session-start.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.js\"",
             "timeout": 30
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notion-task-inject.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js\"",
             "timeout": 30
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/capture-learning.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/capture-learning.js\"",
             "timeout": 5
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/precompact-backup.js",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/precompact-backup.js\"",
             "timeout": 5
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/notion-task-inject.js --post-exit-plan",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js\" --post-exit-plan",
             "timeout": 10
           }
         ]

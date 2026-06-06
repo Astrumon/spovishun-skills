@@ -371,16 +371,35 @@ function checkSettingsJsonHooks(ctx) {
 }
 
 /**
- * Extracts a relative file path from a hook command line such as
- *   "node .claude/hooks/session-end.js"
- *   "node .claude/hooks/foo.js --flag"
- * Returns the absolute resolved path under cwd, or null if no path token found.
+ * Extracts the hook script path from a hook command line and returns the
+ * absolute resolved path under cwd. Tolerates the three shapes Claude Code
+ * may carry in settings.json:
+ *
+ *   bare relative (pre-1.4.0 plugin output, user-authored):
+ *     `node .claude/hooks/session-end.js`
+ *
+ *   $CLAUDE_PROJECT_DIR-anchored, double-quoted (1.4.0+ plugin output):
+ *     `node "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.js"`
+ *
+ *   with trailing CLI flags in any shape:
+ *     `node "$CLAUDE_PROJECT_DIR/.claude/hooks/foo.js" --flag`
+ *
+ * Returns null if no `.claude/hooks/` path token is found.
  */
 function resolveHookScript(cwd, command) {
   const tokens = command.split(/\s+/);
-  const scriptToken = tokens.find((t) => t.startsWith('.claude/') || t.startsWith('.claude\\'));
-  if (!scriptToken) return null;
-  return join(cwd, scriptToken);
+  for (const raw of tokens) {
+    // Strip the surrounding double-quotes the plugin emits to tolerate spaces.
+    const t = raw.replace(/^"+|"+$/g, '');
+    // Strip the $CLAUDE_PROJECT_DIR (or ${CLAUDE_PROJECT_DIR}) env-var prefix
+    // we now emit; the script path inside is always rooted at the consumer's
+    // .claude/ directory which we already have via `cwd`.
+    const stripped = t.replace(/^\$\{?CLAUDE_PROJECT_DIR\}?[\\/]+/, '');
+    if (stripped.startsWith('.claude/') || stripped.startsWith('.claude\\')) {
+      return join(cwd, stripped);
+    }
+  }
+  return null;
 }
 
 function readGitignoreEntries(cwd) {

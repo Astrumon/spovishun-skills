@@ -104,10 +104,42 @@ test('scripts/notion/lib/ modules are copied as a subdirectory', async () => {
     'query-tasks.js',
     'resolve-relations.js',
     'section-parser.js',
+    'markdown-to-blocks.js',
   ];
   for (const name of expectedLib) {
     assert.ok(existsSync(join(libDir, name)), `lib/${name} must be installed`);
   }
+});
+
+// markdown-to-blocks.js requires marked at runtime. Since consumer projects do
+// not install the plugin's deps, marked is vendored under lib/vendor/ and must
+// be delivered with the rest of the script tree.
+test('vendored marked.cjs is shipped alongside markdown-to-blocks.js', async () => {
+  const consumer = await install(NOTION_CONFIG);
+  const vendored = join(consumer, '.claude', 'scripts', 'notion', 'lib', 'vendor', 'marked.cjs');
+  assert.ok(existsSync(vendored), 'lib/vendor/marked.cjs must be delivered');
+  // First line must be the marked banner so we know it's the real file, not a stub.
+  const head = readFileSync(vendored, 'utf8').slice(0, 80);
+  assert.match(head, /marked v\d+/i, 'vendored file must carry the marked banner');
+});
+
+test('installed markdown-to-blocks.js requires the vendored copy, not "marked"', async () => {
+  const consumer = await install(NOTION_CONFIG);
+  const src = readFileSync(
+    join(consumer, '.claude', 'scripts', 'notion', 'lib', 'markdown-to-blocks.js'),
+    'utf8'
+  );
+  // If we accidentally ship a `require('marked')` it would fail with
+  // MODULE_NOT_FOUND on every consumer (no node_modules under .claude/).
+  assert.ok(
+    src.includes("require('./vendor/marked.cjs')"),
+    'parser must require the vendored copy'
+  );
+  assert.equal(
+    /require\(['"]marked['"]\)/.test(src),
+    false,
+    'parser must not require the package name'
+  );
 });
 
 test('scripts/notion/ is NOT copied when stack.notion is false', async () => {
@@ -133,6 +165,7 @@ test('ported scripts hard-code no project-specific Notion UUIDs', async () => {
     'lib/query-tasks.js',
     'lib/resolve-relations.js',
     'lib/project-prefix.js',
+    'lib/markdown-to-blocks.js',
   ];
   // Pre-port hardcoded UUIDs that must not appear anywhere in the installed
   // scripts. Sourced from the original Spovishun-specific constants.js.

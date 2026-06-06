@@ -62,9 +62,9 @@ Property names are case-sensitive: `Name`, `Status`, `Goal`, `Related task`.
 
 ⚠️ MCP `type: "database_id"` parent works only when the epics database has exactly **one** data source. For multi-source databases, fetch the live `data_source_id` first (`<data-source url="collection://...">`) and use `type: "data_source_id"`.
 
-### Fallback (CLI — only for short / programmatic creates)
+### Alternative path — CLI (since v1.4.0)
 
-If the body is just a short paragraph (no tables / callouts / toggles), the CLI path is fine:
+The CLI now parses the markdown `content` into native Notion blocks (headings, lists, code, callouts, toggles, tables — see `scripts/notion/lib/markdown-to-blocks.js`). Long content is auto-chunked at the 2000-char `rich_text` limit. Use this path when you need scripted creation or want to pipe a file:
 
 ```bash
 echo '{
@@ -73,11 +73,11 @@ echo '{
   "status": "<Status>",
   "relatedTask": "<URL or omit>",
   "icon": "<emoji>",
-  "content": "<plain paragraph text>"
+  "content": "<full markdown body — headings, lists, code, callouts, toggles all render>"
 }' | node .claude/scripts/notion/create-epic.js
 ```
 
-The CLI wraps `content` in a single paragraph block — it does NOT parse markdown. For rich bodies use MCP.
+⚠️ Notion API rejects pages whose initial `children` array exceeds 100 blocks per request. Bodies that produce more than 100 blocks must be split — the parser emits a stderr warning when this happens.
 
 ---
 
@@ -96,7 +96,7 @@ Report:
 - Do NOT create an Epic for a single isolated task — use `newtask` directly
 - Do NOT skip the Goal property — every Epic needs a clear "why"
 - Do NOT duplicate an existing Epic — run `node .claude/scripts/notion/list-epics.js --format=text` first if unsure
-- Do NOT use the CLI path for bodies with tables, callouts, or toggles — they will be flattened into raw text
+- Do NOT split a single epic body into multiple create calls — keep one Epic page = one create call (the parser handles long bodies via rich_text chunking; only watch the 100-blocks-per-request cap)
 
 ---
 

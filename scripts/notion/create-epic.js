@@ -4,6 +4,7 @@
 const http = require('./lib/notion-http');
 const { loadToken } = require('./lib/load-token');
 const constants = require('./lib/constants');
+const { markdownToBlocks } = require('./lib/markdown-to-blocks');
 
 const VALID_STATUSES = ['Planned', 'Active', 'Completed'];
 
@@ -76,9 +77,9 @@ async function main() {
   const body = {
     parent: { database_id: constants.EPICS_DATABASE_ID },
     properties,
-    children: content
-      ? [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content } }] } }]
-      : [],
+    // Parse markdown content into native Notion blocks instead of a single
+    // paragraph; see lib/markdown-to-blocks.js for the supported syntax.
+    children: content ? markdownToBlocks(content) : [],
   };
 
   if (icon && typeof icon === 'string') {

@@ -5,6 +5,110 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-06-07
+
+Minor release. Two independent fixes that surfaced during Spovishun dogfooding:
+
+1. The CLI's single-paragraph fallback for page content is replaced by a proper
+   markdown → Notion blocks parser. Closes the gap where `create-task.js`
+   flattened the 5-section newtask template into one paragraph and hit the
+   2000-char `rich_text` limit on any non-trivial task body.
+2. Claude Code hook commands are now anchored on `$CLAUDE_PROJECT_DIR` instead
+   of the bare relative `.claude/hooks/...` form. The Stop / SessionStart /
+   UserPromptSubmit / PreCompact / PostToolUse hooks no longer fail with
+   `MODULE_NOT_FOUND` when the user's working directory differs from the
+   project root (e.g. another repo opened in the same Claude session).
+
+### Added
+
+- **`scripts/notion/lib/markdown-to-blocks.js`** — new pure module that takes a
+  markdown string and returns an array of Notion API block objects. Backed by
+  `marked@15` (CommonJS-compatible, zero runtime dependencies). Covered block
+  types:
+  - `heading_1` / `heading_2` / `heading_3` (depth 4+ collapses to 3 — Notion
+    does not expose deeper levels)
+  - `paragraph` with inline `bold` / `italic` / `code` / `strikethrough` /
+    `link` annotations
+  - `bulleted_list_item` / `numbered_list_item` with recursive `children` for
+    nested lists
+  - `to_do` for GFM task lists (`- [ ]` / `- [x]`)
+  - `code` with language normalization (`js` → `javascript`, `kt` → `kotlin`,
+    unknown → `plain text` so the API never rejects on language)
+  - `quote` with inline + block children flattened correctly
+  - `callout` for GitHub-style alerts (`> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]`
+    / `[!WARNING]` / `[!CAUTION]`) with matching emoji + colored background
+  - `divider` for `---`
+  - `table` with header row + correct `table_width`
+  - `toggle` for `<details><summary>...</summary>…</details>` HTML, with the
+    inner block tokens nested as `children`
+- **Auto-chunking** of any `rich_text` segment longer than 2000 chars (Notion's
+  per-text-run hard limit) into multiple sibling segments preserving
+  annotations + link. Emits a `stderr` warning when the produced block array
+  exceeds 100 (Notion's per-create-request children limit).
+- **`marked@15`** added to `dependencies` and **vendored** under
+  `scripts/notion/lib/vendor/marked.cjs` (73 KiB single file, byte-identical
+  to `node_modules/marked/lib/marked.cjs`). Consumer projects do not run
+  `npm install` on the installed `.claude/scripts/` tree, so a bare
+  `require('marked')` would fail with `MODULE_NOT_FOUND` after a fresh
+  install. The vendored copy is what the installed parser actually requires;
+  `npm run lint` runs `scripts/check-vendored-marked.js` to catch drift, and
+  `scripts/vendor-marked.js` regenerates the bundle after `npm update marked`.
+  Pinned to the last CommonJS-compatible major (>=v16 is ESM-only,
+  incompatible with the `scripts/notion/` CJS package).
+
+### Changed
+
+- **`scripts/notion/create-task.js`** and **`scripts/notion/create-epic.js`**
+  now pipe the stdin `content` field through `markdownToBlocks()` instead of
+  inlining one paragraph block. No backward-compatibility flag: a plain-text
+  body still produces a single paragraph block via the same parser.
+- **`skills/newepic/SKILL.md`** — the "Fallback (CLI — only for short /
+  programmatic creates)" section is renamed to "Alternative path — CLI (since
+  v1.4.0)" with the limitation note replaced by the 100-blocks-per-request
+  cap reminder.
+- **`skills/newtask/SKILL.md`** — the create-task example now mentions that
+  the CLI parses full markdown (since v1.4.0), aligning the doc with reality.
+
+### Manifests bumped
+
+- `newtask` 1.0.1 → 1.0.2
+- `newepic` 1.0.1 → 1.0.2
+- `scripts/notion/package.json` 1.1.0 → 1.2.0
+
+### Why a new dep
+
+`CLAUDE.md` documents "minimum deps" as the policy. `marked` adds one
+high-quality dependency that replaces ~400 lines of hand-rolled markdown
+parser + ~300 lines of edge-case tests. It has 0 runtime deps, 33 k★, a
+public security policy, and a release cadence of ~3 per month. We treat it
+the same way we treat `ajv` or `js-yaml`: a single quality dep is preferred
+over equivalent in-tree code we'd have to maintain forever.
+
+### Fixed — hook commands anchored on $CLAUDE_PROJECT_DIR
+
+- **`hooks/hooks.json`** — every `command` string is rewritten from the bare
+  relative form `node .claude/hooks/<script>.js` to
+  `node "$CLAUDE_PROJECT_DIR/.claude/hooks/<script>.js"` (double-quoted so
+  paths with spaces survive). Claude Code resolves a hook `command` against
+  the current working directory of the hook process, not the project root;
+  any user who opened a second repo in the same Claude session before this
+  release saw the Stop hook fail with `MODULE_NOT_FOUND` against the wrong
+  cwd. `$CLAUDE_PROJECT_DIR` is set by Claude Code itself, so the form is
+  cwd-independent.
+- **`hooks/notion-task-inject.js`** — the two prompt strings that tell Claude
+  to run `node .claude/hooks/notion-task-inject.js --apply-pick <pageId>` use
+  the same `$CLAUDE_PROJECT_DIR`-anchored form. Those commands are executed
+  by Claude via `Bash`, not by the hook subsystem, but the cwd-drift problem
+  is identical.
+- **`bin/doctor.js resolveHookScript()`** — extended to recognise both the
+  legacy bare `.claude/hooks/...` token and the new
+  `$CLAUDE_PROJECT_DIR/.claude/hooks/...` token (with or without surrounding
+  double quotes). Doctor's "missing hook script" check now works on
+  pre-1.4.0 settings.json files and on settings.json regenerated by 1.4.0
+  alike.
+- Codex / Windsurf adapters are untouched — they do not consume
+  `hooks/hooks.json`.
+
 ## [1.3.0] — 2026-06-06
 
 Minor release. Adds a new Notion CLI helper for archive/restore — closes the

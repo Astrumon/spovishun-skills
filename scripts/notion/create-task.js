@@ -5,6 +5,7 @@ const http = require('./lib/notion-http');
 const { loadToken } = require('./lib/load-token');
 const constants = require('./lib/constants');
 const { toDashed } = require('./lib/page-id');
+const { markdownToBlocks } = require('./lib/markdown-to-blocks');
 
 const VALID_PRIORITIES = ['High', 'Medium', 'Low'];
 // Board v2 (Scrum) Stage. New tasks default to Backlog so they appear in the
@@ -104,9 +105,11 @@ async function main() {
   const body = {
     parent: { database_id: constants.DATABASE_ID },
     properties,
-    children: content
-      ? [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content } }] } }]
-      : [],
+    // Parse markdown content into native Notion blocks (headings, lists, code,
+    // tables, callouts, toggles, …) rather than dropping the whole body into a
+    // single paragraph block. Long paragraphs / code spans are chunked at the
+    // 2000-char `rich_text` limit by the parser.
+    children: content ? markdownToBlocks(content) : [],
   };
 
   if (icon && typeof icon === 'string') {

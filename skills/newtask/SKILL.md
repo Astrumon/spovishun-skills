@@ -112,7 +112,7 @@ Rules:
 
 ## Step 5: Create the task
 
-Use the script (it supports `epicId` and `blockedBy`):
+Use the script (supports `epicId`, `blockedBy`, and since v1.4.0 parses the full markdown `content` into native Notion blocks — headings, lists, code, callouts, toggles, tables):
 ```bash
 echo '{
   "title": "feature/{{PROJECT_PREFIX}}-{N}: {task title}",
@@ -120,7 +120,7 @@ echo '{
   "icon": "✨",
   "epicId": "<page-id from Step 3.5 or null>",
   "blockedBy": ["<page-id>", ...],
-  "content": "{full page content from Step 4}"
+  "content": "{full page content from Step 4 — markdown is parsed, not flattened}"
 }' | node .claude/scripts/notion/create-task.js
 ```
 

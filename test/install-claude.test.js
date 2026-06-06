@@ -192,6 +192,43 @@ test('hooks settings entries are tagged with _spovishun for idempotent re-instal
   assert.equal(settings.hooks.SessionStart.length, 1, 'SessionStart hook should appear exactly once after re-install');
 });
 
+test('hook commands are anchored on $CLAUDE_PROJECT_DIR so they resolve regardless of cwd', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: PKG_ROOT, config, artifacts });
+
+  const settings = JSON.parse(readFileSync(join(consumer, '.claude', 'settings.json'), 'utf8'));
+
+  // Walk every registered hook command from every event.
+  const allCommands = [];
+  for (const event of Object.keys(settings.hooks)) {
+    for (const matcher of settings.hooks[event]) {
+      for (const h of matcher.hooks ?? []) {
+        if (h.type === 'command') allCommands.push(h.command);
+      }
+    }
+  }
+
+  assert.ok(allCommands.length >= 5, 'expected at least 5 plugin hook commands across all events');
+  for (const cmd of allCommands) {
+    assert.match(
+      cmd,
+      /\$CLAUDE_PROJECT_DIR[\\/]\.claude[\\/]hooks[\\/]/,
+      `hook command must anchor on $CLAUDE_PROJECT_DIR — got: ${cmd}`
+    );
+    // The bare `node .claude/hooks/` form would break when the Claude Code
+    // hook process runs with cwd != project root (e.g. user switched repos
+    // in the same session). It must not survive into the rendered settings.
+    assert.equal(
+      /\bnode\s+\.claude[\\/]hooks[\\/]/.test(cmd),
+      false,
+      `hook command must not use the bare relative form — got: ${cmd}`
+    );
+  }
+});
+
 test('rule files are rendered into .claude/rules/ preserving subdirectory structure', async () => {
   const consumer = makeConsumerDir();
   copyConfig(consumer, 'install-config-no-notion.yaml');

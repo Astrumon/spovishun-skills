@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-06-06
+
+Minor release. Adds a new Notion CLI helper for archive/restore — closes the
+"create + update but can't clean up" gap in the script set surfaced while
+smoke-testing the Notion workflow.
+
+### Added
+
+- **`scripts/notion/archive-task.js`** — new CLI that PATCHes
+  `/v1/pages/{id}` with `archived: true` (default) or `archived: false`
+  (`--unarchive` flag) to move a page to / restore from Notion Trash. Accepts
+  a page id only (compact or dashed UUID) — usage string documents this
+  explicitly so the caller doesn't expect the `<prefix>-N` shorthand that
+  `get-task.js` resolves. Mirrors `update-status.js` in size and style: same
+  shebang, `'use strict'`, the same `loadToken` / `notion-http` / `page-id`
+  lib reuse, the same stderr-on-error + JSON-on-stdout convention.
+- **Test wiring:** `scripts-notion-delivery.test.js` now asserts that
+  `archive-task.js` is installed under `.claude/scripts/notion/` (with the
+  `#!/usr/bin/env node` shebang) and is included in the
+  "no hard-coded UUIDs / no `spovishun-<N>` literals" sweep.
+
+### Changed
+
+- **`skills/notion-spovishun-task-manager/SKILL.md`** — the I/O rule now
+  documents `archive-task.js` as the cleanup partner of `create-task.js` /
+  `update-status.js` (no MCP equivalent at the moment).
+- **`skills/notion-workflow-spovishun/SKILL.md`** — added an
+  "Archive / restore a throwaway page (cleanup)" row to the MCP vs REST
+  decision matrix.
+
+### Manifests bumped
+
+- `notion-spovishun-task-manager` 1.0.1 → 1.0.2
+- `notion-workflow-spovishun` 1.0.1 → 1.0.2
+- `scripts/notion/package.json` 1.0.1 → 1.1.0
+
 ## [1.2.3] — 2026-06-05
 
 Patch release. Fixes a contract drift between `scripts/notion/get-task.js` and the

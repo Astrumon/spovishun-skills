@@ -2,7 +2,7 @@
 
 Task management for a project board in Notion with project-specific conventions — task numbering, branch naming, and documentation auto-update.
 
-**I/O rule:** Reads go through `.claude/scripts/notion/` CLI scripts. Writes use MCP (`notion-create-pages`, `notion-update-page`) or `.claude/scripts/notion/create-task.js` / `.claude/scripts/notion/update-status.js` interchangeably.
+**I/O rule:** Reads go through `.claude/scripts/notion/` CLI scripts. Writes use MCP (`notion-create-pages`, `notion-update-page`) or `.claude/scripts/notion/create-task.js` / `.claude/scripts/notion/update-status.js` interchangeably. Cleanup uses `.claude/scripts/notion/archive-task.js <pageId> [--unarchive]` to move a throwaway page to Notion Trash (useful for smoke tests; no MCP equivalent at the moment).
 
 ## Project Conventions
 

@@ -34,6 +34,7 @@ The start-task flow (`.claude/scripts/notion/*.js`) is 100% Notion REST via the 
 |---|---|
 | Read task / board / CLAUDE.md (hot path) | `.claude/scripts/notion/*.js` (REST) |
 | Update task status (hot path) | `.claude/scripts/notion/update-status.js` or hook PATCH |
+| Archive / restore a throwaway page (cleanup) | `.claude/scripts/notion/archive-task.js <pageId> [--unarchive]` |
 | Free-form semantic search across Notion | MCP `notion-search` |
 | Create / update arbitrary page content | MCP via `notion-page-builder` skill |
 | Create / query databases | MCP via `notion-database-manager` skill |

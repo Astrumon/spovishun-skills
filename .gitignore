@@ -18,9 +18,10 @@ yarn-error.log*
 spovishun-skills.config.yaml
 spovishun-skills.config.yml
 
-# Per-developer Claude Code permissions and adapter-generated settings
-.claude/settings.local.json
-.claude/settings.json
+# Local Claude Code state (dogfooded self-install + session runtime).
+# The artifact *source* lives in skills/ agents/ hooks/ rules/ — nothing under
+# .claude/ is tracked in this repo, so ignore the whole directory.
+.claude/
 
 # OS / editor
 .DS_Store

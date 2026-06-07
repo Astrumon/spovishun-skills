@@ -77,6 +77,7 @@ test('scripts/notion/*.js are copied into .claude/scripts/notion/ when stack.not
     'list-epics.js',
     'update-status.js',
     'archive-task.js',
+    'bootstrap-config.js',
   ];
   for (const name of expectedScripts) {
     const p = join(notionDir, name);
@@ -160,6 +161,7 @@ test('ported scripts hard-code no project-specific Notion UUIDs', async () => {
     'list-epics.js',
     'update-status.js',
     'archive-task.js',
+    'bootstrap-config.js',
     'lib/constants.js',
     'lib/extract-branch.js',
     'lib/query-tasks.js',

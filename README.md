@@ -85,6 +85,23 @@ Schema is validated against [`schema/config.schema.json`](./schema/config.schema
 
 **Gitignore `spovishun-skills.config.yaml`** — it holds your Notion IDs, so it should not be committed (`doctor` checks this). Commit a sanitized `spovishun-skills.config.example.yaml` instead, plus the generated `spovishun-skills.lock.yaml`.
 
+## Bootstrapping a new project's Notion docs
+
+Filling the `notion:` block by hand means copying ~13 page/database IDs out of Notion — tedious and error-prone. Instead, duplicate the **Notion project template** and let `bootstrap-config.js` harvest the IDs for you.
+
+The template is a single Notion page tree (a row in your Projects DB) holding the full doc skeleton: a `CLAUDE.md` page, a Board (Tasks DB with Status/Stage/Priority, an Epic relation and a Blocked-by self-relation), an Epics DB, and the 7 documentation category DBs — with per-stage board views and placeholder records.
+
+1. **Duplicate** the template page in Notion. Notion remaps every relation and view onto the copy.
+2. **Before renaming anything**, run from your new project's repo root:
+   ```bash
+   node .claude/scripts/notion/bootstrap-config.js <new-page-url> --write
+   ```
+   It walks the copy by its fixed English anchor titles and writes `database_id`, `epics_database_id`, `epics_group_page_id`, `claude_md_page_id`, `root_page_id`, `docs_root_id` and every `categories.*` into `spovishun-skills.config.yaml` (existing comments preserved). Omit `--write` to print the resolved `notion:` block instead (`--format json` for JSON).
+3. Rename the page, fill the placeholders, and delete the `🔧 PLACEHOLDER` seed records.
+4. If a CLI script later returns **404**, share the new project's pages with your Notion integration (duplicates normally inherit access from the Projects DB).
+
+> Run the extractor **before** renaming — it identifies anchors by their English titles, which only survive duplication intact until you edit them.
+
 ## Commands
 
 | Command | Purpose |

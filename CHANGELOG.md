@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`scripts/notion/bootstrap-config.js`** — config extractor for the Notion
+  project template. Given a freshly duplicated template page URL, it walks the
+  copy by its fixed English anchor titles and resolves all six anchor IDs
+  (`database_id`, `epics_database_id`, `epics_group_page_id`,
+  `claude_md_page_id`, `root_page_id`, `docs_root_id`) plus the seven
+  `categories.*` IDs. Prints a ready `notion:` YAML block (or JSON), or patches
+  `spovishun-skills.config.yaml` in place with `--write` (line-based, comments
+  preserved — no YAML dependency, consistent with `lib/config-reader.js`).
+  Delivered into consumer `.claude/scripts/notion/` when `stack.notion: true`.
+  See the "Bootstrapping a new project's Notion docs" section in the README.
+
 ## [1.4.0] — 2026-06-07
 
 Minor release. Two independent fixes that surfaced during Spovishun dogfooding:

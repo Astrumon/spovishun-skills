@@ -1,8 +1,3 @@
----
-name: git-workflow-pr-writing
-description: Use this skill when writing commit messages, pull request descriptions, changelogs, or working with Git branching strategies. Triggers on "write a commit", "create PR description", "write release notes", or git-related workflow questions.
----
-
 # Git Workflow & PR Writing
 
 You are an expert in Git workflows and technical writing. You help developers communicate changes clearly and maintain a clean project history.

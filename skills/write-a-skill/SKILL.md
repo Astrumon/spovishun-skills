@@ -1,14 +1,3 @@
----
-name: write-a-skill
-description: >
-  Create a new Claude Code skill for the user's own project — drafts SKILL.md with proper frontmatter,
-  progressive disclosure structure, and optional bundled resources. Use when the user wants to create,
-  write, build, or add a new skill in their project (NOT for contributing to the spovishun-skills
-  package itself — for that, use the package's own contributor guide).
-  Triggers on: "write a skill", "create a skill", "new skill", "add a skill", "build a skill",
-  "напиши скіл", "створи скіл", "новий скіл", "додай скіл", "зроби скіл".
----
-
 # Write a Skill
 
 Help the user create a new Claude Code skill inside **their own project's** `.claude/skills/` directory.

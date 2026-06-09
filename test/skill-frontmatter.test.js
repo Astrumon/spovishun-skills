@@ -46,6 +46,27 @@ test('buildSkillFrontmatter emits a JSON-quoted description', () => {
   assert.match(block, /^---\nname: my-skill\ndescription: "Uses \\"quotes\\" and: colons\."\n---\n$/);
 });
 
+test('buildSkillFrontmatter emits user_invocable: false when manifest opts out', () => {
+  const block = buildSkillFrontmatter({ id: 's', description: 'D', user_invocable: false });
+  assert.match(block, /\nuser_invocable: false\n/);
+});
+
+test('buildSkillFrontmatter emits disable-model-invocation: true when set', () => {
+  const block = buildSkillFrontmatter({ id: 's', description: 'D', 'disable-model-invocation': true });
+  assert.match(block, /\ndisable-model-invocation: true\n/);
+});
+
+test('buildSkillFrontmatter omits invocation flags at their defaults', () => {
+  const block = buildSkillFrontmatter({
+    id: 's',
+    description: 'D',
+    user_invocable: true,
+    'disable-model-invocation': false,
+  });
+  assert.doesNotMatch(block, /user_invocable/);
+  assert.doesNotMatch(block, /disable-model-invocation/);
+});
+
 test('ensureSkillFrontmatter prepends a block when missing', () => {
   const body = '# Title\n\nBody.\n';
   const out = ensureSkillFrontmatter(body, {

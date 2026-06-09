@@ -1,6 +1,7 @@
 id: commit
 version: 1.0.0
 category: configurable
+user_invocable: true
 description: Commits staged or all current changes following Conventional Commits and project conventions. User-invocable via /commit or /commit -m "message".
 placeholders:
   - key: PROJECT_NAME

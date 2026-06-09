@@ -1,90 +1,44 @@
 # Dependency Injection & Architecture (Kotlin)
 
-You are an expert in clean architecture and dependency injection for Kotlin applications.
+Expert in clean architecture and dependency injection for Kotlin applications.
 
-## Layer Architecture
+## Workflow
 
-```
-presentation (commands, handlers)  ← handles input
-    ↓
-domain (services)                  ← business logic, orchestration
-    ↓
-data (repositories)                ← data access (DB, in-memory)
-    ↓
-common                             ← pure Kotlin utilities, zero project imports
-```
+1. Identify whether the task is about layer boundaries or Koin wiring.
+2. Match it to the **Decision Table** below.
+3. Read `references/<chosen>.md` using the `Read` tool.
+4. Apply the patterns, enforcing the Always-Active Rules below.
 
-**Rules:**
-- `presentation` → `domain` ← `data` (allowed dependency direction)
-- `common` is accessible from all layers
-- `di` wires everything and knows all layers
-- Each layer only knows about the layer directly below it
-- Repositories return domain objects, not DB entities
+## Decision Table
 
-## Hard Rules per Layer
-- `domain/` — no Telegram SDK, no Exposed/JDBC, no Koin, no `Dispatchers.IO`
-- `data/` — no Telegram SDK, never call services
-- `common/` — pure Kotlin only, zero project imports
-- `presentation/` — no Exposed/DB imports; no business logic in Command classes
-- Only `data/db/DatabaseFactory.kt` may use `Dispatchers.IO`
+| If the task is about… | Read first |
+|---|---|
+| Layer responsibilities, allowed dependency direction, per-layer hard rules | `references/layers.md` |
+| Koin modules, `single`/`factory`, profile-based config, naming, adding a service | `references/koin-patterns.md` |
 
-## Koin Setup Pattern
-```kotlin
-val appModule = module {
-    // Data layer
-    single<UserRepository> { UserRepositoryImpl(get()) }
+## Always-Active Rules
 
-    // Service layer
-    single { UserService(get()) }
-    single { NotificationService(get(), get()) }
+- Dependency direction is `presentation → domain ← data`; `common` has zero project imports.
+- Only `data/db/DatabaseFactory.kt` may use `Dispatchers.IO`.
+- Prefer constructor injection over `by inject()` — it is explicit and testable.
+- Use interface types for all repository/service bindings.
+- Never inject the DI container itself (service-locator anti-pattern).
+- Use `Service`, never `UseCase`, for the naming of domain orchestration classes.
 
-    // Controller layer
-    single { BotController(get(), get()) }
-}
+## Do NOT
 
-fun main() {
-    startKoin {
-        modules(appModule)
-    }
-}
-```
+- Do NOT load both reference files unless the task spans layering and wiring.
+- Do NOT put business logic in `presentation/` Command classes.
+- Do NOT import Exposed/JDBC or the Telegram SDK into `domain/`.
+- Do NOT create circular dependencies — redesign with an intermediate service.
 
-## Profile-Based Configuration
-```kotlin
-val devModule = module {
-    single<MemberRepository> { MemberRepositoryMockImpl() }
-}
-val prodModule = module {
-    single<MemberRepository> { MemberRepositoryImpl() }
-}
+## Error Handling
 
-val profile = System.getenv("PROFILE") ?: "dev"
-startKoin { modules(if (profile == "prod") prodModule else devModule) }
-```
+- If the task does not match a Decision Table row, ask the user to clarify.
+- If a reference file is missing, STOP and report the expected path.
 
-## DI Best Practices
-- Prefer constructor injection — dependencies are explicit and testable
-- Use interfaces for all services and repositories — enables mocking
-- `single` for stateful/expensive objects (DB connections, services)
-- `factory` for lightweight, stateless objects created per request
-- Never inject the DI container itself — it's a service locator anti-pattern
-- All repository bindings use the interface type: `single<MemberRepository> { MemberRepositoryImpl() }`
+## Related Skills
 
-## Naming Conventions
-- Interface: `UserRepository`
-- Implementation: `UserRepositoryImpl` (DB), `UserRepositoryMockImpl` (in-memory)
-- Module file: `DevRepositoryModule.kt`, `ProdRepositoryModule.kt`, `ServiceModule.kt`
-- Never use `UseCase` — use `Service` instead
-
-## Adding a New Service (Checklist)
-
-1. Define interface in `domain/`
-2. Implement in `data/` (or `domain/` if no DB access needed)
-3. Register in appropriate Koin module
-4. Inject in the consuming class via constructor
-5. Add MockImpl in `data/` for unit testing
-
-## Common Pitfalls
-- Circular dependencies — Koin will throw at startup; redesign with an intermediate service
-- `get()` inside `factory {}` re-resolves every call — use `single {}` for expensive objects
-- `by inject()` at field level creates late-init binding — prefer constructor injection for testability
+- `kotlin-specialist` — coroutine scope ownership and dispatcher rules wired through DI
+- `unit-testing-kotlin` — MockImpl bindings and how DI enables test doubles
+- `postgresql-exposed-orm` — `DatabaseFactory` is the single `Dispatchers.IO` owner referenced above

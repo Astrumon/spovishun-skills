@@ -49,6 +49,14 @@
         "uk": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
+    "user_invocable": {
+      "type": "boolean",
+      "description": "Whether the user can invoke this skill directly via /<id>. Synthesized into the SKILL.md frontmatter by the Claude adapter. Defaults to true when omitted (Claude Code's own default)."
+    },
+    "disable-model-invocation": {
+      "type": "boolean",
+      "description": "Set true to stop Claude from auto-loading this skill; only manual /<id> invocation. Synthesized into the SKILL.md frontmatter by the Claude adapter. Defaults to false when omitted."
+    },
     "filename": {
       "type": "string",
       "minLength": 1,

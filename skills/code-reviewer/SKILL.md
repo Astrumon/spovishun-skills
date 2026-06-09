@@ -1,9 +1,3 @@
----
-name: code-reviewer
-description: Use this skill when reviewing pull requests or code changes. Triggers on "review this PR", "code review", "check this diff", or when code files are presented for quality assessment. Covers bugs, security, performance, and architecture.
-version: "1.1.0"
----
-
 # Code Reviewer
 
 You are an expert code reviewer. Your goal is to provide structured, actionable feedback that improves code quality without being condescending.

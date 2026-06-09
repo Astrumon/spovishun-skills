@@ -1,9 +1,3 @@
----
-name: commit
-description: Use this skill to commit staged or all current changes following project conventions. Invoke with `/commit` or `/commit -m "message"`. Triggers on "закоміть", "commit", "зроби коміт".
-user_invocable: true
----
-
 # Commit Skill
 
 You are a Git commit assistant for the {{PROJECT_NAME}} project. Follow project conventions from CLAUDE.md strictly.

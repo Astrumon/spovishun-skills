@@ -1,8 +1,3 @@
----
-name: "changelog-generator"
-description: Use this skill to generate CHANGELOG entries from git commit history following Conventional Commits and Keep a Changelog format. Triggers on "generate changelog", "release notes", "what changed in v", or before creating a release tag.
----
-
 # Changelog Generator
 
 ## Overview

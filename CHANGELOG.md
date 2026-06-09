@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-06-09
+
+### Added
+
+- **Schema:** optional `user_invocable` and `disable-model-invocation` boolean
+  fields in `manifest.yaml` (`schema/manifest.schema.json`). The Claude adapter
+  (`lib/skill-frontmatter.js`) synthesizes them into the generated `SKILL.md`
+  frontmatter, emitting a line only when the value diverges from Claude Code's
+  default (`user_invocable: true`, `disable-model-invocation: false`). This lets
+  invocation flags live in the canonical manifest instead of an inline
+  frontmatter block.
+
+### Changed
+
+- **Skill authoring (Anthropic guidelines, #97):** removed duplicated inline
+  YAML frontmatter from 12 skill bodies so `manifest.yaml` is the single source
+  of metadata, matching the package's "canonical body + manifest" pattern. The
+  adapter now synthesizes a trigger-rich `description` from `manifest.triggers`
+  for these skills (previously the hand-written inline block won and the
+  manifest triggers were ignored). `commit` gained an explicit
+  `user_invocable: true` in its manifest.
+- **Progressive disclosure:** refactored four reference-style skills
+  (`docker-deployment`, `ci-cd-pipeline-builder`, `database-optimizer`,
+  `dependency-injection-architecture`) to the Decision Table + `references/*.md`
+  layout already used by `kotlin-specialist` / `postgresql-exposed-orm`. Heavy
+  inline code blocks moved into nested reference files; each `SKILL.md` is now a
+  thin router. Procedural workflow skills were intentionally left intact.
+
 ## [1.5.0] — 2026-06-07
 
 ### Added

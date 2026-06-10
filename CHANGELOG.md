@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] — 2026-06-10
+
+### Added
+
+- **Rules (kotlin-style, #99):** ported the four unique clean-code rules from the
+  orphaned `code-decomposition` skill into `rules/kotlin/kotlin-style.md` so they
+  regenerate into consumer projects on every install instead of living in a dead,
+  non-loaded skill. New **Functions** rules: max 3 parameters (bundle more into a
+  `data class`; framework/DSL callbacks exempted inline), nesting depth ≤ 2 via
+  guard clauses, no output arguments, and `require()`/`check()` argument
+  validation. New **Naming** rule: boolean `is`/`has`/`can`/`should` prefix and
+  banned standalone names (`manager`, `helper`, `util`, `data`, `info`).
+  Additionally hardened the rule set while in this file: new **Visibility** and
+  **Collections** sections (narrowest visibility by default, `internal` for
+  module APIs, read-only collection returns, `emptyList()` over `null`,
+  functional operators over mutating loops) and **Idiomatic Kotlin** rules for
+  top-level functions / `object` over static-helper classes and disciplined
+  `companion object` use.
+
 ## [1.6.0] — 2026-06-09
 
 ### Added

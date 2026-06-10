@@ -2,10 +2,12 @@
 
 ## Idiomatic Kotlin
 - Prefer `val` over `var` — mutability must be justified
-- Use `data class` for value objects and DTOs
+- Use `data class` for value objects and DTOs (named per the `XxxDto` convention below)
 - Use `sealed class` / `sealed interface` for closed hierarchies
 - `when` expressions on sealed types MUST be exhaustive — no `else` branch
 - Use extension functions to add behavior without inheritance
+- Use top-level functions or `object` for stateless logic — never a class with only static-like helpers
+- `companion object` only for factory functions and constants — not as a dumping ground
 
 ## Nullability
 - NEVER use `!!` (non-null assertion) — use `requireNotNull()` or `checkNotNull()` with a message
@@ -16,7 +18,21 @@
 - One function = one responsibility
 - Max ~20 lines per function — if longer, extract
 - NEVER use boolean parameters — use named subclasses, enums, or overloads instead
+- Max 3 parameters — bundle more into a `data class`. Exception: framework/DSL callbacks (Exposed columns, Ktor routing) — document inline
+- Nesting depth ≤ 2 levels — use guard clauses (`?: return`) to flatten
+- No output arguments — return a value, never mutate a parameter
+- Validate argument invariants with `require()` / `check()` — fail fast with a message, don't return silently
 - Prefer expression body (`= ...`) for single-expression functions
+
+## Visibility
+- Default to the narrowest visibility — make members `private`, widen only when needed
+- Use `internal` for module-internal APIs not meant for other modules
+- Never expose mutable state through a public `var` — back it with a `private` field and a read-only accessor
+
+## Collections
+- Public APIs return read-only `List` / `Map` / `Set` — keep `MutableXxx` local
+- Return `emptyList()` / `emptyMap()` instead of `null` for absent collections
+- Prefer functional operators (`map`, `filter`, `associateBy`) over manual loops with mutation
 
 ## Error Handling
 - NEVER swallow exceptions with empty `catch` blocks
@@ -45,4 +61,5 @@
 - Use case: `XxxUseCase`
 - Handler: `XxxHandler`
 - DTO: `XxxDto`
+- Boolean names use `is`/`has`/`can`/`should` prefix. Banned standalone names: `manager`, `helper`, `util`, `data`, `info` — qualify them (e.g. `GroupValidator`, `MemberMapper`)
 - NEVER abbreviate class names — clarity over brevity

@@ -297,22 +297,40 @@ test('skill supporting files (references/, assets/) are installed under the skil
   assert.equal(png[1], 0x50, 'binary asset must be copied verbatim');
 });
 
-test('reinstall removes legacy flat .md files', async () => {
+test('reinstall removes legacy flat .md files for plugin-known artifact ids', async () => {
   const consumer = makeConsumerDir();
   copyConfig(consumer, 'install-config-no-notion.yaml');
   const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
   const artifacts = loadArtifacts(FIXTURES_SOURCE);
 
-  // Simulate a pre-v1.2.0 install with a flat skill file.
+  // Simulate a pre-v1.2.0 install: flat file whose id matches a current artifact.
   const skillsDir = join(consumer, '.claude', 'skills');
   const { mkdirSync, writeFileSync } = await import('node:fs');
   mkdirSync(skillsDir, { recursive: true });
-  writeFileSync(join(skillsDir, 'legacy.md'), 'old flat content', 'utf8');
+  writeFileSync(join(skillsDir, 'universal-skill.md'), 'old flat content', 'utf8');
 
   await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, warn: { write: () => {} } });
 
-  assert.ok(!existsSync(join(skillsDir, 'legacy.md')), 'legacy flat file should be removed');
+  assert.ok(!existsSync(join(skillsDir, 'universal-skill.md')), 'legacy flat file should be removed');
   assert.ok(existsSync(join(skillsDir, 'universal-skill', 'SKILL.md')), 'new folder layout should be in place');
+});
+
+test('reinstall preserves user-authored flat .md files the plugin never installed', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+
+  // A user's own file in .claude/skills/ — its id is in neither the artifact
+  // set nor the lockfile, so the legacy-cleanup pass must leave it alone.
+  const skillsDir = join(consumer, '.claude', 'skills');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  mkdirSync(skillsDir, { recursive: true });
+  writeFileSync(join(skillsDir, 'my-notes.md'), 'user content — not ours to delete', 'utf8');
+
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, warn: { write: () => {} } });
+
+  assert.ok(existsSync(join(skillsDir, 'my-notes.md')), 'user flat file must survive install');
 });
 
 test('installs template kind into .claude/_templates/{id}/TEMPLATE.md', async () => {

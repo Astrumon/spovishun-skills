@@ -71,11 +71,11 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
   }
 
-  // Always ensure settings.json exists, even with no plugin hooks
-  patchSettings(claudeDir, {});
-  installHooks(pkgRoot, claudeDir);
+  // installHooks returns {} when there are no hooks to merge, so this single
+  // call also guarantees settings.json exists.
+  patchSettings(claudeDir, installHooks(pkgRoot, claudeDir, warn));
   installRules(pkgRoot, claudeDir, configMap);
-  installScripts(pkgRoot, claudeDir, config, warn);
+  installScripts(pkgRoot, claudeDir, config);
 
   return lockEntries;
 }
@@ -83,13 +83,15 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
 /**
  * Removes stale artifact files from prior plugin layouts:
  *
- *   1. Flat `.claude/{subdir}/{id}.md` files from pre-v1.2.0 installs (always
- *      stale: every artifact now uses the folder layout).
+ *   1. Flat `.claude/{subdir}/{id}.md` files from pre-v1.2.0 installs — but
+ *      ONLY for ids the plugin knows about (current artifact set or prior
+ *      lockfile). User-authored flat .md files in the same directories are
+ *      never touched.
  *   2. `.claude/{subdir}/{id}/` folders for ids that were in the prior lockfile
  *      but are no longer in the filtered artifact set (e.g. removed skill,
  *      stack-flag toggled off).
  *
- * Reads the prior lockfile to drive (2); skips silently if absent.
+ * Reads the prior lockfile to drive both; skips (2) silently if absent.
  */
 function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, warn) {
   const wantById = new Map();
@@ -97,22 +99,28 @@ function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, war
     wantById.set(`${artifact.kind}:${artifact.id}`, true);
   }
 
+  const lockPath = join(consumerCwd, LOCKFILE_NAME);
+  const lock = readLockfile(lockPath);
+  const lockedIds = new Set(
+    (lock?.artifacts ?? []).map((e) => `${e.kind}:${e.id}`)
+  );
+
   for (const [kind, layout] of Object.entries(KIND_LAYOUT)) {
     const subdirPath = join(claudeDir, layout.subdir);
-    // Drop flat {id}.md files (legacy layout).
+    // Drop flat {id}.md files (legacy layout) — plugin-known ids only.
     if (existsSync(subdirPath)) {
       for (const entry of readdirSync(subdirPath, { withFileTypes: true })) {
-        if (entry.isFile() && entry.name.endsWith('.md')) {
-          const flatPath = join(subdirPath, entry.name);
-          rmSync(flatPath, { force: true });
-          warn.write(`Removed legacy flat file: ${relative(consumerCwd, flatPath)}\n`);
-        }
+        if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+        const id = entry.name.slice(0, -'.md'.length);
+        const key = `${kind}:${id}`;
+        if (!wantById.has(key) && !lockedIds.has(key)) continue;
+        const flatPath = join(subdirPath, entry.name);
+        rmSync(flatPath, { force: true });
+        warn.write(`Removed legacy flat file: ${relative(consumerCwd, flatPath)}\n`);
       }
     }
   }
 
-  const lockPath = join(consumerCwd, LOCKFILE_NAME);
-  const lock = readLockfile(lockPath);
   if (!lock || !Array.isArray(lock.artifacts)) return;
 
   for (const entry of lock.artifacts) {
@@ -128,21 +136,25 @@ function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, war
 }
 
 /**
- * Copies all hook scripts from hooks/ to .claude/hooks/ and merges hooks.json
- * event mappings into .claude/settings.json.
+ * Copies all hook scripts from hooks/ to .claude/hooks/ and returns the
+ * hooks.json event mappings for the caller to merge into settings.json.
+ * Returns {} when hooks/ or hooks.json is absent.
  */
-function installHooks(pkgRoot, claudeDir) {
+function installHooks(pkgRoot, claudeDir, warn) {
   const hooksDir = join(pkgRoot, 'hooks');
-  if (!existsSync(hooksDir)) return;
+  if (!existsSync(hooksDir)) return {};
 
   const hooksJsonPath = join(hooksDir, 'hooks.json');
-  if (!existsSync(hooksJsonPath)) return;
+  if (!existsSync(hooksJsonPath)) return {};
 
   let hooksJson;
   try {
     hooksJson = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
-  } catch {
-    return;
+  } catch (err) {
+    // A broken hooks.json must not pass silently: scripts would be skipped and
+    // the install would still report success with hooks missing.
+    warn.write(`Warning: hooks/hooks.json is not valid JSON (${err.message}) — hooks NOT installed.\n`);
+    return {};
   }
 
   // Copy all .js scripts verbatim
@@ -151,9 +163,7 @@ function installHooks(pkgRoot, claudeDir) {
     copyFileSync(join(hooksDir, script), join(claudeDir, 'hooks', script));
   }
 
-  // Merge event entries from hooks.json into settings.json
-  const pluginHooks = hooksJson.hooks ?? {};
-  patchSettings(claudeDir, pluginHooks);
+  return hooksJson.hooks ?? {};
 }
 
 /**
@@ -187,24 +197,24 @@ function copyRulesRecursive(baseDir, currentDir, claudeDir, configMap) {
 
 /**
  * Copies CLI scripts that skill bodies invoke (e.g. `node .claude/scripts/notion/get-board.js`)
- * into the consumer's `.claude/scripts/` tree. The whole `scripts/` subtree is
- * mirrored recursively, preserving subdirectories. Each `notion/` script is
- * gated on `stack.notion` — if the consumer is not running Notion, no scripts
- * are copied at all.
+ * into the consumer's `.claude/scripts/` tree. Each subdirectory of `scripts/`
+ * is mirrored recursively; top-level files (repo maintenance scripts like
+ * validate-all-manifests.js) are never shipped. The `notion/` subtree is gated
+ * on `stack.notion`.
  *
  * Codex / Windsurf adapters do not call this — those targets surface skills
  * as inline text where shell-script delivery makes no sense.
  */
-function installScripts(pkgRoot, claudeDir, config, warn) {
+function installScripts(pkgRoot, claudeDir, config) {
   const scriptsRoot = join(pkgRoot, 'scripts');
   if (!existsSync(scriptsRoot)) return;
 
-  const notionDir = join(scriptsRoot, 'notion');
-  if (existsSync(notionDir)) {
-    if (!config.stack?.notion) return;
-    const dest = join(claudeDir, 'scripts', 'notion');
+  for (const entry of readdirSync(scriptsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    if (entry.name === 'notion' && !config.stack?.notion) continue;
+    const dest = join(claudeDir, 'scripts', entry.name);
     mkdirSync(dest, { recursive: true });
-    copyDirRecursive(notionDir, dest);
+    copyDirRecursive(join(scriptsRoot, entry.name), dest);
   }
 }
 

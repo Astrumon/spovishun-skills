@@ -158,6 +158,10 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const SELECTED_TASKS_FILE = '.dev-context/selected-tasks.json';
 const SELECTED_TASKS_VERSION = 1;
 const PICKER_TIER_LIMIT = 5;
+// MUST stay in sync with PRIORITY_TIERS in scripts/notion/lib/query-tasks.js —
+// the hook is standalone (scripts/ are not installed when stack.notion=false),
+// so the list is duplicated here. Guarded by test/hooks-notion-task-inject.test.js.
+const PRIORITY_TIERS = ['High', 'Medium', 'Low'];
 
 const TRIGGER_WORDS = ['implement', 'refactor', 'реалізуй', 'розроби', 'задача', 'таск', 'фіча'];
 const START_TASK_TRIGGERS = ['start new task', 'почати нову задачу', 'беру нову задачу'];
@@ -165,6 +169,12 @@ const REFRESH_TRIGGERS = ['reread task', 'update task context', 'оновити 
 
 // ─── Notion HTTP ───────────────────────────────────────────────────────────────
 
+const REQUEST_TIMEOUT_MS = 30000;
+
+// Resolves parsed JSON for any HTTP status (Notion errors are structured JSON
+// that callers handle). Rejects only on transport failure: network error,
+// timeout, or non-JSON body — so an API outage surfaces as a logged error
+// instead of masquerading as an empty board / "No Tasks Available".
 function notionRequest(token, method, urlPath, body) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
@@ -172,6 +182,7 @@ function notionRequest(token, method, urlPath, body) {
       hostname: 'api.notion.com',
       path: urlPath,
       method,
+      timeout: REQUEST_TIMEOUT_MS,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Notion-Version': '2022-06-28',
@@ -184,8 +195,15 @@ function notionRequest(token, method, urlPath, body) {
       let raw = '';
       res.on('data', c => { raw += c; });
       res.on('end', () => {
-        try { resolve(JSON.parse(raw)); } catch { resolve(null); }
+        try {
+          resolve(JSON.parse(raw));
+        } catch {
+          reject(new Error(`Notion API returned non-JSON response (HTTP ${res.statusCode}) for ${method} ${urlPath}`));
+        }
       });
+    });
+    req.on('timeout', () => {
+      req.destroy(new Error(`Notion API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${method} ${urlPath}`));
     });
     req.on('error', reject);
     if (data) req.write(data);
@@ -256,6 +274,18 @@ function toDashed(id) {
 
 // ─── Git helpers ───────────────────────────────────────────────────────────────
 
+// Branch names reach execSync command lines. Both sources are external (config
+// scalar, Notion page text), so refuse anything outside safe git-ref characters
+// before interpolating — double quotes alone do not stop $(...) on POSIX shells.
+const SAFE_BRANCH_RE = /^[\w./-]+$/;
+
+function assertSafeBranch(name, label) {
+  if (!SAFE_BRANCH_RE.test(name)) {
+    throw new Error(`unsafe ${label} name "${name}" — only [A-Za-z0-9_./-] allowed`);
+  }
+  return name;
+}
+
 function getCurrentBranch() {
   try {
     return execSync('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' }).toString().trim();
@@ -263,14 +293,21 @@ function getCurrentBranch() {
 }
 
 function gitSetupBranch(branch) {
+  let base;
+  try {
+    assertSafeBranch(branch, 'branch');
+    base = assertSafeBranch(DEVELOP_BRANCH, 'base branch');
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
   try {
     execSync(`git rev-parse --verify "${branch}"`, { stdio: 'pipe' });
     execSync(`git checkout "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Switched to existing branch: ${branch}` };
   } catch {
     try {
-      execSync(`git checkout ${DEVELOP_BRANCH}`, { stdio: 'pipe' });
-      execSync(`git pull origin ${DEVELOP_BRANCH}`, { stdio: 'pipe' });
+      execSync(`git checkout "${base}"`, { stdio: 'pipe' });
+      execSync(`git pull origin "${base}"`, { stdio: 'pipe' });
       execSync(`git checkout -b "${branch}"`, { stdio: 'pipe' });
       return { ok: true, message: `Created and switched to: ${branch}` };
     } catch (err) {
@@ -280,15 +317,22 @@ function gitSetupBranch(branch) {
 }
 
 function gitCreateBranchOnly(branch) {
+  let base;
+  try {
+    assertSafeBranch(branch, 'branch');
+    base = assertSafeBranch(DEVELOP_BRANCH, 'base branch');
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
   try {
     execSync(`git rev-parse --verify "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Branch already exists: ${branch}` };
   } catch {
     try {
-      execSync(`git fetch origin ${DEVELOP_BRANCH} --quiet`, { stdio: 'pipe' });
+      execSync(`git fetch origin "${base}" --quiet`, { stdio: 'pipe' });
     } catch { /* no remote */ }
     try {
-      execSync(`git branch "${branch}" ${DEVELOP_BRANCH}`, { stdio: 'pipe' });
+      execSync(`git branch "${branch}" "${base}"`, { stdio: 'pipe' });
       return { ok: true, message: `Created branch (no checkout): ${branch}` };
     } catch (err) {
       return { ok: false, message: err.message };
@@ -299,11 +343,13 @@ function gitCreateBranchOnly(branch) {
 function conflictCheck(newBranch, existingTasks, force) {
   const getDiff = branch => {
     try {
+      assertSafeBranch(branch, 'branch');
+      assertSafeBranch(DEVELOP_BRANCH, 'base branch');
       const count = parseInt(
-        execSync(`git rev-list ${DEVELOP_BRANCH}..${branch} --count`, { stdio: 'pipe' }).toString().trim(), 10
+        execSync(`git rev-list "${DEVELOP_BRANCH}".."${branch}" --count`, { stdio: 'pipe' }).toString().trim(), 10
       );
       if (isNaN(count) || count === 0) return null;
-      const out = execSync(`git diff --name-only ${DEVELOP_BRANCH}...${branch}`, { stdio: 'pipe' }).toString();
+      const out = execSync(`git diff --name-only "${DEVELOP_BRANCH}"..."${branch}"`, { stdio: 'pipe' }).toString();
       return new Set(out.split('\n').filter(Boolean));
     } catch { return null; }
   };
@@ -381,8 +427,7 @@ function saveSelectedTasks(tasks) {
 // ─── Task Picker ───────────────────────────────────────────────────────────────
 
 async function queryByPriorityTier(token, status) {
-  const priorities = ['High', 'Medium', 'Low', 'Normal'];
-  for (const priority of priorities) {
+  for (const priority of PRIORITY_TIERS) {
     const result = await notionRequest(token, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
       filter: withStageFilter({
         and: [
@@ -471,7 +516,7 @@ async function runPicker(token, currentBranch, isForce) {
   const toOption = page => {
     const name = (page.properties?.Name?.title || []).map(t => t.plain_text).join('') || 'Unknown';
     const taskNum = extractTaskNumber(name) || '?';
-    const priority = page.properties?.Priority?.select?.name || 'Normal';
+    const priority = page.properties?.Priority?.select?.name || '—';
     const pageId = page.id.replace(/-/g, '');
     const displayName = name.replace(new RegExp(`^feature\\/${PROJECT_PREFIX}-\\d+[:\\s-]*`, 'i'), '').trim();
     return { taskNum, name, displayName, priority, pageId };
@@ -578,9 +623,14 @@ async function applyPickMain(token, pageId, { force, fromNotStarted, noSwitch })
   }), 'utf8');
   writeSessionLock(path.join(ctxDir, 'session.lock'));
 
-  await notionRequest(token, 'PATCH', `/v1/pages/${page.id}`, {
+  const statusPatch = await notionRequest(token, 'PATCH', `/v1/pages/${page.id}`, {
     properties: { Status: { status: { name: 'In progress' } } }
   });
+  if (statusPatch?.object === 'error') {
+    // Not fatal (branch + context are already set up), but the user must know
+    // the board does not reflect the local state.
+    process.stderr.write(`[apply-pick] Warning: failed to set Status=In progress in Notion: ${statusPatch.message || statusPatch.code}\n`);
+  }
 
   const updated = selectedTasks.filter(t => t.pageId !== cleanPageId);
   updated.push({ pageId: cleanPageId, taskNumber, name, branch: taskBranch, addedAt: Date.now(), status: 'In progress' });
@@ -773,26 +823,44 @@ function outputPrompt(systemPrompt) {
 
 // ─── Entry point ───────────────────────────────────────────────────────────────
 
-if (process.argv[2] === '--post-exit-plan') {
-  runPostExitPlan();
-} else if (process.argv[2] === '--apply-pick') {
-  const pageId = process.argv[3];
-  if (!pageId) {
-    process.stderr.write('[apply-pick] Usage: --apply-pick <pageId> [--from-not-started] [--no-switch] [--force]\n');
-    process.exit(1);
+// Pure helpers exported for unit tests (test/hooks-notion-task-inject.test.js).
+// Note: PROJECT_PREFIX / STAGE_FILTER are read from env+config at require time,
+// so tests must set env vars BEFORE requiring this module.
+module.exports = {
+  PRIORITY_TIERS,
+  readConfigValue,
+  slug,
+  withStageFilter,
+  stageFilterClause,
+  extractTaskNumber,
+  deriveBranchFromName,
+  toDashed,
+  blockToMd,
+  assertSafeBranch,
+};
+
+if (require.main === module) {
+  if (process.argv[2] === '--post-exit-plan') {
+    runPostExitPlan();
+  } else if (process.argv[2] === '--apply-pick') {
+    const pageId = process.argv[3];
+    if (!pageId) {
+      process.stderr.write('[apply-pick] Usage: --apply-pick <pageId> [--from-not-started] [--no-switch] [--force]\n');
+      process.exit(1);
+    }
+    if (!NOTION_TOKEN) {
+      process.stderr.write('[apply-pick] NOTION_TOKEN not set\n');
+      process.exit(1);
+    }
+    applyPickMain(NOTION_TOKEN, pageId, {
+      force: process.argv.includes('--force'),
+      fromNotStarted: process.argv.includes('--from-not-started'),
+      noSwitch: process.argv.includes('--no-switch'),
+    }).catch(err => {
+      process.stderr.write(`[apply-pick] Error: ${err.message}\n`);
+      process.exit(1);
+    });
+  } else {
+    main();
   }
-  if (!NOTION_TOKEN) {
-    process.stderr.write('[apply-pick] NOTION_TOKEN not set\n');
-    process.exit(1);
-  }
-  applyPickMain(NOTION_TOKEN, pageId, {
-    force: process.argv.includes('--force'),
-    fromNotStarted: process.argv.includes('--from-not-started'),
-    noSwitch: process.argv.includes('--no-switch'),
-  }).catch(err => {
-    process.stderr.write(`[apply-pick] Error: ${err.message}\n`);
-    process.exit(1);
-  });
-} else {
-  main();
 }

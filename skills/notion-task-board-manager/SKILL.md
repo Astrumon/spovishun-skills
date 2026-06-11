@@ -24,7 +24,9 @@ notion-search(
 
 Note: `notion-search` returns titles only — Status not included. Fetch each page individually for Status.
 
-Status values: `Not started` / `Backlog` → `In progress` → `Done`
+Status values: `Not started` → `In progress` → `Done`
+
+(`Backlog` is NOT a Status — it is a value of the separate Board v2 `Stage` select. See `notion-spovishun-task-manager` for the Stage model.)
 
 ## Updating a Task
 

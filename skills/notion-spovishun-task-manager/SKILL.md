@@ -22,9 +22,10 @@ Task management for a project board in Notion with project-specific conventions 
 node .claude/scripts/notion/get-board.js                       # JSON (default) — use when processing data
 node .claude/scripts/notion/get-board.js --format=md           # markdown table — use when displaying to user
 node .claude/scripts/notion/get-board.js --epic "<name|id>"    # only tasks linked to that epic
+node .claude/scripts/notion/get-board.js --stage Backlog       # filter by Stage (Backlog | Sprint | Archive)
 ```
 
-Display statuses: In progress / Not started / Done (last 3). The board table includes `Epic` and `Blocked by` columns.
+Display statuses: In progress / Not started / Done (last 3). The board table includes `Epic` and `Blocked by` columns; a `Stage` column appears on Board v2 (when stage data exists).
 
 ## Epics
 
@@ -45,9 +46,24 @@ notion-update-page(
 )
 ```
 
-Status flow: `Not started -> In progress -> Done`
+Status flow: `Not started -> To do -> In progress -> Done`
 
-For Board v2 (Scrum) Stage model and migration from v1, see `references/board-v2-stages.md`.
+## Stage Workflows (Board v2)
+
+Stage tracks lifecycle ownership (`Backlog -> Sprint -> Archive`) independently of Status. The Stage model, board views, and migration from v1 are documented in `references/board-v2-stages.md` — that file is the single source of truth.
+
+```
+# Sprint planning: promote a groomed task into the sprint
+node .claude/scripts/notion/update-status.js <task-id> --stage Sprint
+
+# Sprint close: archive a completed task (optionally finish it in the same call)
+node .claude/scripts/notion/update-status.js <task-id> Done --stage Archive
+
+# Grooming: list backlog candidates
+node .claude/scripts/notion/get-board.js --stage Backlog --status "Not started" --format=md
+```
+
+`update-status.js` accepts a status, a `--stage`, or both — at least one is required. Note: `archive-task.js` is different — it moves the page to Notion Trash, while `--stage Archive` keeps it on the board in the Archive view.
 
 <details>
 <summary>Extended: creating a task (full 4-step workflow), common mistakes</summary>

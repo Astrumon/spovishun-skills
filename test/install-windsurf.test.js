@@ -246,3 +246,27 @@ test('writes template artifacts as templates--{id}.md with supporting files', as
   const body = readFileSync(join(rulesDir, 'templates--sample.md'), 'utf8');
   assert.ok(body.includes('FixtureProject'), 'Mustache must render template body');
 });
+
+// ── Stale-file reconcile ─────────────────────────────────────────────────────
+
+test('reinstall removes stale plugin files but preserves user files', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const { runInstall } = await import('../bin/install.js');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  // First install writes the lockfile (target=windsurf) that drives reconcile.
+  await runInstall({ target: 'windsurf', cwd: consumer, pkgRoot: FIXTURES_SOURCE, out: { write: () => {} } });
+
+  const rulesDir = getRulesDir(consumer);
+  // Simulate leftovers from a previous install: a shrunk chunked artifact part
+  // for a plugin-known id, and a user-authored file the plugin never wrote.
+  writeFileSync(join(rulesDir, 'universal-skill-part-2.md'), 'stale chunk', 'utf8');
+  writeFileSync(join(rulesDir, 'my-own-rule.md'), 'user content', 'utf8');
+
+  await runInstall({ target: 'windsurf', cwd: consumer, pkgRoot: FIXTURES_SOURCE, out: { write: () => {} } });
+
+  assert.ok(!existsSync(join(rulesDir, 'universal-skill-part-2.md')), 'stale part file must be removed');
+  assert.ok(existsSync(join(rulesDir, 'my-own-rule.md')), 'user file must be preserved');
+  assert.ok(existsSync(join(rulesDir, 'universal-skill.md')), 'current artifact body must be present');
+});

@@ -55,7 +55,7 @@ async function resolvePageId(token, rawArg) {
 }
 
 function renderMd(task) {
-  const meta = [task.status, task.priority, task.branch].filter(Boolean).join(' | ');
+  const meta = [task.status, task.stage, task.priority, task.branch].filter(Boolean).join(' | ');
   const parts = [`# ${task.title}`];
   if (meta) parts.push(meta);
   if (task.epic) parts.push(`**Epic:** ${task.epic.title ?? task.epic.id}`);
@@ -69,7 +69,7 @@ function renderMd(task) {
 
 function renderText(task) {
   const lines = [task.title];
-  const meta = [task.status, task.priority, task.branch].filter(Boolean).join(' | ');
+  const meta = [task.status, task.stage, task.priority, task.branch].filter(Boolean).join(' | ');
   if (meta) lines.push(meta);
   if (task.epic) lines.push(`Epic: ${task.epic.title ?? task.epic.id}`);
   if (task.blockedBy && task.blockedBy.length > 0) {
@@ -131,6 +131,8 @@ async function main() {
     id: page.id,
     title,
     status: props.Status?.status?.name ?? null,
+    // Board v2 Stage; null on Board v1 boards without the property.
+    stage: props.Stage?.select?.name ?? null,
     branch: extractBranchFromBlocks(blocks) ?? deriveBranchFromName(title),
     priority: props.Priority?.select?.name ?? null,
     epic: epicIds[0]

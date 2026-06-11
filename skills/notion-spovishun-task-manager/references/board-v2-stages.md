@@ -43,6 +43,22 @@ With `picker.stage_filter: "Sprint"`, every picker query (priority tier, orphane
 
 The filter is added to existing `and:` arrays; lone filters get wrapped into `{ and: [original, stage] }`. When `stage_filter` is empty the picker behaves identically to Board v1.
 
+## CLI operations
+
+```
+# Read the board per stage (md/text formats render a Stage column when stage data exists)
+node .claude/scripts/notion/get-board.js --stage Backlog
+node .claude/scripts/notion/get-board.js --stage Sprint --format=md
+
+# Promote Backlog → Sprint (sprint planning)
+node .claude/scripts/notion/update-status.js <task-id> --stage Sprint
+
+# Archive at sprint close (status and stage may be combined in one call)
+node .claude/scripts/notion/update-status.js <task-id> Done --stage Archive
+```
+
+`get-task.js` includes `stage` in all output formats (null on Board v1). `archive-task.js` is unrelated to `Stage = Archive` — it moves the page to Notion Trash.
+
 ## Status transitions (unchanged from v1)
 
 ```

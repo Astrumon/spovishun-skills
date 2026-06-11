@@ -123,11 +123,22 @@ export async function runUpdate({
     );
   }
 
-  const summary = { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, localOnly: 0, unchanged: 0 };
+  const summary = { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, localOnly: 0, unchanged: 0, rulesSkipped: 0 };
   const newLockEntries = [];
 
   for (const key of filteredKeys) {
     const lockEntry = lockEntryMap.get(key) ?? null;
+
+    // Rules are flat data files outside artifact-loader (no manifest), so they
+    // never appear in the upstream map — without this guard every rule lock
+    // entry would be misclassified as REMOVED and silently dropped. Rules are
+    // regenerated wholesale by install/sync; update preserves their entries.
+    if (key.startsWith('rule:')) {
+      summary.rulesSkipped++;
+      write(`  ${'RULE_SKIP'.padEnd(16)} ${key}\n`);
+      if (lockEntry) newLockEntries.push(lockEntry);
+      continue;
+    }
     const upstreamEntry = upstreamMap.get(key) ?? null;
     const installedEntry = installedFiles.get(key) ?? null;
 
@@ -190,7 +201,7 @@ export async function runUpdate({
 
       case ACTIONS.REMOVED: {
         summary.removed++;
-        write(`  (entry removed from lockfile)\n`);
+        write(`  (entry removed from lockfile; files on disk are kept — the next install/sync cleans them up)\n`);
         // Drop from lockfile — do NOT push lockEntry
         break;
       }
@@ -216,7 +227,9 @@ export async function runUpdate({
     `auto-applied: ${summary.autoApplied}, ` +
     `conflicts: ${summary.conflicts}, ` +
     `new: ${summary.newArtifacts}, ` +
-    `removed: ${summary.removed})\n`
+    `removed: ${summary.removed}` +
+    (summary.rulesSkipped > 0 ? `, rules skipped: ${summary.rulesSkipped} (rules update via install/sync only)` : '') +
+    `)\n`
   );
 
   return summary;

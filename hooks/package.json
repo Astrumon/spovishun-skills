@@ -1,0 +1,7 @@
+{
+  "name": "spovishun-skills-hooks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Claude Code hook scripts shipped by the spovishun-skills plugin. Installed into consumer projects under .claude/hooks/. All hooks are CommonJS; this file pins the module type so they keep working when the consumer's root package.json declares \"type\": \"module\"."
+}

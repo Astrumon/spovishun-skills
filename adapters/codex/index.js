@@ -1,8 +1,10 @@
-import { writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
+import { collectRules } from '../../lib/rules-loader.js';
+import { renderTemplate } from '../../lib/template-renderer.js';
 import { sha256 } from '../../lib/checksum.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
@@ -62,49 +64,27 @@ export async function installCodex({
     );
   }
 
-  const artifactEntries = included.map((artifact) => ({
-    kind: artifact.kind,
-    id: artifact.id,
-    version: artifact.version,
-    checksum: sha256(artifact.bodyText),
-  }));
+  // Checksums cover the RENDERED body (placeholders resolved) — same semantics
+  // as the claude and windsurf adapters, so lock entries mean the same thing
+  // regardless of target.
+  const artifactEntries = included.map((artifact) => {
+    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
+    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    return {
+      kind: artifact.kind,
+      id: artifact.id,
+      version: artifact.version,
+      checksum: sha256(rendered),
+    };
+  });
 
   const ruleEntries = rules.map((rule) => ({
     kind: 'rule',
     id: rule.id,
     version: '0.0.0',
-    checksum: sha256(rule.body),
+    checksum: sha256(renderTemplate(rule.body, { configMap })),
   }));
 
   return [...artifactEntries, ...ruleEntries];
 }
 
-/**
- * Walks pkgRoot/rules/ recursively and returns each .md file as a flat list.
- * Rules in this repo are data files (not artifact-loader entries), so we walk
- * them directly the same way installClaude does.
- */
-function collectRules(pkgRoot) {
-  if (!pkgRoot) return [];
-  const rulesDir = join(pkgRoot, 'rules');
-  if (!existsSync(rulesDir)) return [];
-
-  const collected = [];
-  walk(rulesDir, rulesDir, collected);
-  collected.sort((a, b) => a.id.localeCompare(b.id));
-  return collected;
-}
-
-function walk(baseDir, currentDir, out) {
-  for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue;
-    const fullPath = join(currentDir, entry.name);
-    if (entry.isDirectory()) {
-      walk(baseDir, fullPath, out);
-    } else if (entry.name.endsWith('.md')) {
-      const rel = relative(baseDir, fullPath).split(/[\\/]/).join('/');
-      const id = rel.replace(/\.md$/, '');
-      out.push({ id, body: readFileSync(fullPath, 'utf8') });
-    }
-  }
-}

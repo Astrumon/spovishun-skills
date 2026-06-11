@@ -214,6 +214,54 @@ test('REMOVED: lockfile entry dropped when artifact absent from upstream', async
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RULE entries: never classified as REMOVED, preserved verbatim
+// ─────────────────────────────────────────────────────────────────────────────
+test('rule lock entries are preserved by update (not dropped as REMOVED)', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  // Rules never appear in loadArtifacts(upstream); before the rule-skip guard
+  // they were classified REMOVED and silently dropped from the lockfile.
+  const lockPath = join(consumer, LOCKFILE_NAME);
+  const lock = readLockfile(lockPath);
+  lock.artifacts.push({ kind: 'rule', id: 'common/git-workflow', version: '0.0.0', checksum: 'sha256:rulehash' });
+  const { dump } = await import('js-yaml');
+  writeFileSync(lockPath, dump(lock), 'utf8');
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V1, out: NOOP_OUT });
+
+  assert.equal(summary.removed, 0, 'rule entry must not be counted as removed');
+  assert.equal(summary.rulesSkipped, 1, 'rule entry must be reported as skipped');
+
+  const lockAfter = readLockfile(lockPath);
+  const ruleEntry = lockAfter.artifacts.find((e) => e.kind === 'rule' && e.id === 'common/git-workflow');
+  assert.ok(ruleEntry, 'rule entry must survive the update');
+  assert.equal(ruleEntry.checksum, 'sha256:rulehash', 'rule entry must be preserved verbatim');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// installed-files-loader: windsurf template files keyed as template:<id>
+// ─────────────────────────────────────────────────────────────────────────────
+test('loadInstalledFiles keys windsurf templates--<id>.md files under template:<id>', async () => {
+  const { loadInstalledFiles } = await import('../lib/installed-files-loader.js');
+  const { mkdirSync } = await import('node:fs');
+
+  const consumer = makeConsumerDir();
+  const rulesDir = join(consumer, '.windsurf', 'rules');
+  mkdirSync(rulesDir, { recursive: true });
+  writeFileSync(join(rulesDir, 'templates--epic-page.md'), '# Epic template\n', 'utf8');
+  writeFileSync(join(rulesDir, 'some-skill.md'), '# Skill\n', 'utf8');
+
+  const map = loadInstalledFiles(consumer, 'windsurf');
+
+  assert.ok(map.has('template:epic-page'), 'template file must be keyed by kind template');
+  assert.equal(map.has('skill:templates--epic-page'), false, 'template must not leak under skill kind');
+  assert.ok(map.has('skill:some-skill'), 'plain skill files keep the skill kind');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // codex: unsupported, exits 0 with warning
 // ─────────────────────────────────────────────────────────────────────────────
 test('codex target: prints warning and returns without error', async () => {

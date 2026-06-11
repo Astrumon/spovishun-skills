@@ -1,9 +1,11 @@
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
+import { collectRules } from '../../lib/rules-loader.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { sha256 } from '../../lib/checksum.js';
+import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
 
 export const RULES_DIR = '.windsurf/rules';
 export const CHAR_LIMIT = 6000;
@@ -39,6 +41,7 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
   mkdirSync(rulesDir, { recursive: true });
 
   const lockEntries = [];
+  const written = new Set();
 
   for (const artifact of included) {
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
@@ -46,7 +49,7 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
     const checksum = sha256(rendered);
 
     const ruleBaseId = artifact.kind === 'template' ? `templates--${artifact.id}` : artifact.id;
-    writeChunked(rulesDir, ruleBaseId, rendered);
+    writeChunked(rulesDir, ruleBaseId, rendered, written);
 
     for (const file of artifact.files ?? []) {
       if (file.encoding !== 'utf8') {
@@ -58,7 +61,7 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
       }
       const fileRendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
       const fileRuleId = `${ruleBaseId}--${file.relPath.replace(/\//g, '--').replace(/\.md$/, '')}`;
-      writeChunked(rulesDir, fileRuleId, fileRendered);
+      writeChunked(rulesDir, fileRuleId, fileRendered, written);
     }
 
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
@@ -69,27 +72,70 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
     const checksum = sha256(rendered);
     const ruleId = rule.id.replace(/\//g, '--');
 
-    writeChunked(rulesDir, ruleId, rendered);
+    writeChunked(rulesDir, ruleId, rendered, written);
     lockEntries.push({ kind: 'rule', id: rule.id, version: '0.0.0', checksum });
   }
 
+  reconcileStaleFiles(consumerCwd, rulesDir, written, warn);
+
   return lockEntries;
+}
+
+/**
+ * Removes plugin-generated files that this run did not (re)write:
+ * removed/filtered-out artifacts and leftover `-part-N.md` chunks after
+ * content shrank below CHAR_LIMIT. Only filenames derivable from the PRIOR
+ * lockfile are candidates — user-authored files in .windsurf/rules/ that the
+ * plugin never installed are left untouched.
+ */
+function reconcileStaleFiles(consumerCwd, rulesDir, written, warn) {
+  const lock = readLockfile(join(consumerCwd, LOCKFILE_NAME));
+  if (!lock || !Array.isArray(lock.artifacts) || lock.target !== 'windsurf') return;
+
+  const baseIds = lock.artifacts.map((e) =>
+    e.kind === 'template' ? `templates--${e.id}` : e.id.replace(/\//g, '--')
+  );
+
+  const isPluginFile = (name) => {
+    if (!name.endsWith('.md')) return false;
+    return baseIds.some(
+      (base) =>
+        name === `${base}.md` ||
+        name.startsWith(`${base}-part-`) ||
+        name.startsWith(`${base}--`)
+    );
+  };
+
+  if (!existsSync(rulesDir)) return;
+  for (const entry of readdirSync(rulesDir, { withFileTypes: true })) {
+    if (!entry.isFile() || written.has(entry.name) || !isPluginFile(entry.name)) continue;
+    const stalePath = join(rulesDir, entry.name);
+    rmSync(stalePath, { force: true });
+    warn.write(`Removed stale rule file: ${relative(consumerCwd, stalePath)}\n`);
+  }
 }
 
 /**
  * Writes content as one or more files under rulesDir.
  * If content.length <= CHAR_LIMIT → single file: <id>.md
  * Otherwise → <id>-part-1.md, <id>-part-2.md, ...
+ * Filenames are recorded into `written` (when provided) so the caller can
+ * reconcile stale files afterwards. Returns the number of files written.
  */
-export function writeChunked(rulesDir, id, content) {
+export function writeChunked(rulesDir, id, content, written) {
+  const record = (name) => { if (written) written.add(name); };
+
   if (content.length <= CHAR_LIMIT) {
     writeFileSync(join(rulesDir, `${id}.md`), content, 'utf8');
+    record(`${id}.md`);
     return 1;
   }
 
   const chunks = splitIntoChunks(content, CHAR_LIMIT);
   for (let i = 0; i < chunks.length; i++) {
-    writeFileSync(join(rulesDir, `${id}-part-${i + 1}.md`), chunks[i], 'utf8');
+    const name = `${id}-part-${i + 1}.md`;
+    writeFileSync(join(rulesDir, name), chunks[i], 'utf8');
+    record(name);
   }
   return chunks.length;
 }
@@ -120,27 +166,3 @@ export function splitIntoChunks(text, maxChars) {
   return chunks;
 }
 
-function collectRules(pkgRoot) {
-  if (!pkgRoot) return [];
-  const rulesDir = join(pkgRoot, 'rules');
-  if (!existsSync(rulesDir)) return [];
-
-  const collected = [];
-  walk(rulesDir, rulesDir, collected);
-  collected.sort((a, b) => a.id.localeCompare(b.id));
-  return collected;
-}
-
-function walk(baseDir, currentDir, out) {
-  for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue;
-    const fullPath = join(currentDir, entry.name);
-    if (entry.isDirectory()) {
-      walk(baseDir, fullPath, out);
-    } else if (entry.name.endsWith('.md')) {
-      const rel = relative(baseDir, fullPath).split(/[\\/]/).join('/');
-      const id = rel.replace(/\.md$/, '');
-      out.push({ id, body: readFileSync(fullPath, 'utf8') });
-    }
-  }
-}

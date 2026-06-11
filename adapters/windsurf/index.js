@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
+import { collectRules } from '../../lib/rules-loader.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { sha256 } from '../../lib/checksum.js';
 
@@ -120,27 +121,3 @@ export function splitIntoChunks(text, maxChars) {
   return chunks;
 }
 
-function collectRules(pkgRoot) {
-  if (!pkgRoot) return [];
-  const rulesDir = join(pkgRoot, 'rules');
-  if (!existsSync(rulesDir)) return [];
-
-  const collected = [];
-  walk(rulesDir, rulesDir, collected);
-  collected.sort((a, b) => a.id.localeCompare(b.id));
-  return collected;
-}
-
-function walk(baseDir, currentDir, out) {
-  for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue;
-    const fullPath = join(currentDir, entry.name);
-    if (entry.isDirectory()) {
-      walk(baseDir, fullPath, out);
-    } else if (entry.name.endsWith('.md')) {
-      const rel = relative(baseDir, fullPath).split(/[\\/]/).join('/');
-      const id = rel.replace(/\.md$/, '');
-      out.push({ id, body: readFileSync(fullPath, 'utf8') });
-    }
-  }
-}

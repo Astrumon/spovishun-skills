@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
+import { collectRules } from '../../lib/rules-loader.js';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
@@ -174,26 +175,12 @@ function installHooks(pkgRoot, claudeDir, warn) {
  * mirroring the codex and windsurf adapters — never copied verbatim.
  */
 function installRules(pkgRoot, claudeDir, configMap) {
-  const rulesDir = join(pkgRoot, 'rules');
-  if (!existsSync(rulesDir)) return;
-
-  copyRulesRecursive(rulesDir, rulesDir, claudeDir, configMap);
-}
-
-function copyRulesRecursive(baseDir, currentDir, claudeDir, configMap) {
-  for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue;
-    const srcPath = join(currentDir, entry.name);
-    if (entry.isDirectory()) {
-      copyRulesRecursive(baseDir, srcPath, claudeDir, configMap);
-    } else if (entry.name.endsWith('.md')) {
-      const rel = relative(baseDir, srcPath);
-      const destPath = join(claudeDir, 'rules', rel);
-      mkdirSync(join(destPath, '..'), { recursive: true });
-      // Rules carry no manifest, so every UPPER_SNAKE_CASE token must resolve from config.
-      const rendered = renderTemplate(readFileSync(srcPath, 'utf8'), { configMap, manifestPlaceholders: [] });
-      writeFileSync(destPath, rendered, 'utf8');
-    }
+  for (const rule of collectRules(pkgRoot)) {
+    const destPath = join(claudeDir, 'rules', ...rule.id.split('/')) + '.md';
+    mkdirSync(dirname(destPath), { recursive: true });
+    // Rules carry no manifest, so every UPPER_SNAKE_CASE token must resolve from config.
+    const rendered = renderTemplate(rule.body, { configMap, manifestPlaceholders: [] });
+    writeFileSync(destPath, rendered, 'utf8');
   }
 }
 

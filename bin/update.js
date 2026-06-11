@@ -201,7 +201,7 @@ export async function runUpdate({
 
       case ACTIONS.REMOVED: {
         summary.removed++;
-        write(`  (entry removed from lockfile)\n`);
+        write(`  (entry removed from lockfile; files on disk are kept — the next install/sync cleans them up)\n`);
         // Drop from lockfile — do NOT push lockEntry
         break;
       }

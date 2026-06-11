@@ -27,85 +27,79 @@ if (!subcommand || subcommand === '--help' || subcommand === '-h') {
   process.exit(0);
 }
 
+// Runs an async subcommand: exit 0 on resolve (or a truthy boolean result),
+// exit 1 with the error message + actionable hint otherwise.
+function runAsync(label, promise) {
+  promise
+    .then((result) => process.exit(result === false ? 1 : 0))
+    .catch((err) => {
+      process.stderr.write(`${label} failed: ${err.message}\n`);
+      if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
+      process.exit(1);
+    });
+}
+
+// node:util parseArgs throws on unknown flags — turn that into a usage line
+// instead of an unhandled stack trace.
+function parseFlags(label, args, options, usage) {
+  try {
+    return parseArgs({ args, options, allowPositionals: false }).values;
+  } catch (err) {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.stderr.write(`Usage: ${usage}\n`);
+    process.exit(1);
+  }
+}
+
 switch (subcommand) {
   case 'validate':
     process.exit(runValidate(rest));
   case 'init':
-    runInit({ cwd: process.cwd(), prompter: createPromptModule(), out: process.stdout })
-      .then(() => process.exit(0))
-      .catch((err) => {
-        process.stderr.write(`init failed: ${err.message}\n`);
-        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
-        process.exit(1);
-      });
+    runAsync('init', runInit({ cwd: process.cwd(), prompter: createPromptModule(), out: process.stdout }));
     break;
   case 'install': {
-    const { values: installOpts } = parseArgs({
-      args: rest,
-      options: { target: { type: 'string' } },
-      allowPositionals: false,
-    });
+    const installOpts = parseFlags(
+      'install', rest,
+      { target: { type: 'string' } },
+      'spovishun-skills install --target=claude'
+    );
     if (!installOpts.target) {
       process.stderr.write(`Error: --target is required.\n`);
       process.stderr.write(`Usage: spovishun-skills install --target=claude\n`);
       process.exit(1);
     }
-    runInstall({ target: installOpts.target, cwd: process.cwd(), out: process.stdout })
-      .then(() => process.exit(0))
-      .catch((err) => {
-        process.stderr.write(`install failed: ${err.message}\n`);
-        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
-        process.exit(1);
-      });
+    runAsync('install', runInstall({ target: installOpts.target, cwd: process.cwd(), out: process.stdout }));
     break;
   }
   case 'sync':
-    runSync({ cwd: process.cwd(), out: process.stdout })
-      .then(() => process.exit(0))
-      .catch((err) => {
-        process.stderr.write(`sync failed: ${err.message}\n`);
-        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
-        process.exit(1);
-      });
+    runAsync('sync', runSync({ cwd: process.cwd(), out: process.stdout }));
     break;
   case 'update': {
-    const { values: updateOpts } = parseArgs({
-      args: rest,
-      options: {
+    const updateOpts = parseFlags(
+      'update', rest,
+      {
         upstream: { type: 'string' },
         skill: { type: 'string' },
         'dry-run': { type: 'boolean' },
       },
-      allowPositionals: false,
-    });
+      'spovishun-skills update --upstream=<dir> [--skill <id>] [--dry-run]'
+    );
     if (!updateOpts.upstream) {
       process.stderr.write(`Error: --upstream is required.\n`);
       process.stderr.write(`Usage: spovishun-skills update --upstream=<dir>\n`);
       process.exit(1);
     }
-    runUpdate({
+    runAsync('update', runUpdate({
       cwd: process.cwd(),
       upstreamRoot: updateOpts.upstream,
       skillId: updateOpts.skill,
       dryRun: updateOpts['dry-run'] ?? false,
       out: process.stdout,
-    })
-      .then(() => process.exit(0))
-      .catch((err) => {
-        process.stderr.write(`update failed: ${err.message}\n`);
-        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
-        process.exit(1);
-      });
+    }));
     break;
   }
   case 'doctor':
-    runDoctor({ cwd: process.cwd(), env: process.env, out: process.stdout })
-      .then((ok) => process.exit(ok ? 0 : 1))
-      .catch((err) => {
-        process.stderr.write(`doctor failed: ${err.message}\n`);
-        if (err.actionable) process.stderr.write(`  ${err.actionable}\n`);
-        process.exit(1);
-      });
+    runAsync('doctor', runDoctor({ cwd: process.cwd(), env: process.env, out: process.stdout }));
     break;
   default:
     process.stderr.write(`Unknown command: ${subcommand}\n`);

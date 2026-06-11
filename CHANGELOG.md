@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] — 2026-06-11
+
+### Added
+
+- **Stage support in board scripts (#107):** the Board v2 (Scrum) `Stage`
+  select is now first-class across the Notion CLI toolchain.
+  `get-board.js` gains a `--stage <Backlog|Sprint|Archive>` filter (AND-combined
+  with the Status filter, including the `--priority-tier` and `--latest` paths)
+  and maps `stage` into the task JSON; `get-task.js` includes `stage` in
+  json/md/text output; `update-status.js` gains `--stage` (positional status is
+  now optional — update status, stage, or both in one PATCH) for promoting
+  Backlog → Sprint and archiving at sprint close. `lib/query-tasks.js` accepts
+  an optional extra filter. Board v1 degrades gracefully: `stage = null` in
+  JSON, no Stage column in md/text output, no Stage filter.
+- **Stage workflows in task skills (#107):** `notion-spovishun-task-manager`
+  documents promote-to-Sprint / archive-on-completion CLI flows;
+  `notion-task-to-code` warns when generating a prompt for a task whose Stage
+  is not `Sprint`; `task-decomposer` states that decomposed tasks land in
+  Backlog and offers promoting the first unblocked task; `newtask` asks
+  Backlog (default) vs Sprint and passes `stage` explicitly.
+
+### Changed
+
+- **`newtask` branch creation is opt-in (#107):** a git branch is created only
+  when the task goes straight to Sprint and the user confirms starting now, or
+  when explicitly requested — Backlog tasks no longer spawn branches.
+
+### Fixed
+
+- **`create-task.js` Status default (#107):** the script hardcoded
+  `Status = "To do"` while the `newtask` skill declared `Not started`. New
+  tasks now land as `Not started` (override via the optional `status` stdin
+  field) and appear in the Backlog view.
+- **`notion-task-board-manager` status list (#107):** removed `Backlog` from
+  the Status values — it is a Stage, not a Status (stage/status conflation).
+
 ## [1.7.0] — 2026-06-10
 
 ### Added

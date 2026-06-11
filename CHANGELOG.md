@@ -26,13 +26,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Backlog and offers promoting the first unblocked task; `newtask` asks
   Backlog (default) vs Sprint and passes `stage` explicitly.
 
+- **Doctor `installed-artifacts` check:** verifies that every artifact pinned
+  in the lockfile still has its body file on disk (fail + sync hint when
+  missing); checksum drift from local edits is annotated, not failed.
+- **Hook unit tests:** first test coverage for `hooks/notion-task-inject.js`
+  pure helpers (stage filter shapes, branch derivation, config reader, git-ref
+  sanitizer) plus parity guards that pin the hook's priority tiers and the
+  `Notion-Version` header to the scripts/lib copies.
+
 ### Changed
 
 - **`newtask` branch creation is opt-in (#107):** a git branch is created only
   when the task goes straight to Sprint and the user confirms starting now, or
   when explicitly requested — Backlog tasks no longer spawn branches.
+- **Notion HTTP transport (scripts + hook):** non-JSON responses and hung
+  sockets now reject with a descriptive error (30 s timeout) instead of
+  resolving `null` — an API outage no longer masquerades as an empty board or
+  "No Tasks Available" in the picker.
+- **Codex lockfile checksums** now cover the rendered body (placeholders
+  resolved), matching the claude/windsurf semantics; rules are checksummed
+  rendered as well.
+- **CLI:** unknown flags print a usage line instead of an unhandled
+  `parseArgs` stack trace; async subcommand dispatch deduplicated.
+- **Shared rules collector:** the three per-adapter `rules/` walkers merged
+  into `lib/rules-loader.js`.
 
 ### Fixed
+
+- **`update` dropped rule/template lock entries:** rules never appear in the
+  upstream artifact map, so every `rule:` lockfile entry was misclassified as
+  REMOVED and silently dropped (windsurf installs); windsurf template files
+  (`templates--<id>.md`) were keyed under the wrong kind and never matched
+  their lock entries. Update now preserves rule entries (`RULE_SKIP`) and keys
+  templates correctly.
+- **Claude install deleted user files:** the legacy flat-file cleanup removed
+  ANY `.md` in `.claude/skills|agents|_templates/` — it now touches only ids
+  known from the current artifact set or the prior lockfile.
+- **Hooks broke in ESM consumers:** `.claude/hooks/` now ships a
+  `package.json` with `"type": "commonjs"`, so the CJS hooks keep working when
+  the consumer's root package.json declares `"type": "module"`.
+- **Windsurf stale files:** reinstall now removes plugin-generated files that
+  the run did not rewrite (removed artifacts, leftover `-part-N.md` chunks
+  after content shrank) while preserving user-authored files.
+- **Task hook hardening:** git branch names from config/Notion are validated
+  against `[\w./-]` before interpolation into `execSync` (double quotes alone
+  do not stop `$(...)`); the base branch is quoted; a failed
+  `Status=In progress` PATCH in apply-pick now emits a warning; the phantom
+  `Normal` priority tier (diverged from `query-tasks.js`) is gone.
+- **Broken `hooks/hooks.json`** during install now emits a warning instead of
+  silently skipping hook installation; `settings.json` is written once per
+  install instead of twice.
 
 - **`create-task.js` Status default (#107):** the script hardcoded
   `Status = "To do"` while the `newtask` skill declared `Not started`. New

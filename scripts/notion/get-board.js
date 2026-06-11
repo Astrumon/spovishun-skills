@@ -11,6 +11,9 @@ const { resolveRelationIds, extractRelationIds } = require('./lib/resolve-relati
 
 const VALID_STATUSES = ['Not started', 'To do', 'In progress', 'Done'];
 const VALID_FORMATS = ['json', 'md', 'text'];
+// Board v2 (Scrum) Stage select. Boards without the property (Board v1) yield
+// stage = null and the md/text renderers drop the column entirely.
+const VALID_STAGES = ['Backlog', 'Sprint', 'Archive'];
 
 function parseArgs(argv) {
   let priorityTier = false;
@@ -18,6 +21,7 @@ function parseArgs(argv) {
   let status = 'To do';
   let format = 'json';
   let epicFilter = null;
+  let stage = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--priority-tier') { priorityTier = true; }
     else if (argv[i] === '--latest') { latest = true; }
@@ -26,8 +30,10 @@ function parseArgs(argv) {
     else if (argv[i] === '--format' && argv[i + 1]) { format = argv[++i]; }
     else if (argv[i].startsWith('--epic=')) { epicFilter = argv[i].slice(7); }
     else if (argv[i] === '--epic' && argv[i + 1]) { epicFilter = argv[++i]; }
+    else if (argv[i].startsWith('--stage=')) { stage = argv[i].slice(8); }
+    else if (argv[i] === '--stage' && argv[i + 1]) { stage = argv[++i]; }
   }
-  return { priorityTier, latest, status, format, epicFilter };
+  return { priorityTier, latest, status, format, epicFilter, stage };
 }
 
 function mapPageRaw(page) {
@@ -37,6 +43,7 @@ function mapPageRaw(page) {
     id: page.id,
     title,
     status: props.Status?.status?.name ?? null,
+    stage: props.Stage?.select?.name ?? null,
     branch: deriveBranchFromName(title),
     priority: props.Priority?.select?.name ?? null,
     epicIds: extractRelationIds(props.Epic),
@@ -57,34 +64,47 @@ function enrichWithRelations(rawTasks, titleMap) {
   });
 }
 
-function renderMd(tasks) {
+// The Stage column appears only when there is stage data to show (Board v2)
+// or the caller filtered by stage — Board v1 output stays column-free.
+function showStageColumn(tasks, stageFilter) {
+  return Boolean(stageFilter) || tasks.some(t => t.stage != null);
+}
+
+function renderMd(tasks, stageFilter) {
   if (tasks.length === 0) return '*(no tasks)*';
+  const withStage = showStageColumn(tasks, stageFilter);
   const rows = tasks.map(t => {
     const epic = t.epic?.title ?? '';
     const blockers = t.blockedBy.map(b => b.title ?? b.id.slice(0, 8)).join(', ');
-    return `| ${t.title} | ${t.status ?? ''} | ${t.priority ?? ''} | ${epic} | ${blockers} |`;
+    const stageCell = withStage ? ` ${t.stage ?? ''} |` : '';
+    return `| ${t.title} | ${t.status ?? ''} |${stageCell} ${t.priority ?? ''} | ${epic} | ${blockers} |`;
   });
   return [
-    '| Title | Status | Priority | Epic | Blocked by |',
-    '|-------|--------|----------|------|------------|',
+    `| Title | Status |${withStage ? ' Stage |' : ''} Priority | Epic | Blocked by |`,
+    `|-------|--------|${withStage ? '-------|' : ''}----------|------|------------|`,
     ...rows,
   ].join('\n');
 }
 
-function renderText(tasks) {
+function renderText(tasks, stageFilter) {
   if (tasks.length === 0) return '(no tasks)';
+  const withStage = showStageColumn(tasks, stageFilter);
   const pad = (s, n) => (s ?? '').padEnd(n);
   const epicLabel = t => t.epic?.title ?? '';
   const blockersLabel = t => t.blockedBy.map(b => b.title ?? b.id.slice(0, 8)).join(',');
   const maxTitle = Math.max(5, ...tasks.map(t => t.title.length));
   const maxStatus = Math.max(6, ...tasks.map(t => (t.status ?? '').length));
+  const maxStage = Math.max(5, ...tasks.map(t => (t.stage ?? '').length));
   const maxPriority = Math.max(8, ...tasks.map(t => (t.priority ?? '').length));
   const maxEpic = Math.max(4, ...tasks.map(t => epicLabel(t).length));
-  const header = `${pad('Title', maxTitle)}  ${pad('Status', maxStatus)}  ${pad('Priority', maxPriority)}  ${pad('Epic', maxEpic)}  Blocked by`;
-  const sep = `${'-'.repeat(maxTitle)}  ${'-'.repeat(maxStatus)}  ${'-'.repeat(maxPriority)}  ${'-'.repeat(maxEpic)}  ----------`;
-  const rows = tasks.map(t =>
-    `${pad(t.title, maxTitle)}  ${pad(t.status ?? '', maxStatus)}  ${pad(t.priority ?? '', maxPriority)}  ${pad(epicLabel(t), maxEpic)}  ${blockersLabel(t)}`
-  );
+  const stageHeader = withStage ? `${pad('Stage', maxStage)}  ` : '';
+  const stageSep = withStage ? `${'-'.repeat(maxStage)}  ` : '';
+  const header = `${pad('Title', maxTitle)}  ${pad('Status', maxStatus)}  ${stageHeader}${pad('Priority', maxPriority)}  ${pad('Epic', maxEpic)}  Blocked by`;
+  const sep = `${'-'.repeat(maxTitle)}  ${'-'.repeat(maxStatus)}  ${stageSep}${'-'.repeat(maxPriority)}  ${'-'.repeat(maxEpic)}  ----------`;
+  const rows = tasks.map(t => {
+    const stageCell = withStage ? `${pad(t.stage ?? '', maxStage)}  ` : '';
+    return `${pad(t.title, maxTitle)}  ${pad(t.status ?? '', maxStatus)}  ${stageCell}${pad(t.priority ?? '', maxPriority)}  ${pad(epicLabel(t), maxEpic)}  ${blockersLabel(t)}`;
+  });
   return [header, sep, ...rows].join('\n');
 }
 
@@ -121,10 +141,15 @@ async function main() {
     process.exit(2);
   }
 
-  const { priorityTier, latest, status, format, epicFilter } = parseArgs(process.argv.slice(2));
+  const { priorityTier, latest, status, format, epicFilter, stage } = parseArgs(process.argv.slice(2));
 
   if (!latest && !VALID_STATUSES.includes(status)) {
     process.stderr.write(`Error: invalid status "${status}". Valid: ${VALID_STATUSES.join(', ')}\n`);
+    process.exit(1);
+  }
+
+  if (stage !== null && !VALID_STAGES.includes(stage)) {
+    process.stderr.write(`Error: invalid stage "${stage}". Valid: ${VALID_STAGES.join(', ')}\n`);
     process.exit(1);
   }
 
@@ -134,11 +159,13 @@ async function main() {
   }
 
   const epicPageId = await resolveEpicFilter(token, epicFilter);
+  const stageFilter = stage ? { property: 'Stage', select: { equals: stage } } : null;
 
   let pages;
 
   if (latest) {
     const result = await http.post(token, `/v1/databases/${constants.DATABASE_ID}/query`, {
+      ...(stageFilter ? { filter: stageFilter } : {}),
       sorts: [{ timestamp: 'created_time', direction: 'descending' }],
       page_size: 10,
     });
@@ -148,11 +175,12 @@ async function main() {
     }
     pages = result?.results || [];
   } else if (priorityTier) {
-    const { candidates } = await queryByPriorityTier(http, token, status, new Set());
+    const { candidates } = await queryByPriorityTier(http, token, status, new Set(), stageFilter);
     pages = candidates;
   } else {
+    const statusFilter = { property: 'Status', status: { equals: status } };
     const result = await http.post(token, `/v1/databases/${constants.DATABASE_ID}/query`, {
-      filter: { property: 'Status', status: { equals: status } },
+      filter: stageFilter ? { and: [statusFilter, stageFilter] } : statusFilter,
       sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     });
     if (result?.object === 'error') {
@@ -174,15 +202,21 @@ async function main() {
   const tasks = enrichWithRelations(rawTasks, titleMap);
 
   if (format === 'md') {
-    process.stdout.write(renderMd(tasks) + '\n');
+    process.stdout.write(renderMd(tasks, stage) + '\n');
   } else if (format === 'text') {
-    process.stdout.write(renderText(tasks) + '\n');
+    process.stdout.write(renderText(tasks, stage) + '\n');
   } else {
     process.stdout.write(JSON.stringify(tasks) + '\n');
   }
 }
 
-main().catch(err => {
-  process.stderr.write(`Error: ${err.message}\n`);
-  process.exit(1);
-});
+// Exported for unit tests. The require.main guard keeps tests from
+// triggering the CLI entry — same pattern as get-task.js.
+module.exports = { parseArgs, mapPageRaw, renderMd, renderText, VALID_STAGES, VALID_STATUSES, VALID_FORMATS };
+
+if (require.main === module) {
+  main().catch(err => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exit(1);
+  });
+}

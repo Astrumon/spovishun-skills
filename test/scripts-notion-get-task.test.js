@@ -167,3 +167,45 @@ test('renderText: omits optional sections cleanly when fields are absent', () =>
     }
   );
 });
+
+test('renderText/renderMd: stage appears in the meta line when set (Board v2)', () => {
+  withSandbox(
+    { PROJECT_PREFIX: 'x' },
+    null,
+    ({ renderText, renderMd }) => {
+      const task = {
+        title: 'feature/x-93: Wire foo into bar',
+        status: 'In progress',
+        stage: 'Sprint',
+        priority: 'High',
+        branch: 'feature/x-93-wire-foo',
+        epic: null,
+        blockedBy: [],
+        content: '',
+      };
+      assert.ok(renderText(task).includes('In progress | Sprint | High'), 'text meta line');
+      assert.ok(renderMd(task).includes('In progress | Sprint | High'), 'md meta line');
+    }
+  );
+});
+
+test('renderText/renderMd: null stage leaves the meta line unchanged (Board v1)', () => {
+  withSandbox(
+    { PROJECT_PREFIX: 'x' },
+    null,
+    ({ renderText, renderMd }) => {
+      const task = {
+        title: 'feature/x-93: Wire foo into bar',
+        status: 'In progress',
+        stage: null,
+        priority: 'High',
+        branch: 'feature/x-93-wire-foo',
+        epic: null,
+        blockedBy: [],
+        content: '',
+      };
+      assert.ok(renderText(task).includes('In progress | High | feature/x-93-wire-foo'), 'text meta line');
+      assert.ok(renderMd(task).includes('In progress | High | feature/x-93-wire-foo'), 'md meta line');
+    }
+  );
+});

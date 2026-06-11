@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { collectRules } from '../../lib/rules-loader.js';
+import { renderTemplate } from '../../lib/template-renderer.js';
 import { sha256 } from '../../lib/checksum.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
@@ -63,18 +64,25 @@ export async function installCodex({
     );
   }
 
-  const artifactEntries = included.map((artifact) => ({
-    kind: artifact.kind,
-    id: artifact.id,
-    version: artifact.version,
-    checksum: sha256(artifact.bodyText),
-  }));
+  // Checksums cover the RENDERED body (placeholders resolved) — same semantics
+  // as the claude and windsurf adapters, so lock entries mean the same thing
+  // regardless of target.
+  const artifactEntries = included.map((artifact) => {
+    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
+    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    return {
+      kind: artifact.kind,
+      id: artifact.id,
+      version: artifact.version,
+      checksum: sha256(rendered),
+    };
+  });
 
   const ruleEntries = rules.map((rule) => ({
     kind: 'rule',
     id: rule.id,
     version: '0.0.0',
-    checksum: sha256(rule.body),
+    checksum: sha256(renderTemplate(rule.body, { configMap })),
   }));
 
   return [...artifactEntries, ...ruleEntries];

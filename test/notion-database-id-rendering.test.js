@@ -125,12 +125,16 @@ test('notion-navigator prose references NOTION_DATABASE_ID + NOTION_EPICS_DATABA
   assert.ok(body.includes(EPICS_DB_ID), 'epics database_id must be referenced');
 });
 
-test('newtask sets Stage = "Backlog" in the MCP create call (Board v2 default)', async () => {
+test('newtask passes an explicit Stage in both create paths (Board v2)', async () => {
   const consumer = await installAll();
   const body = readSkill(consumer, 'newtask');
 
-  // Look only at the MCP block: properties: { ... "Stage": "Backlog" ... }
-  assert.match(body, /"Stage":\s*"Backlog"/, 'newtask must include Stage = "Backlog" property');
+  // Since spovishun-107 the stage is chosen in Step 3.7 (Backlog default,
+  // Sprint opt-in) and passed explicitly to both the script stdin JSON and
+  // the MCP properties block.
+  assert.match(body, /"stage":\s*"<Backlog \| Sprint/, 'create-task.js stdin JSON must carry an explicit stage');
+  assert.match(body, /"Stage":\s*"<Backlog \| Sprint/, 'MCP create call must carry an explicit Stage property');
+  assert.ok(body.includes('Backlog** (default)'), 'Backlog must be documented as the default stage');
 });
 
 test('every Notion-related skill installs cleanly (no UNKNOWN_PLACEHOLDER thrown)', async () => {

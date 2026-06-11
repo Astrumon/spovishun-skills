@@ -89,7 +89,13 @@ For each task in order:
    ```
 3. Record the returned `id` so later tasks can reference it as a blocker.
 
-After creating, suggest starting implementation with `notion-task-to-code` on the first task.
+All created tasks land with `Stage = Backlog` (the create-task.js default) — decomposition feeds the grooming queue, not the active sprint.
+
+After creating, offer to promote the first unblocked task to Sprint:
+```bash
+node .claude/scripts/notion/update-status.js <first-task-id> --stage Sprint
+```
+Then suggest starting implementation with `notion-task-to-code` on that task.
 
 ---
 

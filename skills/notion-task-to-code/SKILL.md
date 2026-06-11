@@ -25,6 +25,8 @@ node .claude/scripts/notion/get-task.js <{{PROJECT_PREFIX}}-N | N | pageId> [--f
 
 Default `--format=json`. Use `md` for a rendered markdown card or `text` for a plain human-readable summary.
 
+**1e. Stage check (Board v2).** If the fetched task has a non-null `stage` and it is not `"Sprint"`, warn the user before continuing: the task is still in `Backlog` (not committed to the active sprint) or already in `Archive`. Offer to promote it first (`node .claude/scripts/notion/update-status.js <id> --stage Sprint`) or proceed anyway. Skip the warning when `stage` is `null` (Board v1 — no Stage property).
+
 ### Step 2: Fetch CLAUDE.md (targeted)
 ```
 node .claude/scripts/notion/get-claude-md.js --section commands       # just the Commands section

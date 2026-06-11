@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from '../lib/config-loader.js';
 import { readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
+import { loadInstalledFiles } from '../lib/installed-files-loader.js';
 import { notionRequest } from '../lib/notion-client.js';
 
 const CONFIG_NAME = 'spovishun-skills.config.yaml';
@@ -80,7 +81,7 @@ export async function runDoctor({ cwd, env = process.env, out = process.stdout, 
   }
   results.push(checkGitignoreLocalSettings(ctx));
 
-  // Checks 10-11: claude target only
+  // Checks 10-12: claude target only
   const target = ctx.lockData?.target;
   if (target === 'claude') {
     const r10 = checkSettingsJsonPresent(ctx);
@@ -90,10 +91,12 @@ export async function runDoctor({ cwd, env = process.env, out = process.stdout, 
     } else {
       results.push({ name: 'settings-json-hooks', status: 'skip', detail: 'settings.json missing or invalid' });
     }
+    results.push(checkInstalledArtifacts(ctx));
   } else {
     const reason = target ? `target=${target}` : 'lockfile missing or no target';
-    results.push({ name: 'settings-json-present', status: 'skip', detail: reason });
-    results.push({ name: 'settings-json-hooks',   status: 'skip', detail: reason });
+    results.push({ name: 'settings-json-present',  status: 'skip', detail: reason });
+    results.push({ name: 'settings-json-hooks',    status: 'skip', detail: reason });
+    results.push({ name: 'installed-artifacts',    status: 'skip', detail: reason });
   }
 
   printResults(write, results);
@@ -368,6 +371,48 @@ function checkSettingsJsonHooks(ctx) {
     };
   }
   return { name: 'settings-json-hooks', status: 'pass', detail: `${referenced} hook script(s) referenced, all present` };
+}
+
+/**
+ * Verifies that every artifact pinned in the lockfile still has its body file
+ * on disk. Checksum drift is reported as informational detail, NOT a failure —
+ * local edits are a supported workflow (update classifies them LOCAL_ONLY /
+ * CONFLICT); a missing file, however, means the install is broken.
+ */
+function checkInstalledArtifacts(ctx) {
+  const lockArtifacts = (ctx.lockData?.artifacts ?? []).filter((a) =>
+    ['skill', 'agent', 'template'].includes(a.kind)
+  );
+  if (lockArtifacts.length === 0) {
+    return { name: 'installed-artifacts', status: 'pass', detail: 'no artifact entries in lockfile' };
+  }
+
+  const installed = loadInstalledFiles(ctx.cwd, 'claude');
+  const missing = [];
+  let modified = 0;
+  for (const a of lockArtifacts) {
+    const entry = installed.get(`${a.kind}:${a.id}`);
+    if (!entry) {
+      missing.push(`${a.kind}:${a.id}`);
+      continue;
+    }
+    if (entry.checksum !== a.checksum) modified++;
+  }
+
+  if (missing.length > 0) {
+    return {
+      name: 'installed-artifacts',
+      status: 'fail',
+      detail: `missing on disk: ${missing.join(', ')}`,
+      action: 'Re-run `npx spovishun-skills sync` to restore the missing artifact files.',
+    };
+  }
+  const modNote = modified > 0 ? `, ${modified} locally modified` : '';
+  return {
+    name: 'installed-artifacts',
+    status: 'pass',
+    detail: `${lockArtifacts.length} artifact(s) on disk${modNote}`,
+  };
 }
 
 /**

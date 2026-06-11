@@ -331,3 +331,41 @@ test('runDoctor returns false on any single failure', async () => {
   const ok = await runDoctor({ cwd: consumer, env: {}, out });
   assert.equal(ok, false);
 });
+
+test('installed-artifacts: passes after install, reports local edits as detail', async () => {
+  const consumer = makeConsumer();
+  await installClaudeFully(consumer, 'install-config-no-notion.yaml');
+  writeGitignore(consumer, ['.claude/settings.local.json']);
+
+  // Local edit must NOT fail the check (supported workflow), only annotate it.
+  const { writeFileSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const skillPath = join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
+  writeFileSync(skillPath, readFileSync(skillPath, 'utf8') + '\nlocal edit', 'utf8');
+
+  const out = silentOut();
+  const ok = await runDoctor({ cwd: consumer, env: {}, out });
+  const text = out.text();
+
+  assert.equal(ok, true, `expected pass, output was:\n${text}`);
+  assert.equal(statusOf(text, 'installed-artifacts'), 'pass');
+  assert.ok(findResult(text, 'installed-artifacts').includes('locally modified'), 'local edit must be annotated');
+});
+
+test('installed-artifacts: fails when a locked artifact body is missing on disk', async () => {
+  const consumer = makeConsumer();
+  await installClaudeFully(consumer, 'install-config-no-notion.yaml');
+  writeGitignore(consumer, ['.claude/settings.local.json']);
+
+  const { rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  rmSync(join(consumer, '.claude', 'skills', 'universal-skill'), { recursive: true, force: true });
+
+  const out = silentOut();
+  const ok = await runDoctor({ cwd: consumer, env: {}, out });
+  const text = out.text();
+
+  assert.equal(ok, false, 'doctor must fail when a locked artifact is missing');
+  assert.equal(statusOf(text, 'installed-artifacts'), 'fail');
+  assert.ok(findResult(text, 'installed-artifacts').includes('skill:universal-skill'));
+});

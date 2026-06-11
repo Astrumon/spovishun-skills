@@ -157,8 +157,10 @@ function installHooks(pkgRoot, claudeDir, warn) {
     return {};
   }
 
-  // Copy all .js scripts verbatim
-  const scripts = readdirSync(hooksDir).filter((f) => f.endsWith('.js'));
+  // Copy all .js scripts verbatim, plus package.json — it pins
+  // "type": "commonjs" so the CJS hooks keep working in consumers whose root
+  // package.json declares "type": "module".
+  const scripts = readdirSync(hooksDir).filter((f) => f.endsWith('.js') || f === 'package.json');
   for (const script of scripts) {
     copyFileSync(join(hooksDir, script), join(claudeDir, 'hooks', script));
   }

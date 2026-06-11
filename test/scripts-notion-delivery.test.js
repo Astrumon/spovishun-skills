@@ -143,6 +143,17 @@ test('installed markdown-to-blocks.js requires the vendored copy, not "marked"',
   );
 });
 
+// All hooks are CommonJS. Without a "type": "commonjs" package.json next to
+// them, a consumer whose root package.json declares "type": "module" would
+// fail every hook invocation with `require is not defined in ES module scope`.
+test('hooks/package.json (type: commonjs) is delivered alongside hook scripts', async () => {
+  const consumer = await install(NOTION_CONFIG);
+  const pkgPath = join(consumer, '.claude', 'hooks', 'package.json');
+  assert.ok(existsSync(pkgPath), '.claude/hooks/package.json must be installed');
+  const parsed = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  assert.equal(parsed.type, 'commonjs');
+});
+
 test('scripts/notion/ is NOT copied when stack.notion is false', async () => {
   const consumer = await install(NO_NOTION_CONFIG);
   const notionDir = join(consumer, '.claude', 'scripts', 'notion');

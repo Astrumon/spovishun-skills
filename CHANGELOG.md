@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **CI:** bumped `actions/checkout` and `actions/setup-node` from `@v4` to `@v5`
+  in `ci.yml` and `release.yml` — `@v4` runs on the Node 20 action runtime that
+  GitHub is sunsetting. `node-version` stays `20`: the bump moves only the action
+  runtime, not the Node version the package is tested against (targets Node ≥ 18).
+
 ## [1.8.0] — 2026-06-11
 
 ### Added

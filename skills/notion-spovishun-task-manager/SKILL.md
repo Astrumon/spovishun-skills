@@ -21,11 +21,13 @@ Task management for a project board in Notion with project-specific conventions 
 ```
 node .claude/scripts/notion/get-board.js                       # JSON (default) — use when processing data
 node .claude/scripts/notion/get-board.js --format=md           # markdown table — use when displaying to user
-node .claude/scripts/notion/get-board.js --epic "<name|id>"    # only tasks linked to that epic
+node .claude/scripts/notion/get-board.js --epic "<name|id>"    # tasks linked to that epic, any status
 node .claude/scripts/notion/get-board.js --stage Backlog       # filter by Stage (Backlog | Sprint | Archive)
 ```
 
 Display statuses: In progress / Not started / Done (last 3). The board table includes `Epic` and `Blocked by` columns; a `Stage` column appears on Board v2 (when stage data exists).
+
+By default the board shows `To do` tasks. `--epic` overrides this: it lists the epic's tasks across **all** statuses (so a Backlog epic isn't falsely shown as empty). Pass `--status` alongside `--epic` to intersect (e.g. `--epic "<name>" --status Done`); `--stage` always composes (AND).
 
 ## Epics
 

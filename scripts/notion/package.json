@@ -1,6 +1,6 @@
 {
   "name": "spovishun-skills-notion-cli",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "commonjs",
   "description": "Notion CLI helpers shipped by the spovishun-skills plugin. Installed into consumer projects under .claude/scripts/notion/. Skill bodies invoke these as `node .claude/scripts/notion/<script>.js`."

@@ -19,13 +19,14 @@ function parseArgs(argv) {
   let priorityTier = false;
   let latest = false;
   let status = 'To do';
+  let statusExplicit = false;
   let format = 'json';
   let epicFilter = null;
   let stage = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--priority-tier') { priorityTier = true; }
     else if (argv[i] === '--latest') { latest = true; }
-    else if (argv[i] === '--status' && argv[i + 1]) { status = argv[++i]; }
+    else if (argv[i] === '--status' && argv[i + 1]) { status = argv[++i]; statusExplicit = true; }
     else if (argv[i].startsWith('--format=')) { format = argv[i].slice(9); }
     else if (argv[i] === '--format' && argv[i + 1]) { format = argv[++i]; }
     else if (argv[i].startsWith('--epic=')) { epicFilter = argv[i].slice(7); }
@@ -33,7 +34,7 @@ function parseArgs(argv) {
     else if (argv[i].startsWith('--stage=')) { stage = argv[i].slice(8); }
     else if (argv[i] === '--stage' && argv[i + 1]) { stage = argv[++i]; }
   }
-  return { priorityTier, latest, status, format, epicFilter, stage };
+  return { priorityTier, latest, status, statusExplicit, format, epicFilter, stage };
 }
 
 function mapPageRaw(page) {
@@ -108,6 +109,20 @@ function renderText(tasks, stageFilter) {
   return [header, sep, ...rows].join('\n');
 }
 
+// When --epic is set without an explicit --status, the epic relation is the
+// real filter, so the default "To do" status filter is dropped — otherwise an
+// all-Not-started epic looks empty. Explicit --status and --stage still apply.
+function buildListFilter({ status, statusExplicit, epicFilter, stageFilter }) {
+  const filters = [];
+  if (statusExplicit || !epicFilter) {
+    filters.push({ property: 'Status', status: { equals: status } });
+  }
+  if (stageFilter) filters.push(stageFilter);
+  if (filters.length === 0) return null;
+  if (filters.length === 1) return filters[0];
+  return { and: filters };
+}
+
 async function resolveEpicFilter(token, epicFilter) {
   if (!epicFilter) return null;
   if (/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(epicFilter)) {
@@ -141,7 +156,7 @@ async function main() {
     process.exit(2);
   }
 
-  const { priorityTier, latest, status, format, epicFilter, stage } = parseArgs(process.argv.slice(2));
+  const { priorityTier, latest, status, statusExplicit, format, epicFilter, stage } = parseArgs(process.argv.slice(2));
 
   if (!latest && !VALID_STATUSES.includes(status)) {
     process.stderr.write(`Error: invalid status "${status}". Valid: ${VALID_STATUSES.join(', ')}\n`);
@@ -178,9 +193,9 @@ async function main() {
     const { candidates } = await queryByPriorityTier(http, token, status, new Set(), stageFilter);
     pages = candidates;
   } else {
-    const statusFilter = { property: 'Status', status: { equals: status } };
+    const listFilter = buildListFilter({ status, statusExplicit, epicFilter, stageFilter });
     const result = await http.post(token, `/v1/databases/${constants.DATABASE_ID}/query`, {
-      filter: stageFilter ? { and: [statusFilter, stageFilter] } : statusFilter,
+      ...(listFilter ? { filter: listFilter } : {}),
       sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     });
     if (result?.object === 'error') {
@@ -212,7 +227,7 @@ async function main() {
 
 // Exported for unit tests. The require.main guard keeps tests from
 // triggering the CLI entry — same pattern as get-task.js.
-module.exports = { parseArgs, mapPageRaw, renderMd, renderText, VALID_STAGES, VALID_STATUSES, VALID_FORMATS };
+module.exports = { parseArgs, buildListFilter, mapPageRaw, renderMd, renderText, VALID_STAGES, VALID_STATUSES, VALID_FORMATS };
 
 if (require.main === module) {
   main().catch(err => {

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] — 2026-06-17
+
+### Added
+
+- **Ownership model — never overwrite owner-authored skills on install/update:**
+  plugin-generated skills and agents now carry an identity-only provenance
+  marker (`x-spovishun: <id>`) in their frontmatter, so `install`/`update` can
+  tell their own artifacts from owner-authored ones. The marker is excluded
+  from every checksum (a shared `stripMarker()` runs before `sha256`), keeping
+  checksums invariant and pre-marker installs migration-safe. The update
+  classifier gains three states — **COLLISION** (an owner-authored file occupies
+  a plugin id → skip, never locked), **ADOPT** (a marked file with no lock entry
+  → registered as baseline, not overwritten), and **DISOWNED** (a locked id now
+  holds an unowned, drifted file → left untouched, dropped from the lockfile).
+  `install` is non-destructive by default (local edits are skipped with a
+  warning) and gains `--force` to reset *your own* edited files — unmarked
+  owner files stay sacred even under `--force`. `doctor` adds a read-only
+  ownership report (collisions, disowned files, orphaned markers, renamed
+  folders). Wired up for the `claude` target; windsurf/codex deferred.
+
 ## [1.8.1] — 2026-06-13
 
 ### Fixed

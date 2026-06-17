@@ -15,11 +15,12 @@ const here = dirname(fileURLToPath(import.meta.url));
  * @param {object} opts
  * @param {string}   opts.target     — install target (only "claude" is supported now)
  * @param {string}   opts.cwd        — consumer project directory
+ * @param {boolean}  [opts.force]    — reset our own locally-edited files (claude only); owner files stay sacred
  * @param {object}   [opts.out]      — writable stream for messages (default: process.stdout)
  * @param {Function} [opts.now]      — injectable clock for lockfile timestamp
  * @param {string}   [opts.pkgRoot]  — override package root (for tests)
  */
-export async function runInstall({ target, cwd, out = process.stdout, now, pkgRoot: pkgRootOverride }) {
+export async function runInstall({ target, cwd, force = false, out = process.stdout, now, pkgRoot: pkgRootOverride }) {
   const write = (msg) => out.write(msg);
 
   const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
@@ -32,7 +33,7 @@ export async function runInstall({ target, cwd, out = process.stdout, now, pkgRo
   let lockEntries;
   let installedHint;
   if (target === 'claude') {
-    lockEntries = await installClaude({ consumerCwd: cwd, pkgRoot, config, artifacts });
+    lockEntries = await installClaude({ consumerCwd: cwd, pkgRoot, config, artifacts, force });
     installedHint = '.claude/';
   } else if (target === 'codex') {
     lockEntries = await installCodex({

@@ -60,15 +60,20 @@ switch (subcommand) {
   case 'install': {
     const installOpts = parseFlags(
       'install', rest,
-      { target: { type: 'string' } },
-      'spovishun-skills install --target=claude'
+      { target: { type: 'string' }, force: { type: 'boolean' } },
+      'spovishun-skills install --target=claude [--force]'
     );
     if (!installOpts.target) {
       process.stderr.write(`Error: --target is required.\n`);
-      process.stderr.write(`Usage: spovishun-skills install --target=claude\n`);
+      process.stderr.write(`Usage: spovishun-skills install --target=claude [--force]\n`);
       process.exit(1);
     }
-    runAsync('install', runInstall({ target: installOpts.target, cwd: process.cwd(), out: process.stdout }));
+    runAsync('install', runInstall({
+      target: installOpts.target,
+      cwd: process.cwd(),
+      force: installOpts.force ?? false,
+      out: process.stdout,
+    }));
     break;
   }
   case 'sync':
@@ -150,6 +155,7 @@ function printHelp(pkg) {
     `  spovishun-skills validate <skill-dir>   Validate a skill's manifest.yaml\n` +
     `  spovishun-skills init                   Create spovishun-skills.config.yaml interactively\n` +
     `  spovishun-skills install --target=<t>   Install skills/agents/hooks for target (claude, codex, windsurf)\n` +
+    `    [--force]                              Reset your own locally-edited plugin files (claude); owner-authored files stay untouched\n` +
     `  spovishun-skills sync                   Re-apply install using existing config + lockfile (no wizard)\n` +
     `  spovishun-skills update --upstream=<d>  Diff installed artifacts against an upstream copy\n` +
     `    [--skill <id>]                         Limit update to one artifact\n` +

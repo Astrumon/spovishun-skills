@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, cpSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, cpSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { runInstall } from '../bin/install.js';
 import { runUpdate } from '../bin/update.js';
-import { LOCKFILE_NAME, readLockfile } from '../lib/lockfile.js';
+import { LOCKFILE_NAME, readLockfile, writeLockfile } from '../lib/lockfile.js';
+import { stripMarker } from '../lib/marker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SOURCE_V1 = join(here, 'fixtures', 'source');
@@ -167,17 +168,15 @@ test('NEW: artifact present in upstream but not in lockfile is written', async (
   // Install from v1 which only has universal-skill (no notion)
   await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
 
-  // Manually remove universal-skill from lockfile to simulate "not installed" state
-  // Actually test NEW by having a source-v2 skill that doesn't exist in v1.
-  // The fixture-agent exists in both. Let's use a different approach:
-  // Install with v1 (no notion), then update against v1 with notion enabled config.
-  // But that's a stack filter issue, not NEW.
-  // Simpler: install from v1 source, then corrupt lockfile to remove universal-skill entry.
+  // Simulate "never installed": drop universal-skill from the lockfile AND
+  // remove its on-disk folder. (With the ownership model, leaving the marked
+  // file on disk would classify as ADOPT, not NEW — see the ADOPT test.)
   const lockPath = join(consumer, LOCKFILE_NAME);
   const lock = readLockfile(lockPath);
   lock.artifacts = lock.artifacts.filter((e) => e.id !== 'universal-skill');
   const { dump } = await import('js-yaml');
   writeFileSync(lockPath, dump(lock), 'utf8');
+  rmSync(join(consumer, '.claude', 'skills', 'universal-skill'), { recursive: true, force: true });
 
   const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
 
@@ -288,4 +287,72 @@ test('codex target: prints warning and returns without error', async () => {
 
   assert.equal(summary.autoApplied, 0);
   assert.equal(summary.conflicts, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership model (claude)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UNI_SKILL = (consumer) => join(consumer, '.claude', 'skills', 'universal-skill', 'SKILL.md');
+
+function dropFromLock(consumer, id) {
+  const lockPath = join(consumer, LOCKFILE_NAME);
+  const lock = readLockfile(lockPath);
+  const kept = lock.artifacts.filter((e) => e.id !== id);
+  writeLockfile(lockPath, { pluginVersion: lock.pluginVersion, target: lock.target, artifacts: kept, now: () => new Date(lock.generatedAt) });
+}
+
+test('ADOPT: marked file with no lock entry is registered as baseline, not overwritten', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  const marked = readFileSync(UNI_SKILL(consumer), 'utf8');
+  dropFromLock(consumer, 'universal-skill'); // marked file stays on disk
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  assert.equal(summary.adopted, 1, 'marked + unlocked → ADOPT');
+  assert.equal(summary.newArtifacts, 0, 'must not be treated as NEW');
+  assert.equal(readFileSync(UNI_SKILL(consumer), 'utf8'), marked, 'file not overwritten this run');
+
+  const lock = readLockfile(join(consumer, LOCKFILE_NAME));
+  assert.ok(lock.artifacts.some((e) => e.id === 'universal-skill'), 'baseline re-registered in lockfile');
+});
+
+test('COLLISION: NEW branch short-circuits when an unowned file occupies the id', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  dropFromLock(consumer, 'universal-skill');
+  const ownerBody = '# owner-authored, unmarked\n';
+  writeFileSync(UNI_SKILL(consumer), ownerBody, 'utf8'); // replace marked file with foreign one
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  assert.equal(summary.collisions, 1, 'unowned + unlocked → COLLISION');
+  assert.equal(summary.newArtifacts, 0);
+  assert.equal(readFileSync(UNI_SKILL(consumer), 'utf8'), ownerBody, 'owner file untouched');
+
+  const lock = readLockfile(join(consumer, LOCKFILE_NAME));
+  assert.ok(!lock.artifacts.some((e) => e.id === 'universal-skill'), 'collision id not added to lockfile');
+});
+
+test('DISOWNED: locked id occupied by an unowned drifted file is dropped, file untouched', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  // Strip the marker AND edit the body → unmarked + drifted from lock → unowned.
+  const foreign = stripMarker(readFileSync(UNI_SKILL(consumer), 'utf8')) + '\nforeign edit\n';
+  writeFileSync(UNI_SKILL(consumer), foreign, 'utf8'); // lock entry still present
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  assert.equal(summary.disowned, 1, 'unmarked + drifted + locked → DISOWNED');
+  assert.equal(readFileSync(UNI_SKILL(consumer), 'utf8'), foreign, 'file left untouched');
+
+  const lock = readLockfile(join(consumer, LOCKFILE_NAME));
+  assert.ok(!lock.artifacts.some((e) => e.id === 'universal-skill'), 'disowned id dropped from lockfile');
 });

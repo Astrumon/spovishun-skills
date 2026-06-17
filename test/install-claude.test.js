@@ -9,6 +9,8 @@ import { loadConfig } from '../lib/config-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { installClaude } from '../adapters/claude/index.js';
 import { writeLockfile, readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
+import { sha256 } from '../lib/checksum.js';
+import { stripMarker, hasMarker } from '../lib/marker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_SOURCE = join(here, 'fixtures', 'source');
@@ -435,4 +437,108 @@ test('reinstall removes stale artifact folder when lockfile entry disappears fro
   await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts: filtered, warn: { write: () => {} } });
 
   assert.ok(!existsSync(join(consumer, '.claude', 'skills', 'notion-skill')), 'stale folder should be removed');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership model
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SKILL_PATH = (consumer, id) => join(consumer, '.claude', 'skills', id, 'SKILL.md');
+const AGENT_PATH = (consumer, id) => join(consumer, '.claude', 'agents', id, 'AGENT.md');
+
+function captureWarn() {
+  const lines = [];
+  return { write: (m) => lines.push(m), text: () => lines.join('') };
+}
+
+async function freshInstall(consumer, configName = 'install-config-no-notion.yaml') {
+  copyConfig(consumer, configName);
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  const lockEntries = await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
+  writeLockfile(join(consumer, LOCKFILE_NAME), { pluginVersion: '1.0.0', target: 'claude', artifacts: lockEntries, now: FIXED_NOW });
+  return { config, artifacts, lockEntries };
+}
+
+test('install stamps a provenance marker on skills and agents', async () => {
+  const consumer = makeConsumerDir();
+  await freshInstall(consumer);
+  assert.ok(hasMarker(readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8')), 'skill marked');
+  assert.ok(hasMarker(readFileSync(AGENT_PATH(consumer, 'fixture-agent'), 'utf8')), 'agent marked');
+});
+
+test('lockfile checksum equals the marker-stripped on-disk checksum', async () => {
+  const consumer = makeConsumerDir();
+  const { lockEntries } = await freshInstall(consumer);
+  const entry = lockEntries.find((e) => e.id === 'universal-skill');
+  const onDisk = readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8');
+  assert.equal(entry.checksum, sha256(stripMarker(onDisk)));
+});
+
+test('install skips a local edit and warns (no --force), preserving the edit', async () => {
+  const consumer = makeConsumerDir();
+  const { config, artifacts } = await freshInstall(consumer);
+
+  const edited = readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8') + '\n<!-- my edit -->\n';
+  writeFileSync(SKILL_PATH(consumer, 'universal-skill'), edited, 'utf8');
+
+  const warn = captureWarn();
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, warn });
+
+  assert.equal(readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8'), edited, 'edit preserved');
+  assert.match(warn.text(), /universal-skill: local edits present/);
+});
+
+test('install --force resets our own local edit', async () => {
+  const consumer = makeConsumerDir();
+  const { config, artifacts } = await freshInstall(consumer);
+
+  writeFileSync(SKILL_PATH(consumer, 'universal-skill'),
+    readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8') + '\nGARBAGE\n', 'utf8');
+
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, force: true, warn: { write: () => {} } });
+
+  assert.ok(!readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8').includes('GARBAGE'), 'edit reset by --force');
+});
+
+test('install never overwrites an owner-authored (unmarked) collision, even with --force', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+
+  // Owner authors their OWN universal-skill before any install: unmarked, no lockfile.
+  const ownerBody = '# My own universal-skill\nhand-authored\n';
+  mkdirSync(join(consumer, '.claude', 'skills', 'universal-skill'), { recursive: true });
+  writeFileSync(SKILL_PATH(consumer, 'universal-skill'), ownerBody, 'utf8');
+
+  const warn = captureWarn();
+  const lockEntries = await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, force: true, warn });
+
+  assert.equal(readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8'), ownerBody, 'owner file untouched even with --force');
+  assert.ok(!lockEntries.some((e) => e.id === 'universal-skill'), 'collision id not added to lockfile');
+  assert.match(warn.text(), /universal-skill: owner-authored file occupies this id/);
+});
+
+test('migration: pre-marker install backfills the marker without rewriting the body content', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+
+  // Simulate a pre-marker install: install, then strip the marker from disk and
+  // pin the lockfile to the marker-stripped checksum (what the old code wrote).
+  const lockEntries = await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts });
+  const marked = readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8');
+  const preMarker = stripMarker(marked);
+  writeFileSync(SKILL_PATH(consumer, 'universal-skill'), preMarker, 'utf8');
+  writeLockfile(join(consumer, LOCKFILE_NAME), { pluginVersion: '1.0.0', target: 'claude', artifacts: lockEntries, now: FIXED_NOW });
+
+  const warn = captureWarn();
+  await installClaude({ consumerCwd: consumer, pkgRoot: FIXTURES_SOURCE, config, artifacts, warn });
+
+  const after = readFileSync(SKILL_PATH(consumer, 'universal-skill'), 'utf8');
+  assert.ok(hasMarker(after), 'marker backfilled on first post-upgrade install');
+  assert.equal(stripMarker(after), preMarker, 'body content unchanged — no spurious overwrite');
+  assert.doesNotMatch(warn.text(), /local edits|owner-authored/, 'no false conflict/collision warnings');
 });

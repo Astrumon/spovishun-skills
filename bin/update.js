@@ -15,7 +15,8 @@ import { sha256 } from '../lib/checksum.js';
 import { classifyArtifact, ACTIONS } from '../lib/update-classifier.js';
 import { updateClaude } from '../adapters/claude/update.js';
 import { updateWindsurf } from '../adapters/windsurf/update.js';
-import { ensureSkillFrontmatter } from '../lib/skill-frontmatter.js';
+import { markBody } from '../lib/skill-frontmatter.js';
+import { stripMarker } from '../lib/marker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -99,13 +100,14 @@ export async function runUpdate({
   for (const artifact of upstreamArtifacts) {
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
     const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    // Claude installs prepend a synthesized YAML frontmatter to every skill
-    // body (see adapters/claude/index.js). Mirror that here so the
-    // upstream checksum matches what is actually on disk after install/sync.
-    const rendered = target === 'claude' && artifact.kind === 'skill'
-      ? ensureSkillFrontmatter(renderedBody, artifact.manifest)
+    // Claude installs synthesize skill frontmatter and stamp a provenance
+    // marker on skills/agents (see adapters/claude/index.js). Mirror that here
+    // so the written body carries the marker, while the checksum is taken over
+    // the marker-stripped body to stay invariant (matches lockfile + on-disk).
+    const rendered = target === 'claude'
+      ? markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest })
       : renderedBody;
-    const checksum = sha256(rendered);
+    const checksum = sha256(stripMarker(rendered));
     upstreamMap.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum });
   }
 
@@ -123,7 +125,7 @@ export async function runUpdate({
     );
   }
 
-  const summary = { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, localOnly: 0, unchanged: 0, rulesSkipped: 0 };
+  const summary = { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, localOnly: 0, unchanged: 0, rulesSkipped: 0, collisions: 0, adopted: 0, disowned: 0 };
   const newLockEntries = [];
 
   for (const key of filteredKeys) {
@@ -147,7 +149,14 @@ export async function runUpdate({
       ? { version: upstreamEntry.artifact.version, checksum: upstreamEntry.checksum }
       : null;
 
-    const action = classifyArtifact({ upstream: upstreamForClassifier, lockEntry, onDiskChecksum });
+    // Ownership states are only wired up for claude. For windsurf the model is
+    // deferred (markers in chunked -part-N files need a separate decision), so
+    // treat its files as owned to preserve the pre-ownership classification.
+    const onDiskOwned = target === 'claude'
+      ? Boolean(installedEntry && (installedEntry.hasMarker || (lockEntry && installedEntry.checksum === lockEntry.checksum)))
+      : true;
+
+    const action = classifyArtifact({ upstream: upstreamForClassifier, lockEntry, onDiskChecksum, onDiskOwned });
 
     write(`  ${action.padEnd(16)} ${key}\n`);
 
@@ -205,6 +214,33 @@ export async function runUpdate({
         // Drop from lockfile — do NOT push lockEntry
         break;
       }
+
+      case ACTIONS.COLLISION: {
+        summary.collisions++;
+        write(`  (owner-authored file occupies this id — left untouched, not added to lockfile)\n`);
+        // Owner wins: never write, never lock.
+        break;
+      }
+
+      case ACTIONS.ADOPT: {
+        summary.adopted++;
+        write(`  (marked file not in lockfile — registered on-disk content as baseline; rerun to merge)\n`);
+        // Register on-disk as the merge baseline without overwriting this run.
+        newLockEntries.push({
+          kind: upstreamEntry.artifact.kind,
+          id: upstreamEntry.artifact.id,
+          version: upstreamEntry.artifact.version,
+          checksum: onDiskChecksum,
+        });
+        break;
+      }
+
+      case ACTIONS.DISOWNED: {
+        summary.disowned++;
+        write(`  (on-disk file no longer recognisably plugin-generated — left untouched, dropped from lockfile)\n`);
+        // Leave file, drop from lockfile — do NOT push lockEntry
+        break;
+      }
     }
   }
 
@@ -228,6 +264,9 @@ export async function runUpdate({
     `conflicts: ${summary.conflicts}, ` +
     `new: ${summary.newArtifacts}, ` +
     `removed: ${summary.removed}` +
+    (summary.collisions > 0 ? `, collisions: ${summary.collisions}` : '') +
+    (summary.adopted > 0 ? `, adopted: ${summary.adopted}` : '') +
+    (summary.disowned > 0 ? `, disowned: ${summary.disowned}` : '') +
     (summary.rulesSkipped > 0 ? `, rules skipped: ${summary.rulesSkipped} (rules update via install/sync only)` : '') +
     `)\n`
   );

@@ -8,7 +8,10 @@ import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { sha256 } from '../../lib/checksum.js';
 import { mergeSettings } from '../../lib/settings-merger.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
-import { ensureSkillFrontmatter } from '../../lib/skill-frontmatter.js';
+import { markBody } from '../../lib/skill-frontmatter.js';
+import { stripMarker } from '../../lib/marker.js';
+import { loadInstalledFiles } from '../../lib/installed-files-loader.js';
+import { classifyArtifact, ACTIONS } from '../../lib/update-classifier.js';
 
 const KIND_LAYOUT = {
   skill: { subdir: 'skills', bodyFilename: 'SKILL.md' },
@@ -24,10 +27,11 @@ const KIND_LAYOUT = {
  * @param {string}   opts.pkgRoot       — absolute path to this package's root (for hooks/ and rules/)
  * @param {object}   opts.config        — validated consumer config object
  * @param {Array}    opts.artifacts     — all loaded artifacts from loadArtifacts()
+ * @param {boolean}  [opts.force]       — reset our own locally-edited files (LOCAL_ONLY/CONFLICT). Unmarked owner files stay sacred regardless.
  * @param {object}   [opts.warn]        — writable stream for warnings (default: process.stderr)
  * @returns {Array<{kind, id, version, checksum}>}  — lockfile entries for installed artifacts
  */
-export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, warn = process.stderr }) {
+export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, force = false, warn = process.stderr }) {
   const filtered = filterByStack(artifacts, config.stack ?? {});
   const configMap = buildPlaceholderMap(config);
 
@@ -39,7 +43,16 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
   mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
   mkdirSync(join(claudeDir, 'rules'), { recursive: true });
 
-  reconcileLegacyArtifacts(consumerCwd, claudeDir, filtered, warn);
+  const priorLock = readLockfile(join(consumerCwd, LOCKFILE_NAME));
+  const lockEntryMap = new Map(
+    (priorLock?.artifacts ?? []).map((e) => [`${e.kind}:${e.id}`, e])
+  );
+
+  reconcileLegacyArtifacts(consumerCwd, claudeDir, filtered, warn, priorLock);
+
+  // Snapshot what is already on disk (checksums are marker-stripped) so the
+  // ownership predicate can tell our own files from owner-authored collisions.
+  const installed = loadInstalledFiles(consumerCwd, 'claude');
 
   const lockEntries = [];
 
@@ -49,27 +62,88 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
 
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
     const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    const bodyToWrite = artifact.kind === 'skill'
-      ? ensureSkillFrontmatter(renderedBody, artifact.manifest)
-      : renderedBody;
-    const checksum = sha256(bodyToWrite);
+    const bodyToWrite = markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest });
+    // Checksum is taken over the marker-stripped body so it is identical to the
+    // pre-marker lockfile checksum — that invariance is what makes migration
+    // and the ownership predicate work.
+    const checksum = sha256(stripMarker(bodyToWrite));
 
-    const artifactDir = join(claudeDir, layout.subdir, artifact.id);
-    mkdirSync(artifactDir, { recursive: true });
-    writeFileSync(join(artifactDir, layout.bodyFilename), bodyToWrite, 'utf8');
+    const key = `${artifact.kind}:${artifact.id}`;
+    const lockEntry = lockEntryMap.get(key) ?? null;
+    const installedEntry = installed.get(key) ?? null;
+    const onDiskChecksum = installedEntry ? installedEntry.checksum : null;
+    const onDiskOwned = installedEntry
+      ? installedEntry.hasMarker || (lockEntry != null && installedEntry.checksum === lockEntry.checksum)
+      : false;
 
-    for (const file of artifact.files ?? []) {
-      const destPath = join(artifactDir, file.relPath);
-      mkdirSync(dirname(destPath), { recursive: true });
-      if (file.encoding === 'utf8') {
-        const rendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
-        writeFileSync(destPath, rendered, 'utf8');
-      } else {
-        writeFileSync(destPath, Buffer.from(file.contents, 'base64'));
+    const action = classifyArtifact({
+      upstream: { version: artifact.version, checksum },
+      lockEntry,
+      onDiskChecksum,
+      onDiskOwned,
+    });
+
+    const freshEntry = { kind: artifact.kind, id: artifact.id, version: artifact.version, checksum };
+    let writeBody = false;
+    let lockToPush = null;
+
+    switch (action) {
+      case ACTIONS.NEW:
+      case ACTIONS.UNCHANGED:
+      case ACTIONS.AUTO_APPLY:
+      case ACTIONS.MISSING_ON_DISK:
+        writeBody = true;
+        lockToPush = freshEntry;
+        break;
+
+      case ACTIONS.ADOPT:
+        // Owner's file carries our marker but is not in the lockfile. Keep it,
+        // register the on-disk content as the merge baseline, and defer any
+        // plugin overwrite to `update`. install never merges.
+        warn.write(`${key}: existing marked file not in lockfile — adopted as baseline (run \`update\` to merge plugin changes).\n`);
+        lockToPush = { kind: artifact.kind, id: artifact.id, version: artifact.version, checksum: onDiskChecksum };
+        break;
+
+      case ACTIONS.LOCAL_ONLY:
+      case ACTIONS.CONFLICT:
+        if (force) {
+          writeBody = true;
+          lockToPush = freshEntry;
+        } else {
+          warn.write(`${key}: local edits present — skipped (run \`update\` to merge, or \`install --force\` to overwrite).\n`);
+          lockToPush = lockEntry; // keep the id tracked
+        }
+        break;
+
+      case ACTIONS.COLLISION:
+        // An owner-authored file (no marker, not ours) occupies this id.
+        // Sacred even under --force; the owner deletes it to hand over the id.
+        warn.write(`${key}: owner-authored file occupies this id — left untouched, not added to lockfile.\n`);
+        break;
+
+      case ACTIONS.DISOWNED:
+        warn.write(`${key}: on-disk file is no longer recognisably plugin-generated — left untouched, dropped from lockfile.\n`);
+        break;
+    }
+
+    if (writeBody) {
+      const artifactDir = join(claudeDir, layout.subdir, artifact.id);
+      mkdirSync(artifactDir, { recursive: true });
+      writeFileSync(join(artifactDir, layout.bodyFilename), bodyToWrite, 'utf8');
+
+      for (const file of artifact.files ?? []) {
+        const destPath = join(artifactDir, file.relPath);
+        mkdirSync(dirname(destPath), { recursive: true });
+        if (file.encoding === 'utf8') {
+          const rendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+          writeFileSync(destPath, rendered, 'utf8');
+        } else {
+          writeFileSync(destPath, Buffer.from(file.contents, 'base64'));
+        }
       }
     }
 
-    lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
+    if (lockToPush) lockEntries.push(lockToPush);
   }
 
   // installHooks returns {} when there are no hooks to merge, so this single
@@ -94,14 +168,12 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, w
  *
  * Reads the prior lockfile to drive both; skips (2) silently if absent.
  */
-function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, warn) {
+function reconcileLegacyArtifacts(consumerCwd, claudeDir, filteredArtifacts, warn, lock) {
   const wantById = new Map();
   for (const artifact of filteredArtifacts) {
     wantById.set(`${artifact.kind}:${artifact.id}`, true);
   }
 
-  const lockPath = join(consumerCwd, LOCKFILE_NAME);
-  const lock = readLockfile(lockPath);
   const lockedIds = new Set(
     (lock?.artifacts ?? []).map((e) => `${e.kind}:${e.id}`)
   );

@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { threeWayMerge } from '../../lib/three-way-merge.js';
-import { ensureSkillFrontmatter } from '../../lib/skill-frontmatter.js';
+import { markBody } from '../../lib/skill-frontmatter.js';
 
 const KIND_LAYOUT = {
   skill: { subdir: 'skills', bodyFilename: 'SKILL.md' },
@@ -40,13 +40,10 @@ export async function updateClaude({
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, layout.bodyFilename);
 
-  // Defensive: callers in bin/update.js already prepend the synthesized
-  // skill frontmatter, but ensureSkillFrontmatter is a no-op when the
-  // block is already there. Keeping it here means a direct adapter call
-  // with a raw rendered body still produces a Claude-loadable file.
-  const upstream = artifact.kind === 'skill'
-    ? ensureSkillFrontmatter(rendered, artifact.manifest)
-    : rendered;
+  // Defensive: callers in bin/update.js already produce a marked body via
+  // markBody, which is idempotent — re-running here means a direct adapter
+  // call with a raw rendered body still yields a Claude-loadable, marked file.
+  const upstream = markBody({ body: rendered, kind: artifact.kind, manifest: artifact.manifest });
 
   if (!conflict) {
     writeFileSync(outPath, upstream, 'utf8');

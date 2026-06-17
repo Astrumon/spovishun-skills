@@ -1,9 +1,14 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../lib/config-loader.js';
 import { readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
 import { loadInstalledFiles } from '../lib/installed-files-loader.js';
+import { loadArtifacts } from '../lib/artifact-loader.js';
+import { readMarker } from '../lib/marker.js';
 import { notionRequest } from '../lib/notion-client.js';
+
+const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const CONFIG_NAME = 'spovishun-skills.config.yaml';
 const NOTION_TIMEOUT_MS = 3000;
@@ -92,11 +97,13 @@ export async function runDoctor({ cwd, env = process.env, out = process.stdout, 
       results.push({ name: 'settings-json-hooks', status: 'skip', detail: 'settings.json missing or invalid' });
     }
     results.push(checkInstalledArtifacts(ctx));
+    results.push(checkOwnershipAnomalies(ctx));
   } else {
     const reason = target ? `target=${target}` : 'lockfile missing or no target';
     results.push({ name: 'settings-json-present',  status: 'skip', detail: reason });
     results.push({ name: 'settings-json-hooks',    status: 'skip', detail: reason });
     results.push({ name: 'installed-artifacts',    status: 'skip', detail: reason });
+    results.push({ name: 'ownership-anomalies',    status: 'skip', detail: reason });
   }
 
   printResults(write, results);
@@ -412,6 +419,90 @@ function checkInstalledArtifacts(ctx) {
     name: 'installed-artifacts',
     status: 'pass',
     detail: `${lockArtifacts.length} artifact(s) on disk${modNote}`,
+  };
+}
+
+/**
+ * Read-only ownership report for skills/agents. Surfaces four anomaly classes
+ * without ever modifying anything:
+ *
+ *   COLLISION       — an owner-authored (unmarked, unlocked) file sits at a
+ *                     plugin id; install/update leave it untouched.
+ *   DISOWNED        — a locked id is now occupied by an unowned, drifted file.
+ *   orphaned marker — a marked file the lockfile no longer tracks and the
+ *                     installed package no longer ships.
+ *   renamed folder  — the marker id disagrees with the folder name (manual mv).
+ *
+ * COLLISION / DISOWNED are expected outcomes of the ownership model (ids the
+ * plugin deliberately does not manage), so they report as a non-failing note.
+ * Orphaned markers and renames signal a real inconsistency → fail.
+ */
+function checkOwnershipAnomalies(ctx) {
+  const installed = loadInstalledFiles(ctx.cwd, 'claude');
+  const lockMap = new Map(
+    (ctx.lockData?.artifacts ?? []).map((a) => [`${a.kind}:${a.id}`, a])
+  );
+
+  let packageIds = null;
+  try {
+    packageIds = new Set(loadArtifacts(pkgRoot).map((a) => `${a.kind}:${a.id}`));
+  } catch {
+    // Package introspection unavailable — fall back to lockfile-only orphan test.
+    packageIds = null;
+  }
+
+  const collisions = [];
+  const disowned = [];
+  const orphaned = [];
+  const renamed = [];
+
+  for (const [key, entry] of installed) {
+    const sep = key.indexOf(':');
+    const kind = key.slice(0, sep);
+    const id = key.slice(sep + 1);
+    if (kind !== 'skill' && kind !== 'agent') continue; // markers only live on these
+
+    const lockEntry = lockMap.get(key) ?? null;
+    const owned = entry.hasMarker || (lockEntry != null && entry.checksum === lockEntry.checksum);
+    const markerId = readMarker(entry.content);
+
+    if (markerId && markerId !== id) renamed.push(`${key} (marker=${markerId})`);
+
+    if (!lockEntry) {
+      if (entry.hasMarker) {
+        if (!packageIds || !packageIds.has(key)) orphaned.push(key);
+      } else {
+        collisions.push(key);
+      }
+    } else if (!owned) {
+      disowned.push(key);
+    }
+  }
+
+  const notes = [];
+  if (collisions.length) notes.push(`collision: ${collisions.join(', ')}`);
+  if (disowned.length) notes.push(`disowned: ${disowned.join(', ')}`);
+  if (orphaned.length) notes.push(`orphaned marker: ${orphaned.join(', ')}`);
+  if (renamed.length) notes.push(`renamed folder: ${renamed.join(', ')}`);
+
+  if (notes.length === 0) {
+    return { name: 'ownership-anomalies', status: 'pass', detail: 'none (no collisions, disowned, orphaned markers, or renames)' };
+  }
+
+  // Orphaned markers and renames are genuine inconsistencies; collisions and
+  // disowned files are intended ownership outcomes and only warrant a note.
+  if (orphaned.length > 0 || renamed.length > 0) {
+    return {
+      name: 'ownership-anomalies',
+      status: 'fail',
+      detail: notes.join('; '),
+      action: 'Remove orphaned marker files or align the marker id with the folder name; collisions/disowned are left untouched by design.',
+    };
+  }
+  return {
+    name: 'ownership-anomalies',
+    status: 'pass',
+    detail: `${notes.join('; ')} — ownership respected, files left untouched`,
   };
 }
 

@@ -14,7 +14,8 @@ single<CoroutineScope> {
 }
 ```
 
-- `SupervisorJob`: child failures do not cancel siblings or the parent.
+- The scope context MUST carry all three elements: Dispatcher + Job + `CoroutineExceptionHandler`. Drop any one and the scope is broken — most dangerously, a missing handler silently swallows uncaught exceptions.
+- `SupervisorJob`: child failures do not cancel siblings or the parent. It only isolates siblings — it does NOT catch, log, or surface the exception.
 - `CoroutineScope(Job())`: one child failure cancels all siblings — use only when that's intentional.
 - Never use `GlobalScope` — it has no structured lifetime and leaks.
 
@@ -54,14 +55,24 @@ In Spovishun, `Dispatchers.IO` usage is forbidden outside `DatabaseFactory.kt`.
 ## Exception handling
 
 ```kotlin
+// WRONG — no handler: an uncaught throw reaches the default
+// Thread.UncaughtExceptionHandler and disappears. No crash, no log, no alert.
+// SupervisorJob does NOT help here — it only isolates siblings.
+val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+// CORRECT — handler logs AND reports to observability, so the failure is visible.
 val handler = CoroutineExceptionHandler { _, throwable ->
-    logger.error("Unhandled coroutine error", throwable)
+    if (throwable is CancellationException) throw throwable  // never swallow cancellation
+    logger.error("Unhandled coroutine error", throwable)     // SLF4J
+    Sentry.captureException(throwable)                       // observability sink (Sentry/Crashlytics)
 }
 
 val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
 ```
 
-Set `CoroutineExceptionHandler` at scope level, not inside individual `launch {}` blocks.
+- Set `CoroutineExceptionHandler` at scope level, not inside individual `launch {}` blocks.
+- The handler body MUST log (SLF4J) AND report to an observability sink — a logging-only or empty handler still leaves failures invisible in production.
+- In a DI app, provide the handler as its own dependency with a typed qualifier and compose it into the scope — see the `dependency-injection-architecture` skill.
 
 ## Rules
 

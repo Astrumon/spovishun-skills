@@ -11,7 +11,8 @@ const REQUEST_TIMEOUT_MS = 30000;
 // Rejects only on transport problems: network error, timeout, or a non-JSON
 // body (proxy HTML page, truncated response). Rejecting instead of resolving
 // null keeps an API outage from masquerading as an empty board.
-function request(token, method, apiPath, body) {
+function request(token, method, apiPath, body, opts = {}) {
+  const { httpsImpl = https } = opts;
   return new Promise((resolve, reject) => {
     const bodyStr = body ? JSON.stringify(body) : null;
     const options = {
@@ -23,11 +24,14 @@ function request(token, method, apiPath, body) {
         'Authorization': `Bearer ${token}`,
         'Notion-Version': NOTION_VERSION,
         'Content-Type': 'application/json',
+        // Cloudflare in front of api.notion.com rejects requests with no
+        // User-Agent (returns an HTML 403, not a JSON error body). Always send one.
+        'User-Agent': 'spovishun-skills-notion-cli',
         ...(bodyStr && { 'Content-Length': Buffer.byteLength(bodyStr) })
       }
     };
 
-    const req = https.request(options, (res) => {
+    const req = httpsImpl.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -50,7 +54,7 @@ function request(token, method, apiPath, body) {
 
 module.exports = {
   request,
-  get:   (token, apiPath)        => request(token, 'GET',   apiPath, null),
-  post:  (token, apiPath, body)  => request(token, 'POST',  apiPath, body),
-  patch: (token, apiPath, body)  => request(token, 'PATCH', apiPath, body),
+  get:   (token, apiPath, opts)        => request(token, 'GET',   apiPath, null, opts),
+  post:  (token, apiPath, body, opts)  => request(token, 'POST',  apiPath, body, opts),
+  patch: (token, apiPath, body, opts)  => request(token, 'PATCH', apiPath, body, opts),
 };

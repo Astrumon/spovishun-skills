@@ -28,6 +28,7 @@ test('sends correct headers and method', async () => {
   assert.equal(mockFetch.lastCall.opts.method, 'GET');
   assert.equal(mockFetch.lastCall.opts.headers.Authorization, 'Bearer secret_abc');
   assert.equal(mockFetch.lastCall.opts.headers['Notion-Version'], '2022-06-28');
+  assert.equal(mockFetch.lastCall.opts.headers['User-Agent'], 'spovishun-skills');
   assert.equal(mockFetch.lastCall.opts.body, undefined);
 });
 

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Send a `User-Agent` header on Notion requests to avoid Cloudflare 403:**
+  Cloudflare in front of `api.notion.com` rejects requests with no `User-Agent`
+  by returning an HTML `403` page (not a JSON error body), which surfaced as
+  `Notion API returned non-JSON response`. Both HTTP layers now always send an
+  explicit `User-Agent` — `scripts/notion/lib/notion-http.js` (raw `https`, the
+  Notion CLI helpers) and `lib/notion-client.js` (the `fetch`-based client used by
+  `init`/bootstrap and `doctor`).
+
 ## [1.9.0] — 2026-06-17
 
 ### Added

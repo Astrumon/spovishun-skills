@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] — 2026-06-18
+
+### Added
+
+- **Scope-level `CoroutineExceptionHandler` pattern in the coroutine skills:**
+  a background `CoroutineScope(SupervisorJob() + dispatcher)` without a
+  `CoroutineExceptionHandler` silently swallows uncaught exceptions — no crash,
+  no log, no alert — so features stop working invisibly. Two skills now emit
+  guidance against this. `kotlin-specialist` mandates that every `CoroutineScope`
+  context carries three elements (Dispatcher + Job + `CoroutineExceptionHandler`)
+  and clarifies that `SupervisorJob` only isolates siblings — it does not catch,
+  log, or surface the exception; its `references/coroutines.md` gains a WRONG/CORRECT
+  pair where the handler logs (SLF4J) **and** reports to observability.
+  `dependency-injection-architecture` adds a `Coroutine Scope Provider` section
+  (`references/koin-patterns.md`) showing a Koin Annotations example that provides
+  the handler as its own dependency keyed by a typed qualifier (annotation class,
+  not string `@Named`) and composes `SupervisorJob() + dispatcher + handler` into
+  the scope. (#25)
+
 ## [1.9.1] — 2026-06-18
 
 ### Fixed

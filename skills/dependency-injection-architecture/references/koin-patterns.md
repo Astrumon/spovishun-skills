@@ -36,6 +36,49 @@ val profile = System.getenv("PROFILE") ?: "dev"
 startKoin { modules(if (profile == "prod") prodModule else devModule) }
 ```
 
+## Coroutine Scope Provider
+
+A background `CoroutineScope(SupervisorJob() + dispatcher)` without a `CoroutineExceptionHandler`
+silently swallows uncaught exceptions — no crash, no log, no alert. Provide the handler as its own
+DI dependency and compose it into the scope. Key it with a **typed qualifier** (annotation class),
+not a string `@Named`.
+
+This example uses **Koin Annotations** (KSP):
+
+```kotlin
+import org.koin.core.annotation.Module
+import org.koin.core.annotation.Qualifier
+import org.koin.core.annotation.Single
+
+// Typed qualifier — refactor-safe, no string typos like @Named("...") risks.
+@Qualifier
+annotation class GlobalCoroutineExceptionHandler
+
+@Module
+class CoroutineModule {
+
+    // Handler logs (SLF4J) AND reports to observability, so the failure is visible.
+    @Single
+    @GlobalCoroutineExceptionHandler
+    fun provideExceptionHandler(observability: ObservabilitySink): CoroutineExceptionHandler =
+        CoroutineExceptionHandler { _, throwable ->
+            if (throwable is CancellationException) throw throwable
+            logger.error("Unhandled coroutine error", throwable)  // SLF4J
+            observability.report(throwable)                       // Sentry / Crashlytics
+        }
+
+    @Single
+    fun provideAppScope(
+        dispatcher: CoroutineDispatcher,
+        @GlobalCoroutineExceptionHandler handler: CoroutineExceptionHandler,
+    ): CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher + handler)
+}
+```
+
+- Prefer a typed qualifier (annotation class) over string `@Named` — it is checked at compile time and survives renames.
+- The scope's context MUST carry all three elements: `SupervisorJob()` + dispatcher + handler.
+- Inject `CoroutineScope` via constructor into feature classes — never instantiate it inside them.
+
 ## Best Practices
 
 - Prefer constructor injection — dependencies are explicit and testable.

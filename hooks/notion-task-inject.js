@@ -46,7 +46,9 @@ const https = require('https');
 function loadEnv() {
   const envFile = path.join(process.cwd(), '.env');
   if (fs.existsSync(envFile)) {
-    for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+    // split on /\r?\n/ so CRLF .env files (Windows) parse — a trailing \r would
+    // otherwise break the `$` anchor below (JS `.` does not match \r).
+    for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
       if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
     }
@@ -127,7 +129,17 @@ function slug(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-const NOTION_TOKEN = process.env.NOTION_SKILLS_TOKEN || process.env.NOTION_TOKEN;
+// Token precedence is NOTION_TOKEN first, then NOTION_SKILLS_TOKEN — matching the
+// header doc, scripts/notion/* error messages, and scripts/notion/lib/load-token.js.
+// `source` names the env var that supplied the token so auth errors can point at a
+// stale value (a bogus NOTION_SKILLS_TOKEN no longer silently shadows a working .env
+// NOTION_TOKEN, and on 401/403 notionRequest reports which var was used).
+function resolveToken() {
+  if (process.env.NOTION_TOKEN) return { token: process.env.NOTION_TOKEN, source: 'NOTION_TOKEN' };
+  if (process.env.NOTION_SKILLS_TOKEN) return { token: process.env.NOTION_SKILLS_TOKEN, source: 'NOTION_SKILLS_TOKEN' };
+  return { token: null, source: null };
+}
+const { token: NOTION_TOKEN, source: TOKEN_SOURCE } = resolveToken();
 // NOTION_BOARD_COLLECTION_ID is the deprecated 1.2.0/1.2.1 alias — it was always
 // a misnomer (the hook queries /v1/databases/{id}/query, not a data source).
 // Keep accepting it so existing consumer .env files keep working.
@@ -195,11 +207,24 @@ function notionRequest(token, method, urlPath, body) {
       let raw = '';
       res.on('data', c => { raw += c; });
       res.on('end', () => {
+        let parsed;
         try {
-          resolve(JSON.parse(raw));
+          parsed = JSON.parse(raw);
         } catch {
           reject(new Error(`Notion API returned non-JSON response (HTTP ${res.statusCode}) for ${method} ${urlPath}`));
+          return;
         }
+        // Auth failures must surface loudly: otherwise the structured error body
+        // resolves with no `results`, masquerading as an empty board, and the hook
+        // silently skips. Other errors (e.g. 404) still resolve as JSON so callers
+        // that inspect `object === 'error'` keep working.
+        if (parsed && parsed.object === 'error' && (res.statusCode === 401 || res.statusCode === 403)) {
+          reject(new Error(
+            `Notion API auth failed (HTTP ${res.statusCode} ${parsed.code}): token from ${TOKEN_SOURCE} is invalid or lacks access — unset a stale ${TOKEN_SOURCE} or fix its value.`
+          ));
+          return;
+        }
+        resolve(parsed);
       });
     });
     req.on('timeout', () => {
@@ -828,6 +853,9 @@ function outputPrompt(systemPrompt) {
 // so tests must set env vars BEFORE requiring this module.
 module.exports = {
   PRIORITY_TIERS,
+  resolveToken,
+  NOTION_TOKEN,
+  TOKEN_SOURCE,
   readConfigValue,
   slug,
   withStageFilter,

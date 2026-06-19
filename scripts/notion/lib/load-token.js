@@ -4,12 +4,15 @@ const fs = require('fs');
 const path = require('path');
 
 function loadToken() {
-  if (process.env.NOTION_SKILLS_TOKEN) return process.env.NOTION_SKILLS_TOKEN;
+  // NOTION_TOKEN first, then NOTION_SKILLS_TOKEN — consistent across env and .env
+  // paths and with hooks/notion-task-inject.js.
   if (process.env.NOTION_TOKEN) return process.env.NOTION_TOKEN;
+  if (process.env.NOTION_SKILLS_TOKEN) return process.env.NOTION_SKILLS_TOKEN;
 
   const envPath = path.join(process.cwd(), '.env');
   try {
-    const content = fs.readFileSync(envPath, 'utf8');
+    // Normalize CRLF → LF so the /m regexes match on Windows .env files.
+    const content = fs.readFileSync(envPath, 'utf8').replace(/\r\n/g, '\n');
     const tokenMatch = content.match(/^NOTION_TOKEN=(.+)$/m);
     if (tokenMatch) return tokenMatch[1].trim();
     const skillsMatch = content.match(/^NOTION_SKILLS_TOKEN=(.+)$/m);

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] — 2026-06-19
+
+### Added
+
+- **`finish-task` skill + hook flow (#130):** a "finish task" trigger
+  (`finish task` / `complete task` / `завершити задачу` / `закінчити задачу`)
+  symmetric to "start new task". On an active task branch with cached
+  `.dev-context/`, the `notion-task-inject` hook injects a REQUIRED-NEXT-ACTIONS
+  directive that invokes the new universal `finish-task` skill. The skill reads
+  the build/test/lint commands from the consumer's `CLAUDE.md` `## Commands`,
+  runs a **blocking** gate (tests → build → lint), a **non-blocking**
+  static-analysis pass, then the existing `code-reviewer` skill on
+  `git diff <develop>...HEAD` as an **advisory** report — never auto-merging and
+  never setting Notion `Done` automatically.
+
+### Fixed
+
+- **Branch base no longer stale (#130):** `gitSetupBranch` and
+  `gitCreateBranchOnly` in the hook now create a new branch from the
+  freshly-fetched `origin/<base>` instead of a possibly-stale local ref (a bare
+  `git fetch` updates only the remote-tracking ref). Offline → falls back to the
+  local base with a stderr warning.
+- **CRLF `.env` + token precedence (#129):** `loadEnv()` in the hook and the
+  `.env` file-read path in `scripts/notion/lib/load-token.js` now parse CRLF
+  files (Windows) instead of silently setting no variables. Token precedence is
+  unified to `NOTION_TOKEN` first, then `NOTION_SKILLS_TOKEN`, across both, so a
+  stale global `NOTION_SKILLS_TOKEN` no longer silently shadows a working `.env`
+  `NOTION_TOKEN`. `notionRequest` now surfaces an explicit error on HTTP 401/403
+  (naming the token source) instead of resolving an empty result that looked
+  like an empty board.
+
 ## [1.10.0] — 2026-06-18
 
 ### Added

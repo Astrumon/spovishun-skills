@@ -46,7 +46,9 @@ const https = require('https');
 function loadEnv() {
   const envFile = path.join(process.cwd(), '.env');
   if (fs.existsSync(envFile)) {
-    for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+    // split on /\r?\n/ so CRLF .env files (Windows) parse — a trailing \r would
+    // otherwise break the `$` anchor below (JS `.` does not match \r).
+    for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
       if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
     }
@@ -127,7 +129,17 @@ function slug(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-const NOTION_TOKEN = process.env.NOTION_SKILLS_TOKEN || process.env.NOTION_TOKEN;
+// Token precedence is NOTION_TOKEN first, then NOTION_SKILLS_TOKEN — matching the
+// header doc, scripts/notion/* error messages, and scripts/notion/lib/load-token.js.
+// `source` names the env var that supplied the token so auth errors can point at a
+// stale value (a bogus NOTION_SKILLS_TOKEN no longer silently shadows a working .env
+// NOTION_TOKEN, and on 401/403 notionRequest reports which var was used).
+function resolveToken() {
+  if (process.env.NOTION_TOKEN) return { token: process.env.NOTION_TOKEN, source: 'NOTION_TOKEN' };
+  if (process.env.NOTION_SKILLS_TOKEN) return { token: process.env.NOTION_SKILLS_TOKEN, source: 'NOTION_SKILLS_TOKEN' };
+  return { token: null, source: null };
+}
+const { token: NOTION_TOKEN, source: TOKEN_SOURCE } = resolveToken();
 // NOTION_BOARD_COLLECTION_ID is the deprecated 1.2.0/1.2.1 alias — it was always
 // a misnomer (the hook queries /v1/databases/{id}/query, not a data source).
 // Keep accepting it so existing consumer .env files keep working.
@@ -165,6 +177,7 @@ const PRIORITY_TIERS = ['High', 'Medium', 'Low'];
 
 const TRIGGER_WORDS = ['implement', 'refactor', 'реалізуй', 'розроби', 'задача', 'таск', 'фіча'];
 const START_TASK_TRIGGERS = ['start new task', 'почати нову задачу', 'беру нову задачу'];
+const FINISH_TASK_TRIGGERS = ['finish task', 'complete task', 'завершити задачу', 'закінчити задачу'];
 const REFRESH_TRIGGERS = ['reread task', 'update task context', 'оновити контекст задачі', 'перечитати задачу'];
 
 // ─── Notion HTTP ───────────────────────────────────────────────────────────────
@@ -195,11 +208,24 @@ function notionRequest(token, method, urlPath, body) {
       let raw = '';
       res.on('data', c => { raw += c; });
       res.on('end', () => {
+        let parsed;
         try {
-          resolve(JSON.parse(raw));
+          parsed = JSON.parse(raw);
         } catch {
           reject(new Error(`Notion API returned non-JSON response (HTTP ${res.statusCode}) for ${method} ${urlPath}`));
+          return;
         }
+        // Auth failures must surface loudly: otherwise the structured error body
+        // resolves with no `results`, masquerading as an empty board, and the hook
+        // silently skips. Other errors (e.g. 404) still resolve as JSON so callers
+        // that inspect `object === 'error'` keep working.
+        if (parsed && parsed.object === 'error' && (res.statusCode === 401 || res.statusCode === 403)) {
+          reject(new Error(
+            `Notion API auth failed (HTTP ${res.statusCode} ${parsed.code}): token from ${TOKEN_SOURCE} is invalid or lacks access — unset a stale ${TOKEN_SOURCE} or fix its value.`
+          ));
+          return;
+        }
+        resolve(parsed);
       });
     });
     req.on('timeout', () => {
@@ -305,11 +331,22 @@ function gitSetupBranch(branch) {
     execSync(`git checkout "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Switched to existing branch: ${branch}` };
   } catch {
+    // New branch: base it on the freshly-fetched remote tip, not a possibly-stale
+    // local ref. A bare `git fetch` updates origin/<base> only — never the local
+    // <base> — so we branch from origin/<base> directly. Offline → fall back to
+    // the local base with a warning rather than failing the apply.
+    let fetched = true;
     try {
-      execSync(`git checkout "${base}"`, { stdio: 'pipe' });
-      execSync(`git pull origin "${base}"`, { stdio: 'pipe' });
-      execSync(`git checkout -b "${branch}"`, { stdio: 'pipe' });
-      return { ok: true, message: `Created and switched to: ${branch}` };
+      execSync(`git fetch origin "${base}" --quiet`, { stdio: 'pipe' });
+    } catch { fetched = false; }
+    try {
+      const start = fetched ? `origin/${base}` : base;
+      execSync(`git checkout -b "${branch}" "${start}"`, { stdio: 'pipe' });
+      if (!fetched) {
+        process.stderr.write(`[notion-task-inject] git fetch failed — branched ${branch} from local ${base} (may be stale)\n`);
+        return { ok: true, message: `Created and switched to: ${branch} (offline: local base, may be stale)` };
+      }
+      return { ok: true, message: `Created and switched to: ${branch} (from origin/${base})` };
     } catch (err) {
       return { ok: false, message: err.message };
     }
@@ -328,12 +365,21 @@ function gitCreateBranchOnly(branch) {
     execSync(`git rev-parse --verify "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Branch already exists: ${branch}` };
   } catch {
+    // `git fetch` updates origin/<base>, NOT local <base>, so branch off the
+    // remote-tracking ref to avoid cutting from a stale local develop. Offline →
+    // fall back to local base with a warning.
+    let fetched = true;
     try {
       execSync(`git fetch origin "${base}" --quiet`, { stdio: 'pipe' });
-    } catch { /* no remote */ }
+    } catch { fetched = false; }
     try {
-      execSync(`git branch "${branch}" "${base}"`, { stdio: 'pipe' });
-      return { ok: true, message: `Created branch (no checkout): ${branch}` };
+      const start = fetched ? `origin/${base}` : base;
+      execSync(`git branch "${branch}" "${start}"`, { stdio: 'pipe' });
+      if (!fetched) {
+        process.stderr.write(`[notion-task-inject] git fetch failed — branched ${branch} from local ${base} (may be stale)\n`);
+        return { ok: true, message: `Created branch (no checkout): ${branch} (offline: local base, may be stale)` };
+      }
+      return { ok: true, message: `Created branch (no checkout): ${branch} (from origin/${base})` };
     } catch (err) {
       return { ok: false, message: err.message };
     }
@@ -678,11 +724,31 @@ async function main() {
 
   const prompt = (data.prompt || '').toLowerCase();
   const isStartTask = START_TASK_TRIGGERS.some(t => prompt.includes(t));
+  const isFinishTask = FINISH_TASK_TRIGGERS.some(t => prompt.includes(t));
   const isRefresh = REFRESH_TRIGGERS.some(t => prompt.includes(t));
   const isForce = prompt.includes('--force');
-  const hasTrigger = isStartTask || isRefresh || TRIGGER_WORDS.some(w => prompt.includes(w));
+  const hasTrigger = isStartTask || isFinishTask || isRefresh || TRIGGER_WORDS.some(w => prompt.includes(w));
 
   if (!hasTrigger) process.exit(0);
+
+  // Finish-task is local + Notion-independent: it gates on the cached .dev-context
+  // for the active branch, so handle it before the NOTION_DATABASE_ID guard below.
+  if (isFinishTask) {
+    const branch = getCurrentBranch();
+    if (!branch || branch === DEVELOP_BRANCH || branch === 'main') {
+      process.stderr.write('[notion-task-inject] finish task: not on an active task branch, skipping\n');
+      process.exit(0);
+    }
+    const ctxDir = getContextDir(branch);
+    const hasContext = fs.existsSync(path.join(ctxDir, 'task.json'))
+      || fs.existsSync(path.join(ctxDir, 'context.md'));
+    if (!hasContext) {
+      process.stderr.write('[notion-task-inject] finish task: no .dev-context for this branch, skipping\n');
+      process.exit(0);
+    }
+    outputPrompt(`## Finish Task\nActive task branch: \`${branch}\`\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Immediately invoke the \`finish-task\` skill to run the completion gate (tests → build → lint, blocking) and the advisory \`code-reviewer\` pass on this branch's diff.\n2. Do NOT push, open a PR, or set Notion Status=Done automatically — only offer those after the gate is green and the user has acknowledged any Critical review findings.`);
+    process.exit(0);
+  }
 
   if (!DATABASE_ID) {
     process.stderr.write('[notion-task-inject] NOTION_DATABASE_ID not set, skipping\n');
@@ -828,6 +894,10 @@ function outputPrompt(systemPrompt) {
 // so tests must set env vars BEFORE requiring this module.
 module.exports = {
   PRIORITY_TIERS,
+  FINISH_TASK_TRIGGERS,
+  resolveToken,
+  NOTION_TOKEN,
+  TOKEN_SOURCE,
   readConfigValue,
   slug,
   withStageFilter,

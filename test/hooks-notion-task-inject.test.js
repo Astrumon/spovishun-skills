@@ -119,6 +119,58 @@ test('blockToMd renders the common Notion block types', () => {
   assert.equal(hook.blockToMd(todo), '- [x] done it');
 });
 
+test('FINISH_TASK_TRIGGERS stays the documented finish-task phrase list', () => {
+  // Guards the trigger list wired into main()'s hasTrigger — adding/removing a
+  // phrase here without intent will fail this test (mirrors PRIORITY_TIERS guard).
+  const { hook } = loadHook();
+  assert.deepEqual(hook.FINISH_TASK_TRIGGERS, [
+    'finish task', 'complete task', 'завершити задачу', 'закінчити задачу',
+  ]);
+});
+
+test('loadEnv parses a CRLF .env (Windows) — token/db land in process.env', () => {
+  // Regression for spovishun-129: split('\n') + `$` anchor failed on trailing \r,
+  // so no vars were set and the picker/injection silently skipped.
+  const cwd = mkdtempSync(join(tmpdir(), 'hook-crlf-'));
+  writeFileSync(
+    join(cwd, '.env'),
+    'NOTION_TOKEN=secret-crlf\r\nNOTION_DATABASE_ID=db-crlf\r\n',
+    'utf8'
+  );
+  const oldCwd = process.cwd();
+  const keys = ['NOTION_TOKEN', 'NOTION_SKILLS_TOKEN', 'NOTION_DATABASE_ID'];
+  const saved = {};
+  for (const k of keys) { saved[k] = process.env[k]; delete process.env[k]; }
+  process.chdir(cwd);
+  delete require.cache[require.resolve(HOOK_PATH)];
+  try {
+    const hook = require(HOOK_PATH);
+    assert.equal(process.env.NOTION_TOKEN, 'secret-crlf');
+    assert.equal(process.env.NOTION_DATABASE_ID, 'db-crlf');
+    assert.equal(hook.NOTION_TOKEN, 'secret-crlf');
+    assert.equal(hook.TOKEN_SOURCE, 'NOTION_TOKEN');
+  } finally {
+    process.chdir(oldCwd);
+    delete require.cache[require.resolve(HOOK_PATH)];
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+});
+
+test('token precedence: NOTION_TOKEN wins over NOTION_SKILLS_TOKEN', () => {
+  const { hook } = loadHook({ NOTION_TOKEN: 'primary', NOTION_SKILLS_TOKEN: 'skills' });
+  assert.equal(hook.NOTION_TOKEN, 'primary');
+  assert.equal(hook.TOKEN_SOURCE, 'NOTION_TOKEN');
+});
+
+test('token precedence: NOTION_SKILLS_TOKEN used only when NOTION_TOKEN unset', () => {
+  const { hook } = loadHook({ NOTION_TOKEN: undefined, NOTION_SKILLS_TOKEN: 'skills' });
+  assert.equal(hook.NOTION_TOKEN, 'skills');
+  assert.equal(hook.TOKEN_SOURCE, 'NOTION_SKILLS_TOKEN');
+});
+
 test('readConfigValue resolves 2-level dotted keys (parity with scripts lib)', () => {
   const config = 'notion:\n  database_id: "db-1"\n  picker:\n    stage_filter: "Sprint"\ngit:\n  dev_branch: "develop"\n';
   const { hook } = loadHook({}, config);

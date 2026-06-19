@@ -177,6 +177,7 @@ const PRIORITY_TIERS = ['High', 'Medium', 'Low'];
 
 const TRIGGER_WORDS = ['implement', 'refactor', 'реалізуй', 'розроби', 'задача', 'таск', 'фіча'];
 const START_TASK_TRIGGERS = ['start new task', 'почати нову задачу', 'беру нову задачу'];
+const FINISH_TASK_TRIGGERS = ['finish task', 'complete task', 'завершити задачу', 'закінчити задачу'];
 const REFRESH_TRIGGERS = ['reread task', 'update task context', 'оновити контекст задачі', 'перечитати задачу'];
 
 // ─── Notion HTTP ───────────────────────────────────────────────────────────────
@@ -330,11 +331,22 @@ function gitSetupBranch(branch) {
     execSync(`git checkout "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Switched to existing branch: ${branch}` };
   } catch {
+    // New branch: base it on the freshly-fetched remote tip, not a possibly-stale
+    // local ref. A bare `git fetch` updates origin/<base> only — never the local
+    // <base> — so we branch from origin/<base> directly. Offline → fall back to
+    // the local base with a warning rather than failing the apply.
+    let fetched = true;
     try {
-      execSync(`git checkout "${base}"`, { stdio: 'pipe' });
-      execSync(`git pull origin "${base}"`, { stdio: 'pipe' });
-      execSync(`git checkout -b "${branch}"`, { stdio: 'pipe' });
-      return { ok: true, message: `Created and switched to: ${branch}` };
+      execSync(`git fetch origin "${base}" --quiet`, { stdio: 'pipe' });
+    } catch { fetched = false; }
+    try {
+      const start = fetched ? `origin/${base}` : base;
+      execSync(`git checkout -b "${branch}" "${start}"`, { stdio: 'pipe' });
+      if (!fetched) {
+        process.stderr.write(`[notion-task-inject] git fetch failed — branched ${branch} from local ${base} (may be stale)\n`);
+        return { ok: true, message: `Created and switched to: ${branch} (offline: local base, may be stale)` };
+      }
+      return { ok: true, message: `Created and switched to: ${branch} (from origin/${base})` };
     } catch (err) {
       return { ok: false, message: err.message };
     }
@@ -353,12 +365,21 @@ function gitCreateBranchOnly(branch) {
     execSync(`git rev-parse --verify "${branch}"`, { stdio: 'pipe' });
     return { ok: true, message: `Branch already exists: ${branch}` };
   } catch {
+    // `git fetch` updates origin/<base>, NOT local <base>, so branch off the
+    // remote-tracking ref to avoid cutting from a stale local develop. Offline →
+    // fall back to local base with a warning.
+    let fetched = true;
     try {
       execSync(`git fetch origin "${base}" --quiet`, { stdio: 'pipe' });
-    } catch { /* no remote */ }
+    } catch { fetched = false; }
     try {
-      execSync(`git branch "${branch}" "${base}"`, { stdio: 'pipe' });
-      return { ok: true, message: `Created branch (no checkout): ${branch}` };
+      const start = fetched ? `origin/${base}` : base;
+      execSync(`git branch "${branch}" "${start}"`, { stdio: 'pipe' });
+      if (!fetched) {
+        process.stderr.write(`[notion-task-inject] git fetch failed — branched ${branch} from local ${base} (may be stale)\n`);
+        return { ok: true, message: `Created branch (no checkout): ${branch} (offline: local base, may be stale)` };
+      }
+      return { ok: true, message: `Created branch (no checkout): ${branch} (from origin/${base})` };
     } catch (err) {
       return { ok: false, message: err.message };
     }
@@ -703,11 +724,31 @@ async function main() {
 
   const prompt = (data.prompt || '').toLowerCase();
   const isStartTask = START_TASK_TRIGGERS.some(t => prompt.includes(t));
+  const isFinishTask = FINISH_TASK_TRIGGERS.some(t => prompt.includes(t));
   const isRefresh = REFRESH_TRIGGERS.some(t => prompt.includes(t));
   const isForce = prompt.includes('--force');
-  const hasTrigger = isStartTask || isRefresh || TRIGGER_WORDS.some(w => prompt.includes(w));
+  const hasTrigger = isStartTask || isFinishTask || isRefresh || TRIGGER_WORDS.some(w => prompt.includes(w));
 
   if (!hasTrigger) process.exit(0);
+
+  // Finish-task is local + Notion-independent: it gates on the cached .dev-context
+  // for the active branch, so handle it before the NOTION_DATABASE_ID guard below.
+  if (isFinishTask) {
+    const branch = getCurrentBranch();
+    if (!branch || branch === DEVELOP_BRANCH || branch === 'main') {
+      process.stderr.write('[notion-task-inject] finish task: not on an active task branch, skipping\n');
+      process.exit(0);
+    }
+    const ctxDir = getContextDir(branch);
+    const hasContext = fs.existsSync(path.join(ctxDir, 'task.json'))
+      || fs.existsSync(path.join(ctxDir, 'context.md'));
+    if (!hasContext) {
+      process.stderr.write('[notion-task-inject] finish task: no .dev-context for this branch, skipping\n');
+      process.exit(0);
+    }
+    outputPrompt(`## Finish Task\nActive task branch: \`${branch}\`\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Immediately invoke the \`finish-task\` skill to run the completion gate (tests → build → lint, blocking) and the advisory \`code-reviewer\` pass on this branch's diff.\n2. Do NOT push, open a PR, or set Notion Status=Done automatically — only offer those after the gate is green and the user has acknowledged any Critical review findings.`);
+    process.exit(0);
+  }
 
   if (!DATABASE_ID) {
     process.stderr.write('[notion-task-inject] NOTION_DATABASE_ID not set, skipping\n');
@@ -853,6 +894,7 @@ function outputPrompt(systemPrompt) {
 // so tests must set env vars BEFORE requiring this module.
 module.exports = {
   PRIORITY_TIERS,
+  FINISH_TASK_TRIGGERS,
   resolveToken,
   NOTION_TOKEN,
   TOKEN_SOURCE,

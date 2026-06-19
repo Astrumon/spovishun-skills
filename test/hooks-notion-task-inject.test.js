@@ -119,6 +119,15 @@ test('blockToMd renders the common Notion block types', () => {
   assert.equal(hook.blockToMd(todo), '- [x] done it');
 });
 
+test('FINISH_TASK_TRIGGERS stays the documented finish-task phrase list', () => {
+  // Guards the trigger list wired into main()'s hasTrigger — adding/removing a
+  // phrase here without intent will fail this test (mirrors PRIORITY_TIERS guard).
+  const { hook } = loadHook();
+  assert.deepEqual(hook.FINISH_TASK_TRIGGERS, [
+    'finish task', 'complete task', 'завершити задачу', 'закінчити задачу',
+  ]);
+});
+
 test('loadEnv parses a CRLF .env (Windows) — token/db land in process.env', () => {
   // Regression for spovishun-129: split('\n') + `$` anchor failed on trailing \r,
   // so no vars were set and the picker/injection silently skipped.

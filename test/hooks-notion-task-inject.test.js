@@ -171,6 +171,27 @@ test('token precedence: NOTION_SKILLS_TOKEN used only when NOTION_TOKEN unset', 
   assert.equal(hook.TOKEN_SOURCE, 'NOTION_SKILLS_TOKEN');
 });
 
+test('HOOK_DIR emits a ${CLAUDE_PROJECT_DIR:-<abs>} fallback the agent shell can resolve', () => {
+  // Regression for spovishun-132: the picker printed
+  // `node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" ...`, but the
+  // harness sets $CLAUDE_PROJECT_DIR only for hook subprocesses, not the agent's
+  // Bash shell — where it expands empty and Git Bash maps the leading "/" to the
+  // Git install root → MODULE_NOT_FOUND. HOOK_DIR must carry a concrete fallback.
+  const { hook, cwd } = loadHook({ CLAUDE_PROJECT_DIR: undefined });
+  const fwdCwd = cwd.replace(/\\/g, '/');
+  assert.equal(hook.HOOK_DIR, '${CLAUDE_PROJECT_DIR:-' + fwdCwd + '}/.claude/hooks');
+  // The bare unresolvable form must not survive.
+  assert.equal(hook.HOOK_DIR.includes('$CLAUDE_PROJECT_DIR/'), false);
+  // Forward slashes only — a backslash would break in Git Bash on Windows.
+  assert.equal(/\\/.test(hook.HOOK_DIR), false);
+});
+
+test('HOOK_DIR honors $CLAUDE_PROJECT_DIR when the harness did set it (hook subprocess)', () => {
+  const { hook } = loadHook({ CLAUDE_PROJECT_DIR: 'C:\\proj\\spovishun' });
+  // The env value is normalized to forward slashes and used as the fallback.
+  assert.equal(hook.HOOK_DIR, '${CLAUDE_PROJECT_DIR:-C:/proj/spovishun}/.claude/hooks');
+});
+
 test('readConfigValue resolves 2-level dotted keys (parity with scripts lib)', () => {
   const config = 'notion:\n  database_id: "db-1"\n  picker:\n    stage_filter: "Sprint"\ngit:\n  dev_branch: "develop"\n';
   const { hook } = loadHook({}, config);

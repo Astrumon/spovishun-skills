@@ -129,6 +129,18 @@ function slug(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+// $CLAUDE_PROJECT_DIR is injected by the harness ONLY into hook subprocesses (like
+// this one) — never into the agent's Bash tool shell, where it expands empty. Command
+// templates we print for the AGENT to run must therefore carry a concrete fallback.
+// Read the resolved root from our own env (set here) and emit it via bash ${VAR:-default}
+// so the line honors the var if ever set and falls back to the absolute path otherwise.
+// Forward slashes keep Git Bash on Windows from mapping a bare leading "/" to the Git
+// install root.
+const HOOK_DIR =
+  '${CLAUDE_PROJECT_DIR:-' +
+  (process.env.CLAUDE_PROJECT_DIR || process.cwd()).replace(/\\/g, '/') +
+  '}/.claude/hooks';
+
 // Token precedence is NOTION_TOKEN first, then NOTION_SKILLS_TOKEN — matching the
 // header doc, scripts/notion/* error messages, and scripts/notion/lib/load-token.js.
 // `source` names the env var that supplied the token so auth errors can point at a
@@ -595,7 +607,7 @@ async function runPicker(token, currentBranch, isForce) {
 
   if (options.length === 1) {
     const o = options[0];
-    outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Only one task available — apply automatically without asking the user.\n2. Run Bash: \`node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" --apply-pick ${o.pageId}${applyFlagsSuffix}\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n3. Briefly confirm: task name and branch.\n4. Immediately invoke the \`notion-task-to-code\` skill with pageId \`${o.pageId}\` to load task context and enter Plan Mode.`);
+    outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Only one task available — apply automatically without asking the user.\n2. Run Bash: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick ${o.pageId}${applyFlagsSuffix}\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n3. Briefly confirm: task name and branch.\n4. Immediately invoke the \`notion-task-to-code\` skill with pageId \`${o.pageId}\` to load task context and enter Plan Mode.`);
     return;
   }
 
@@ -606,7 +618,7 @@ async function runPicker(token, currentBranch, isForce) {
     return `     {label: "${label}", value: "${o.pageId}"}`;
   }).join(',\n');
 
-  outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Call \`AskUserQuestion\`:\n   \`\`\`\n   question: "Select tasks to start working on (multiple selection allowed):"\n   multiSelect: true\n   options: [\n${aqOptions},\n     {label: "Cancel", value: "cancel"}\n   ]\n   \`\`\`\n2. If user picked **"Cancel"** → inform user, stop.\n3. For **each** selected pageId — run Bash sequentially:\n   - 1st task:  \`node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix}\`\n   - 2nd+ task: \`node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix} --no-switch\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n4. After all applies — if ≥2 tasks selected → show the DISCLAIMER line from stdout.\n5. Briefly confirm: task name(s), branch(es), total active parallel tasks count.\n6. Immediately invoke the \`notion-task-to-code\` skill with the first selected pageId to load task context and enter Plan Mode.`);
+  outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Call \`AskUserQuestion\`:\n   \`\`\`\n   question: "Select tasks to start working on (multiple selection allowed):"\n   multiSelect: true\n   options: [\n${aqOptions},\n     {label: "Cancel", value: "cancel"}\n   ]\n   \`\`\`\n2. If user picked **"Cancel"** → inform user, stop.\n3. For **each** selected pageId — run Bash sequentially:\n   - 1st task:  \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix}\`\n   - 2nd+ task: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix} --no-switch\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n4. After all applies — if ≥2 tasks selected → show the DISCLAIMER line from stdout.\n5. Briefly confirm: task name(s), branch(es), total active parallel tasks count.\n6. Immediately invoke the \`notion-task-to-code\` skill with the first selected pageId to load task context and enter Plan Mode.`);
 }
 
 // ─── Apply Pick ────────────────────────────────────────────────────────────────
@@ -900,6 +912,7 @@ module.exports = {
   TOKEN_SOURCE,
   readConfigValue,
   slug,
+  HOOK_DIR,
   withStageFilter,
   stageFilterClause,
   extractTaskNumber,

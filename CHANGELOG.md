@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] — 2026-06-20
+
+### Fixed
+
+- **Emitted command templates no longer assume `$CLAUDE_PROJECT_DIR` in the agent
+  shell (#132):** the Task Picker's REQUIRED-NEXT-ACTIONS printed
+  `node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" --apply-pick ...`,
+  but the harness sets `$CLAUDE_PROJECT_DIR` only for hook subprocesses — not the
+  agent's Bash tool shell. There it expanded empty, collapsing the path to
+  `/.claude/...`, which Git Bash on Windows remaps to the Git install root
+  (`C:/Program Files/Git/.claude/...`), so Node exited with `MODULE_NOT_FOUND` and
+  `--apply-pick` failed. Emitted lines now use
+  `${CLAUDE_PROJECT_DIR:-<resolved-abs-path>}` (forward slashes), resolved at emit
+  time from the hook's own env — it still honors the variable if ever set, and
+  falls back to the concrete project path otherwise. The harness-run commands in
+  `hooks.json` are unchanged (the variable is valid there). Follows #129.
+
 ## [1.11.0] — 2026-06-19
 
 ### Added

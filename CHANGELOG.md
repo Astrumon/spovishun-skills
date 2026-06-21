@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] — 2026-06-21
+
+### Added
+
+- **Optional "with grill" modifier for "start new task" (#135):** saying "start new
+  task with grill" (or a Ukrainian equivalent — "з грилем" / "з допитом" /
+  "з прожаркою") makes the `notion-task-inject` picker tell the agent to run the
+  `grill-me` skill on the loaded task and stress-test the plan **before** entering
+  Plan Mode, instead of jumping straight there. Plain "start new task" (no
+  modifier) is unchanged. Implemented via a new `GRILL_MODIFIER_TRIGGERS` check in
+  the hook, threaded through the picker's REQUIRED-NEXT-ACTIONS directive and into
+  `notion-task-to-code`'s new optional `grillFirst` invocation arg (Step 6).
+  `START_TASK_TRIGGERS` also gained the imperative form "почни нову задачу".
+
 ## [1.11.1] — 2026-06-20
 
 ### Fixed

@@ -128,6 +128,36 @@ test('FINISH_TASK_TRIGGERS stays the documented finish-task phrase list', () => 
   ]);
 });
 
+test('GRILL_MODIFIER_TRIGGERS stays the documented grill modifier phrase list', () => {
+  // Guards the "start new task with grill" modifier list (spovishun-135) — mirrors
+  // the FINISH_TASK_TRIGGERS guard above.
+  const { hook } = loadHook();
+  assert.deepEqual(hook.GRILL_MODIFIER_TRIGGERS, [
+    'with grill', 'з грилем', 'з допитом', 'з прожаркою',
+  ]);
+});
+
+test('buildSystemPrompt: grillFirst + no plan instructs grill-me before EnterPlanMode', () => {
+  const { hook } = loadHook();
+  const prompt = hook.buildSystemPrompt('## context', null, null, true, true);
+  assert.match(prompt, /Invoke the `grill-me` skill/);
+  assert.doesNotMatch(prompt, /You MUST call the EnterPlanMode tool immediately/);
+});
+
+test('buildSystemPrompt: isStartTask without grillFirst keeps the default EnterPlanMode instruction', () => {
+  const { hook } = loadHook();
+  const prompt = hook.buildSystemPrompt('## context', null, null, true, false);
+  assert.match(prompt, /You MUST call the EnterPlanMode tool immediately/);
+  assert.doesNotMatch(prompt, /grill-me/);
+});
+
+test('buildSystemPrompt: an approved plan wins over grillFirst (nothing left to grill)', () => {
+  const { hook } = loadHook();
+  const prompt = hook.buildSystemPrompt('## context', '## Approved Plan', null, true, true);
+  assert.match(prompt, /Plan already approved\. Proceed directly with implementation/);
+  assert.doesNotMatch(prompt, /grill-me/);
+});
+
 test('loadEnv parses a CRLF .env (Windows) — token/db land in process.env', () => {
   // Regression for spovishun-129: split('\n') + `$` anchor failed on trailing \r,
   // so no vars were set and the picker/injection silently skipped.

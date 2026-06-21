@@ -4,7 +4,9 @@
  *
  * 1. UserPromptSubmit — injects active Notion task context into the prompt.
  *    On START_TASK_TRIGGERS: shows an interactive task picker directive for Claude
- *    to present via AskUserQuestion.
+ *    to present via AskUserQuestion. If the prompt also matches GRILL_MODIFIER_TRIGGERS
+ *    (e.g. "start new task with grill" / "з грилем"), the picker's directive tells Claude
+ *    to run the `grill-me` skill on the loaded task BEFORE entering Plan Mode.
  *    Other triggers: cache-first context injection.
  *
  * 2. PostToolUse (ExitPlanMode) — auto-saves the approved plan.
@@ -188,9 +190,12 @@ const PICKER_TIER_LIMIT = 5;
 const PRIORITY_TIERS = ['High', 'Medium', 'Low'];
 
 const TRIGGER_WORDS = ['implement', 'refactor', 'реалізуй', 'розроби', 'задача', 'таск', 'фіча'];
-const START_TASK_TRIGGERS = ['start new task', 'почати нову задачу', 'беру нову задачу'];
+const START_TASK_TRIGGERS = ['start new task', 'почати нову задачу', 'беру нову задачу', 'почни нову задачу'];
 const FINISH_TASK_TRIGGERS = ['finish task', 'complete task', 'завершити задачу', 'закінчити задачу'];
 const REFRESH_TRIGGERS = ['reread task', 'update task context', 'оновити контекст задачі', 'перечитати задачу'];
+// Modifier on top of START_TASK_TRIGGERS — runs grill-me on the loaded task before
+// Plan Mode instead of entering it directly. Only checked when isStartTask is true.
+const GRILL_MODIFIER_TRIGGERS = ['with grill', 'з грилем', 'з допитом', 'з прожаркою'];
 
 // ─── Notion HTTP ───────────────────────────────────────────────────────────────
 
@@ -508,7 +513,7 @@ async function queryByPriorityTier(token, status) {
   return { candidates: result?.results || [], tier: null };
 }
 
-async function runPicker(token, currentBranch, isForce) {
+async function runPicker(token, currentBranch, isForce, hasGrillModifier) {
   let selectedTasks = loadSelectedTasks();
 
   // Validate active tasks
@@ -538,7 +543,7 @@ async function runPicker(token, currentBranch, isForce) {
         const planFile = path.join(ctxDir, 'plan.md');
         const plan = fs.existsSync(planFile) ? fs.readFileSync(planFile, 'utf8') : null;
         writeSessionLock(path.join(ctxDir, 'session.lock'));
-        outputPrompt(buildSystemPrompt(context, plan, '\n**Git:** Already on active task branch — skipping checkout', true));
+        outputPrompt(buildSystemPrompt(context, plan, '\n**Git:** Already on active task branch — skipping checkout', true, hasGrillModifier));
         return;
       }
     }
@@ -605,9 +610,13 @@ async function runPicker(token, currentBranch, isForce) {
     return `${i + 1}. **${PROJECT_PREFIX}-${o.taskNum}** — ${o.displayName}${tag}\n   pageId: \`${o.pageId}\``;
   }).join('\n');
 
+  const invokeNote = hasGrillModifier
+    ? 'and `grillFirst=true` — it loads task context, runs `grill-me` to stress-test the plan, then enters Plan Mode'
+    : 'to load task context and enter Plan Mode';
+
   if (options.length === 1) {
     const o = options[0];
-    outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Only one task available — apply automatically without asking the user.\n2. Run Bash: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick ${o.pageId}${applyFlagsSuffix}\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n3. Briefly confirm: task name and branch.\n4. Immediately invoke the \`notion-task-to-code\` skill with pageId \`${o.pageId}\` to load task context and enter Plan Mode.`);
+    outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Only one task available — apply automatically without asking the user.\n2. Run Bash: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick ${o.pageId}${applyFlagsSuffix}\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n3. Briefly confirm: task name and branch.\n4. Immediately invoke the \`notion-task-to-code\` skill with pageId \`${o.pageId}\` ${invokeNote}.`);
     return;
   }
 
@@ -618,7 +627,7 @@ async function runPicker(token, currentBranch, isForce) {
     return `     {label: "${label}", value: "${o.pageId}"}`;
   }).join(',\n');
 
-  outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Call \`AskUserQuestion\`:\n   \`\`\`\n   question: "Select tasks to start working on (multiple selection allowed):"\n   multiSelect: true\n   options: [\n${aqOptions},\n     {label: "Cancel", value: "cancel"}\n   ]\n   \`\`\`\n2. If user picked **"Cancel"** → inform user, stop.\n3. For **each** selected pageId — run Bash sequentially:\n   - 1st task:  \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix}\`\n   - 2nd+ task: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix} --no-switch\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n4. After all applies — if ≥2 tasks selected → show the DISCLAIMER line from stdout.\n5. Briefly confirm: task name(s), branch(es), total active parallel tasks count.\n6. Immediately invoke the \`notion-task-to-code\` skill with the first selected pageId to load task context and enter Plan Mode.`);
+  outputPrompt(`## Task Picker\n${parallelNote}${sourceNote}${orphanedNote}\n\n**Available tasks**:\n${optionLines}\n\n---\n### REQUIRED NEXT ACTIONS (execute in order):\n1. Call \`AskUserQuestion\`:\n   \`\`\`\n   question: "Select tasks to start working on (multiple selection allowed):"\n   multiSelect: true\n   options: [\n${aqOptions},\n     {label: "Cancel", value: "cancel"}\n   ]\n   \`\`\`\n2. If user picked **"Cancel"** → inform user, stop.\n3. For **each** selected pageId — run Bash sequentially:\n   - 1st task:  \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix}\`\n   - 2nd+ task: \`node "${HOOK_DIR}/notion-task-inject.js" --apply-pick <pageId>${applyFlagsSuffix} --no-switch\`\n   If stderr starts with \`CONFLICT:\` → show user the conflicting files, ask: retry with \`--force\` or skip?\n4. After all applies — if ≥2 tasks selected → show the DISCLAIMER line from stdout.\n5. Briefly confirm: task name(s), branch(es), total active parallel tasks count.\n6. Immediately invoke the \`notion-task-to-code\` skill with the first selected pageId ${invokeNote}.`);
 }
 
 // ─── Apply Pick ────────────────────────────────────────────────────────────────
@@ -739,6 +748,7 @@ async function main() {
   const isFinishTask = FINISH_TASK_TRIGGERS.some(t => prompt.includes(t));
   const isRefresh = REFRESH_TRIGGERS.some(t => prompt.includes(t));
   const isForce = prompt.includes('--force');
+  const hasGrillModifier = isStartTask && GRILL_MODIFIER_TRIGGERS.some(t => prompt.includes(t));
   const hasTrigger = isStartTask || isFinishTask || isRefresh || TRIGGER_WORDS.some(w => prompt.includes(w));
 
   if (!hasTrigger) process.exit(0);
@@ -775,7 +785,7 @@ async function main() {
       process.exit(0);
     }
     try {
-      await runPicker(NOTION_TOKEN, currentBranch, isForce);
+      await runPicker(NOTION_TOKEN, currentBranch, isForce, hasGrillModifier);
     } catch (err) {
       process.stderr.write(`[notion-task-inject] Picker error: ${err.message}\n`);
     }
@@ -871,7 +881,7 @@ async function main() {
   }
 }
 
-function buildSystemPrompt(context, plan, branchNote, isStartTask) {
+function buildSystemPrompt(context, plan, branchNote, isStartTask, grillFirst) {
   const parts = [context];
   if (plan) parts.push(`\n---\n## Approved Plan\n${plan}`);
   if (branchNote) parts.push(branchNote);
@@ -880,6 +890,8 @@ function buildSystemPrompt(context, plan, branchNote, isStartTask) {
   let instruction;
   if (isStartTask && plan) {
     instruction = 'Plan already approved. Proceed directly with implementation — do NOT enter plan mode again.';
+  } else if (isStartTask && grillFirst) {
+    instruction = 'IMPORTANT: Invoke the `grill-me` skill on this task context first to stress-test the plan. Only call EnterPlanMode after the grill session concludes.';
   } else if (isStartTask) {
     instruction = 'IMPORTANT: You MUST call the EnterPlanMode tool immediately before doing anything else.';
   } else {
@@ -907,6 +919,7 @@ function outputPrompt(systemPrompt) {
 module.exports = {
   PRIORITY_TIERS,
   FINISH_TASK_TRIGGERS,
+  GRILL_MODIFIER_TRIGGERS,
   resolveToken,
   NOTION_TOKEN,
   TOKEN_SOURCE,
@@ -920,6 +933,7 @@ module.exports = {
   toDashed,
   blockToMd,
   assertSafeBranch,
+  buildSystemPrompt,
 };
 
 if (require.main === module) {

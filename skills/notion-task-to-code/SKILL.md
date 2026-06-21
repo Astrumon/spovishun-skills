@@ -2,6 +2,10 @@
 
 Converts a Notion task into a ready-to-use AI agent prompt for Claude Code or similar AI coding agents.
 
+**Invocation args:** `pageId` (required) and an optional `grillFirst=true` — set by the
+`notion-task-inject` picker when the user said "start new task with grill" (or a Ukrainian
+equivalent: з грилем / з допитом / з прожаркою). See Step 6.
+
 ## Workflow
 
 ### Step 1: Fetch the task
@@ -88,6 +92,12 @@ You are implementing a feature for the {{PROJECT_NAME}} project.
 ### Step 5: Present the output
 Show the prompt in a code block and offer to update the prompt toggle in Notion.
 
-### Step 6: Enter Plan Mode
-After presenting the prompt, immediately enter Plan Mode using the `EnterPlanMode` tool.
+### Step 6: Grill (optional), then enter Plan Mode
+After presenting the prompt:
+- If invoked with `grillFirst=true`: first invoke the `grill-me` skill on the prompt generated
+  in Step 4 to stress-test the plan, and wait for that grill session to conclude. Only then
+  enter Plan Mode using the `EnterPlanMode` tool.
+- Otherwise (default — no `grillFirst` arg): immediately enter Plan Mode using the
+  `EnterPlanMode` tool, as before.
+
 Plannotator will intercept `ExitPlanMode` — wait for user approval before proceeding.

@@ -124,6 +124,29 @@ test('happy path: claude + notion=true with mocked /users/me + /databases', asyn
   assert.equal(statusOf(text, 'gitignore-config'), 'pass');
 });
 
+test('notion token in .env (not process env) → notion-token-env passes (#139)', async () => {
+  const consumer = makeConsumer();
+  await installClaudeFully(consumer, 'install-config-notion.yaml');
+  writeGitignore(consumer, ['spovishun-skills.config.yaml', '.claude/settings.local.json']);
+  // Token lives ONLY in .env, exactly as the generated scripts read it.
+  writeFileSync(join(consumer, '.env'), 'OTHER=x\nNOTION_TOKEN=secret_from_envfile\n', 'utf8');
+
+  const fetchImpl = fakeFetch([
+    { match: (u) => u.includes('/users/me'), response: jsonResponse(200, { id: 'u_1' }) },
+    { match: (u) => u.includes('/databases/'), response: jsonResponse(200, { id: 'db_1' }) },
+  ]);
+
+  const out = silentOut();
+  // env intentionally omits NOTION_TOKEN → must fall back to .env.
+  const ok = await runDoctor({ cwd: consumer, env: {}, out, fetchImpl });
+  const text = out.text();
+
+  assert.equal(ok, true, `expected pass, output was:\n${text}`);
+  assert.equal(statusOf(text, 'notion-token-env'), 'pass');
+  assert.match(text, /from \.env/, 'detail should note the token came from .env');
+  assert.equal(statusOf(text, 'notion-token-valid'), 'pass');
+});
+
 test('missing config → check 1 fails, check 2 skipped, downstream still evaluated', async () => {
   const consumer = makeConsumer();
   writeGitignore(consumer, ['.claude/settings.local.json']);

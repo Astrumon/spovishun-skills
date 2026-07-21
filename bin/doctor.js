@@ -221,17 +221,23 @@ function checkNotionTokenEnv(ctx) {
       action: 'Add `notion.token_env: NOTION_TOKEN` (or similar) to your config.',
     };
   }
-  const value = ctx.env[tokenEnv];
+  // Fall back to <cwd>/.env, mirroring how the generated scripts resolve the
+  // token via scripts/notion/lib/load-token.js — otherwise doctor falsely fails
+  // when the token lives only in .env. We replicate the tiny .env parse here
+  // (keyed on the configured token_env, which load-token.js does not know)
+  // rather than importing that CJS module across the bin/ → data layer boundary.
+  const value = ctx.env[tokenEnv] || readEnvFileVar(ctx.cwd, tokenEnv);
   if (!value) {
     return {
       name: 'notion-token-env',
       status: 'fail',
-      detail: `env var ${tokenEnv} is not set`,
+      detail: `env var ${tokenEnv} is not set (checked process env and .env)`,
       action: `Set the env var: export ${tokenEnv}=<your-integration-secret>`,
     };
   }
   ctx.notionToken = value;
-  return { name: 'notion-token-env', status: 'pass', detail: `${tokenEnv} is set (${value.length} chars)` };
+  const source = ctx.env[tokenEnv] ? 'env' : '.env';
+  return { name: 'notion-token-env', status: 'pass', detail: `${tokenEnv} is set (${value.length} chars, from ${source})` };
 }
 
 async function checkNotionTokenValid(ctx) {
@@ -536,6 +542,24 @@ function resolveHookScript(cwd, command) {
     }
   }
   return null;
+}
+
+/**
+ * Reads a single `KEY=value` from <cwd>/.env, mirroring the parse in
+ * scripts/notion/lib/load-token.js (CRLF→LF normalize, `^KEY=(.+)$` per line,
+ * trimmed). Returns the value or null (file absent / key absent / read error).
+ */
+function readEnvFileVar(cwd, key) {
+  const path = join(cwd, '.env');
+  if (!existsSync(path)) return null;
+  try {
+    const content = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = content.match(new RegExp(`^${escaped}=(.+)$`, 'm'));
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 function readGitignoreEntries(cwd) {

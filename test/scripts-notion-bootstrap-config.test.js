@@ -36,6 +36,45 @@ test('parsePageId: accepts bare compact and dashed ids; rejects junk', () => {
   assert.equal(parsePageId(undefined), null);
 });
 
+test('parsePageId: slug ending in a hex letter does not fuse into the id (#139)', () => {
+  const { parsePageId } = bootstrap;
+  // "Board" ends in a hex letter (d): the old global dash-strip absorbed it,
+  // yielding an off-by-one invalid id. The tail-peel must keep the id intact.
+  assert.equal(
+    parsePageId('https://app.notion.com/p/Board-36f3462f68a98123b662d4735a627566'),
+    '36f3462f-68a9-8123-b662-d4735a627566'
+  );
+  // Multi-segment slug + trailing query string.
+  assert.equal(
+    parsePageId('https://www.notion.so/My-Cool-Project-3783462f68a98135bd4bf2fa128f0ba3?pvs=4&x=1'),
+    '3783462f-68a9-8135-bd4b-f2fa128f0ba3'
+  );
+});
+
+test('normalizeTitle: strips markdown links, collapses whitespace, lowercases', () => {
+  const { normalizeTitle } = bootstrap;
+  assert.equal(normalizeTitle('[CLAUDE.md](https://notion.so/x)'), 'claude.md');
+  assert.equal(normalizeTitle('  Tasks   (v2) '), 'tasks (v2)');
+  assert.equal(normalizeTitle('CI/CD'), 'ci/cd');
+  assert.equal(normalizeTitle(null), '');
+  assert.equal(normalizeTitle(undefined), '');
+});
+
+test('pickChildLoose: matches drifted titles by normalized prefix / alias', () => {
+  const { pickChildLoose } = bootstrap;
+  const children = [
+    { id: 'd1', type: 'child_database', child_database: { title: 'Tasks (v2)' } },
+    { id: 'p1', type: 'child_page', child_page: { title: 'CLAUDE.md — Rules for AI Assistant' } },
+    { id: 'p2', type: 'child_page', child_page: { title: 'AI Tools' } },
+  ];
+  assert.equal(pickChildLoose(children, 'child_database', ['Tasks']).id, 'd1');
+  assert.equal(pickChildLoose(children, 'child_page', ['CLAUDE.md']).id, 'p1');
+  assert.equal(pickChildLoose(children, 'child_page', ['ai tools']).id, 'p2');
+  assert.equal(pickChildLoose(children, 'child_page', ['Missing']), null);
+  // type must still match
+  assert.equal(pickChildLoose(children, 'child_page', ['Tasks']), null);
+});
+
 test('titleOfBlock: reads child_page / child_database titles, ignores others', () => {
   const { titleOfBlock } = bootstrap;
   assert.equal(titleOfBlock({ type: 'child_page', child_page: { title: 'Board' } }), 'Board');
@@ -144,6 +183,87 @@ test('patchConfigYaml: does not touch a categories key outside the notion sectio
   const { yaml } = patchConfigYaml(input, { 'categories.architecture': 'ARCH' });
   assert.match(yaml, /architecture: "leave-me"/, 'foreign section untouched');
   assert.match(yaml, /architecture: "ARCH"/, 'notion section patched');
+});
+
+// extractAnchors traverses the tree via the shared notion-http module. We
+// monkeypatch its `get` on the cached instance (bootstrap-config.js holds the
+// same object) to serve a fake block tree — no network. Children are keyed by
+// the block id embedded in the request path.
+const http = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'notion-http.js'));
+
+function childPage(id, title) {
+  return { id, type: 'child_page', child_page: { title } };
+}
+function childDb(id, title) {
+  return { id, type: 'child_database', child_database: { title } };
+}
+
+function withFakeTree(tree, fn) {
+  const original = http.get;
+  http.get = async (_token, apiPath) => {
+    const m = apiPath.match(/\/v1\/blocks\/([^/]+)\/children/);
+    const id = m ? m[1] : null;
+    return { object: 'list', results: tree[id] ?? [], has_more: false, next_cursor: null };
+  };
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => { http.get = original; });
+}
+
+test('extractAnchors: resolves drifted titles (Tasks (v2), decorated CLAUDE.md)', async () => {
+  const { extractAnchors } = bootstrap;
+  const tree = {
+    root: [childPage('board', 'Board'), childPage('docs', 'Documentation')],
+    board: [childDb('tasks', 'Tasks (v2)')],
+    docs: [
+      childPage('claude', '[CLAUDE.md](https://notion.so/x)'),
+      childPage('arch', 'Architecture'),
+      childPage('dbc', 'Database'),
+      childPage('testc', 'Testing'),
+      childPage('cic', 'CI/CD'),
+      childPage('featc', 'Features'),
+      childPage('aic', 'AI Tools'),
+      childPage('epicsgrp', 'Epics'),
+    ],
+    epicsgrp: [childDb('epicsdb', 'Epics')],
+  };
+
+  const anchors = await withFakeTree(tree, () => extractAnchors('token', 'root'));
+
+  assert.equal(anchors.database_id, 'tasks', 'Tasks (v2) must resolve to the Tasks anchor');
+  assert.equal(anchors.claude_md_page_id, 'claude', 'decorated CLAUDE.md link must resolve');
+  assert.equal(anchors.docs_root_id, 'docs');
+  assert.equal(anchors.epics_group_page_id, 'epicsgrp');
+  assert.equal(anchors.epics_database_id, 'epicsdb');
+  assert.equal(anchors.categories.architecture, 'arch');
+  assert.equal(anchors.categories.aitools, 'aic');
+});
+
+test('extractAnchors: reports ALL unresolved anchors in one error', async () => {
+  const { extractAnchors } = bootstrap;
+  // Board + Documentation resolve, but their subtrees are empty → Tasks,
+  // CLAUDE.md, every category and Epics are all missing.
+  const tree = {
+    root: [childPage('board', 'Board'), childPage('docs', 'Documentation')],
+    board: [],
+    docs: [],
+  };
+
+  await withFakeTree(tree, async () => {
+    await assert.rejects(
+      () => extractAnchors('token', 'root'),
+      (err) => {
+        assert.match(err.message, /Unresolved anchors \((\d+)\)/);
+        assert.match(err.message, /Tasks/);
+        assert.match(err.message, /CLAUDE\.md/);
+        assert.match(err.message, /Architecture/);
+        // one aggregated error, not first-failure only
+        const count = Number(err.message.match(/Unresolved anchors \((\d+)\)/)[1]);
+        assert.ok(count >= 3, `expected several unresolved anchors, got ${count}`);
+        return true;
+      }
+    );
+  });
 });
 
 test('renderYaml: emits a notion block with all 6 anchors + 7 categories', () => {

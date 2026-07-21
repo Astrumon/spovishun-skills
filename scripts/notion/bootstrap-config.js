@@ -39,13 +39,37 @@ const CATEGORY_TITLE_TO_KEY = {
 // ---------------------------------------------------------------------------
 
 // Accepts a Notion page URL or a bare id and returns the dashed uuid.
-// Notion URLs end in a 32-hex id (optionally after a slugged title); we take
-// the last 32-hex run so query strings and titles don't interfere.
+//
+// The id sits at the TAIL of a Notion URL, optionally behind a slugged title
+// joined by '-'. We must NOT globally strip dashes before matching: a slug that
+// ends in a hex letter (e.g. "Board-<id>") would fuse its trailing letter into
+// the 32-hex run and shift the id by one char (yielding an invalid uuid and a
+// Notion 400). Instead we peel the id off the tail without touching its dashes:
+//   drop the query string → take the last path segment → the part after the
+//   last '-' → accept either a dashed uuid or a bare 32-hex run.
+const DASHED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BARE_HEX32 = /^[0-9a-f]{32}$/i;
+
 function parsePageId(input) {
   if (!input || typeof input !== 'string') return null;
-  const matches = input.replace(/-/g, '').match(/[0-9a-f]{32}/gi);
-  if (!matches || matches.length === 0) return null;
-  return toDashed(matches[matches.length - 1].toLowerCase());
+
+  const noQuery = input.split('?')[0];
+  const lastSegment = noQuery.split('/').pop() || '';
+  // Candidates, most-specific first: the tail after the last '-' (peels a slug),
+  // then the whole segment (bare id with no slug), then the raw input (dashed
+  // uuid that may itself contain '-', so splitting on '/' still keeps it whole).
+  const dashIdx = lastSegment.lastIndexOf('-');
+  const candidates = [
+    dashIdx >= 0 ? lastSegment.slice(dashIdx + 1) : null,
+    lastSegment,
+    input.trim(),
+  ];
+
+  for (const c of candidates) {
+    if (!c) continue;
+    if (DASHED_UUID.test(c) || BARE_HEX32.test(c)) return toDashed(c.toLowerCase());
+  }
+  return null;
 }
 
 // Title of a child_page / child_database block, or '' for anything else.
@@ -59,6 +83,34 @@ function titleOfBlock(block) {
 // First child block of the given type whose title matches exactly.
 function pickChild(children, type, title) {
   return (children || []).find(b => b.type === type && titleOfBlock(b) === title) || null;
+}
+
+// Normalizes a block/anchor title for tolerant matching: strips markdown link
+// syntax ([text](url) and bare [text]) so a decorated title like
+// "[CLAUDE.md](...)" reduces to "claude.md", collapses whitespace, trims, and
+// lowercases. Titles drift between duplicated boards (casing, trailing suffixes,
+// link decoration); the normalized form is the stable comparison key.
+function normalizeTitle(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [text](url) → text
+    .replace(/\[([^\]]+)\]/g, '$1')          // bare [text] → text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// First child block of the given type whose NORMALIZED title equals or starts
+// with any of the given aliases. Aliases are normalized here so callers pass
+// plain strings. Prefix matching absorbs suffix drift ("Tasks (v2)" for
+// "tasks", "CLAUDE.md — Rules …" for "claude.md").
+function pickChildLoose(children, type, aliases) {
+  const wants = (Array.isArray(aliases) ? aliases : [aliases]).map(normalizeTitle);
+  return (children || []).find(b => {
+    if (b.type !== type) return false;
+    const t = normalizeTitle(titleOfBlock(b));
+    return wants.some(a => a && (t === a || t.startsWith(a)));
+  }) || null;
 }
 
 // Line-based patcher: replaces the values of known notion.* keys (and the
@@ -183,37 +235,62 @@ async function fetchChildren(token, blockId) {
   return out;
 }
 
-// Walks the duplicated template tree and resolves every anchor by title.
-// Throws with a precise message naming the first missing anchor so the user
-// knows exactly which title drifted (or that they renamed before extracting).
+// Walks the duplicated template tree and resolves every anchor by tolerant
+// title matching (see pickChildLoose). Collects ALL unresolved anchors and, if
+// any are missing, throws ONE error listing them together — so a user whose
+// board drifted several titles fixes them in a single pass instead of
+// discovering them one failed run at a time.
 async function extractAnchors(token, rootId) {
   const root = toDashed(rootId);
   const rootChildren = await fetchChildren(token, root);
+  const unresolved = [];
 
-  const boardPage = pickChild(rootChildren, 'child_page', 'Board');
-  if (!boardPage) throw new Error('Anchor not found: child page "Board" under the root page');
-  const docsPage = pickChild(rootChildren, 'child_page', 'Documentation');
-  if (!docsPage) throw new Error('Anchor not found: child page "Documentation" under the root page');
+  const boardPage = pickChildLoose(rootChildren, 'child_page', ['Board']);
+  if (!boardPage) unresolved.push('child page "Board" under the root page');
+  const docsPage = pickChildLoose(rootChildren, 'child_page', ['Documentation']);
+  if (!docsPage) unresolved.push('child page "Documentation" under the root page');
 
-  const boardChildren = await fetchChildren(token, boardPage.id);
-  const tasksDb = pickChild(boardChildren, 'child_database', 'Tasks');
-  if (!tasksDb) throw new Error('Anchor not found: child database "Tasks" under "Board"');
-
-  const docsChildren = await fetchChildren(token, docsPage.id);
-  const claudeMd = pickChild(docsChildren, 'child_page', 'CLAUDE.md');
-  if (!claudeMd) throw new Error('Anchor not found: child page "CLAUDE.md" under "Documentation"');
-
-  const categories = {};
-  for (const [title, key] of Object.entries(CATEGORY_TITLE_TO_KEY)) {
-    const page = pickChild(docsChildren, 'child_page', title);
-    if (!page) throw new Error(`Anchor not found: category page "${title}" under "Documentation"`);
-    categories[key] = page.id;
+  // Children of Board / Documentation can only be fetched once their parent is
+  // resolved; when a parent is missing its subtree stays unchecked (the parent
+  // is the reported root cause).
+  let tasksDb = null;
+  if (boardPage) {
+    const boardChildren = await fetchChildren(token, boardPage.id);
+    tasksDb = pickChildLoose(boardChildren, 'child_database', ['Tasks']);
+    if (!tasksDb) unresolved.push('child database "Tasks" under "Board"');
   }
 
-  const epicsGroupPage = pickChild(docsChildren, 'child_page', 'Epics');
-  const epicsChildren = await fetchChildren(token, epicsGroupPage.id);
-  const epicsDb = pickChild(epicsChildren, 'child_database', 'Epics');
-  if (!epicsDb) throw new Error('Anchor not found: child database "Epics" under "Epics"');
+  const categories = {};
+  let claudeMd = null;
+  let epicsGroupPage = null;
+  let epicsDb = null;
+  if (docsPage) {
+    const docsChildren = await fetchChildren(token, docsPage.id);
+
+    claudeMd = pickChildLoose(docsChildren, 'child_page', ['CLAUDE.md']);
+    if (!claudeMd) unresolved.push('child page "CLAUDE.md" under "Documentation"');
+
+    for (const [title, key] of Object.entries(CATEGORY_TITLE_TO_KEY)) {
+      const page = pickChildLoose(docsChildren, 'child_page', [title]);
+      if (!page) unresolved.push(`category page "${title}" under "Documentation"`);
+      else categories[key] = page.id;
+    }
+
+    epicsGroupPage = pickChildLoose(docsChildren, 'child_page', ['Epics']);
+    if (!epicsGroupPage) {
+      unresolved.push('child page "Epics" under "Documentation"');
+    } else {
+      const epicsChildren = await fetchChildren(token, epicsGroupPage.id);
+      epicsDb = pickChildLoose(epicsChildren, 'child_database', ['Epics']);
+      if (!epicsDb) unresolved.push('child database "Epics" under "Epics"');
+    }
+  }
+
+  if (unresolved.length > 0) {
+    throw new Error(
+      `Unresolved anchors (${unresolved.length}) — did you rename before extracting, or did these titles drift?\n  - ${unresolved.join('\n  - ')}`
+    );
+  }
 
   return {
     root_page_id: root,
@@ -294,6 +371,8 @@ module.exports = {
   parsePageId,
   titleOfBlock,
   pickChild,
+  normalizeTitle,
+  pickChildLoose,
   patchConfigYaml,
   renderYaml,
   flattenAnchors,

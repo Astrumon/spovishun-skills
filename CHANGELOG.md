@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] — 2026-07-21
+
+### Fixed
+
+- **`bootstrap-config.js` corrupted page ids from slugged URLs (#139):** `parsePageId`
+  stripped every dash from the whole URL before matching a 32-hex run, so a slug ending in a
+  hex letter fused into the id — `.../Board-<id>` absorbed the trailing `d` of "Board" and
+  produced an off-by-one invalid id (Notion 400). It now peels the id off the URL tail
+  without touching dashes (drop query string → last path segment → substring after the last
+  `-`) and accepts either a dashed uuid or a bare 32-hex run.
+- **`bootstrap-config.js` failed on drifted anchor titles (#139):** `extractAnchors` matched
+  structural anchors by exact title and threw on the first mismatch. It now matches
+  tolerantly — titles are normalized (markdown-link syntax stripped, whitespace collapsed,
+  case-insensitive) and matched by prefix/alias, so `Tasks (v2)` and a decorated
+  `CLAUDE.md — …` link resolve. All unresolved anchors are now collected and reported in a
+  single error instead of one failed run at a time.
+- **`doctor` ignored `.env` for the Notion token (#139):** `notion-token-env` read only the
+  process environment, while the generated scripts read `.env` via `load-token.js`, causing a
+  false failure when the token lived only in `.env`. The check now falls back to `<cwd>/.env`
+  (keyed on the configured `notion.token_env`).
+
 ## [1.12.0] — 2026-06-21
 
 ### Added

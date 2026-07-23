@@ -1,0 +1,27 @@
+id: two-axis-code-review
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - notion
+description: >-
+  Two-axis diff review against develop: Standards (CLAUDE.md + Kotlin/Clean-Architecture
+  rules + Fowler smells) and Spec (Notion task Goal/Steps/DoD) via two parallel sub-agents
+  with separate Ukrainian reports. Spec-vs-diff coverage only — bugs/tests/DB belong to
+  the reviewer agents.
+placeholders:
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject)
+triggers:
+  en:
+    - "two-axis review"
+    - "review against spec"
+    - "review branch against task"
+    - "spec review"
+    - "review since develop"
+  uk:
+    - "двовісне рев'ю"
+    - "рев'ю по осях"
+    - "звір з задачею"
+    - "рев'ю проти спеки"
+    - "перевір гілку проти задачі"

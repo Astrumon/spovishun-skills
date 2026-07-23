@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] — 2026-07-23
+
+### Added
+
+- **New skill `two-axis-code-review` (#140):** adaptation of Matt Pocock's `code-review`
+  skill for the spovishun stack. Reviews the diff against `develop` (auto-detected via
+  merge-base, no prompting) along two axes via two parallel sub-agents with separate,
+  never-merged Ukrainian reports: **Standards** (consumer `CLAUDE.md` +
+  `.claude/rules/kotlin/*.md` + design principles + the full Fowler 12-smell baseline
+  extended with a Kotlin/Clean-Architecture checklist) and **Spec** (the originating
+  Notion task resolved from the `feature/{{PROJECT_PREFIX}}-N` branch name via
+  `get-task.js`, checked for missing requirements, scope creep, and wrong
+  implementations). Stack-gated on `kotlin` + `notion`. Scope is deliberately limited to
+  spec conformance + architectural/style standards — bugs, tests, types, and DB stay with
+  the existing reviewer agents.
+
 ## [1.12.1] — 2026-07-21
 
 ### Fixed

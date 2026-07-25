@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] — 2026-07-25
+
+### Added
+
+- **KMP track (#142):** a second stack track for Kotlin Multiplatform / Compose
+  Multiplatform projects, gated on a new `stack.kmp` flag. `kmp: true` requires
+  `kotlin: true` — enforced by `schema/config.schema.json` via `if/then`. The `init`
+  wizard asks for it, but only when the project is Kotlin.
+- **Six `rules/kmp/` rules:** `architecture` (strict `ui → domain ← data`, the
+  `MviViewModel<S, I, E>` contract — `StateFlow` + `onIntent` +
+  `Channel(BUFFERED).receiveAsFlow()` with an injected dispatcher **and**
+  `CoroutineExceptionHandler`, empty `catch (Throwable)` forbidden — source sets for
+  Android/iOS/Desktop, and Compose stability), `feature-structure`
+  (`composeApp` + `core/*` + `feature/<name>/{api,impl}`), `navigation` (type-safe
+  Navigation 2, route in `api`, graph in `composeApp`), `uikit`, `localization`
+  (per-module `composeResources`, explicit `packageOfResClass`) and `testing`
+  (`kotlin.test` + fakes in `commonTest`; MockK only in JVM/Android source sets).
+- **Two skills** (`requires: [kotlin, kmp]`): `new-feature` — scaffolds the `api`/`impl`
+  module pair with an MVI screen, Koin module, localized strings and a ViewModel test,
+  then wires navigation and DI (user-invocable via `/new-feature <Name>`); and
+  `kmp-multiplatform-specialist` — source sets, `expect`/`actual`, targets, KMP Gradle
+  DSL, Compose Resources and platform HTTP engines.
+- `STACK_FLAGS` is now exported from `lib/stack-filter.js` as the single JS-side source
+  of truth for the flag list.
+
+### Changed
+
+- **Rules are now gated by directory name.** `rules/` files carry no manifest, so the
+  top-level group name is the gate: `rules/<stack-flag>/` installs only when that flag is
+  active, and any other group (`rules/common/`) always does. `collectRules()` takes a
+  second `stackFlags` argument and fails closed — no flags means ungated groups only.
+  All three adapters pass the consumer's `config.stack`.
+- **`rules/kotlin/kotlin-style.md` is now gated on `stack.kotlin`.** Previously every
+  consumer received it regardless of stack. Projects with `kotlin: true` are unaffected;
+  a non-Kotlin consumer will stop receiving it on the next install.
+- `rules/common/testing.md` now states that its JUnit 5 / MockK stack section does not
+  apply to KMP projects and points at `rules/kmp/testing.md`.
+
+### Notes
+
+- Rules are still absent from the lockfile, so `doctor` does not see them and turning a
+  stack flag off leaves the previously installed rule files on disk. Pre-existing
+  behaviour, unchanged by this release.
+
 ## [1.13.0] — 2026-07-23
 
 ### Added

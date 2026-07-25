@@ -1,6 +1,6 @@
 {
   "name": "spovishun-skills",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Portable Claude Code skills, agents, hooks and rules — bootstrapped from the Spovishun project. Installs into Claude Code, Codex, Windsurf and Cursor via per-assistant adapters.",
   "type": "module",
   "publishConfig": {

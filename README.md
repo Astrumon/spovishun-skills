@@ -12,12 +12,12 @@ One canonical source. Multiple AI assistants. Configurable per project.
 
 A single `npx` command installs a curated set of:
 
-- **36 skills** — task decomposition, code review, Notion workflows, Kotlin/Postgres helpers, etc.
+- **40 skills** — task decomposition, code review, Notion workflows, Kotlin/Postgres helpers, KMP feature scaffolding, etc.
 - **9 agents** — specialized reviewers (architecture, refactor, docs, …)
 - **6 hooks** *(Claude only)* — session start/end, learning capture, Notion task injection
-- **6 rules** — design principles, git workflow, security, testing, Kotlin style
+- **12 rules** — design principles, git workflow, security, testing, Kotlin style, plus a Kotlin/Compose Multiplatform set (architecture + MVI, feature structure, navigation, design system, localization, testing)
 
-Artifacts are filtered by your stack flags (kotlin / postgres / telegram / notion / docker) — you get only what's relevant to your project.
+Artifacts are filtered by your stack flags (kotlin / postgres / telegram / notion / docker / kmp) — you get only what's relevant to your project.
 
 ## Supported targets
 
@@ -58,6 +58,7 @@ stack:
   telegram: true
   notion: true
   docker: false
+  kmp: false               # Kotlin/Compose Multiplatform; requires kotlin: true
 
 git:
   branch_prefix: "feature/myproject"
@@ -138,6 +139,8 @@ requires:
 ```
 
 An artifact installs **iff all `requires:` flags are `true`** in your `spovishun-skills.config.yaml`. Universal artifacts (no `requires:`) install for everyone.
+
+Rules carry no manifest, so their directory name is the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`kotlin/`, `kmp/`). `rules/common/` always installs.
 
 ## Reproducible installs (lockfile)
 

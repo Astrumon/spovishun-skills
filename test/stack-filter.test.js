@@ -24,6 +24,13 @@ test('stack-specific artifact filtered out when flag is false', () => {
   assert.equal(result.length, 0);
 });
 
+test('kmp artifact requires both kotlin and kmp', () => {
+  const art = artifact('kmp-skill', ['kotlin', 'kmp']);
+  assert.equal(filterByStack([art], { kotlin: true, kmp: true }).length, 1);
+  assert.equal(filterByStack([art], { kotlin: true, kmp: false }).length, 0);
+  assert.equal(filterByStack([art], { kotlin: true }).length, 0);
+});
+
 test('multi-flag requires: all must be true to pass', () => {
   const flags = { kotlin: true, postgres: false, telegram: false, notion: true };
   const result = filterByStack([artifact('a', ['kotlin', 'notion'])], flags);

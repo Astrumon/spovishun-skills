@@ -31,7 +31,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["kotlin", "postgres", "telegram", "notion", "docker"]
+        "enum": ["kotlin", "postgres", "telegram", "notion", "docker", "kmp"]
       },
       "uniqueItems": true,
       "description": "Stack flags that must all be active for this skill to be installed."

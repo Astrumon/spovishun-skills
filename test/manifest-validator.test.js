@@ -66,6 +66,15 @@ test('error: universal with requires is forbidden', () => {
   assert.ok(r.errors.some((e) => /Forbidden field/.test(e.message)));
 });
 
+test('happy: kmp is an accepted requires flag', () => {
+  const r = validateManifest({
+    ...VALID_BASE,
+    category: 'stack-specific',
+    requires: ['kotlin', 'kmp']
+  });
+  assert.equal(r.ok, true);
+});
+
 test('error: invalid requires value', () => {
   const r = validateManifest({
     ...VALID_BASE,

@@ -245,7 +245,22 @@ test('rule files are rendered into .claude/rules/ preserving subdirectory struct
   assert.ok(existsSync(join(rulesDir, 'common', 'security.md')));
   assert.ok(existsSync(join(rulesDir, 'common', 'testing.md')));
   assert.ok(existsSync(join(rulesDir, 'common', 'feature-documentation.md')));
-  assert.ok(existsSync(join(rulesDir, 'kotlin', 'kotlin-style.md')));
+  // This fixture is kotlin: false — flag-named rule groups are gated, common/ is not.
+  assert.ok(!existsSync(join(rulesDir, 'kotlin')), 'kotlin/ rules must not install without stack.kotlin');
+  assert.ok(!existsSync(join(rulesDir, 'kmp')), 'kmp/ rules must not install without stack.kmp');
+});
+
+test('flag-named rule groups install when their stack flag is active', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-kmp.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: PKG_ROOT, config, artifacts });
+
+  const rulesDir = join(consumer, '.claude', 'rules');
+  assert.ok(existsSync(join(rulesDir, 'common', 'design-principles.md')), 'common/ still ships');
+  assert.ok(existsSync(join(rulesDir, 'kotlin', 'kotlin-style.md')), 'stack.kotlin enables kotlin/');
+  assert.ok(existsSync(join(rulesDir, 'kmp', 'architecture.md')), 'stack.kmp enables kmp/');
 });
 
 test('rule placeholders are rendered from config (not copied verbatim)', async () => {

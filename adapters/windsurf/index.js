@@ -34,7 +34,7 @@ const WINDSURF_KINDS = new Set(['skill', 'template']);
 export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts, warn = process.stderr }) {
   const stackFiltered = filterByStack(artifacts, config.stack ?? {});
   const included = stackFiltered.filter((a) => WINDSURF_KINDS.has(a.kind));
-  const rules = collectRules(pkgRoot);
+  const rules = collectRules(pkgRoot, config.stack ?? {});
   const configMap = buildPlaceholderMap(config);
 
   const rulesDir = join(consumerCwd, RULES_DIR);

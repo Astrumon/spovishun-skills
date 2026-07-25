@@ -39,7 +39,7 @@ export async function installCodex({
 }) {
   const stackFiltered = filterByStack(artifacts, config.stack ?? {});
   const included = stackFiltered.filter((a) => CODEX_KINDS.has(a.kind));
-  const rules = collectRules(pkgRoot);
+  const rules = collectRules(pkgRoot, config.stack ?? {});
   const configMap = buildPlaceholderMap(config);
 
   const content = buildAgentsMd({

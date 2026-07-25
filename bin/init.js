@@ -22,6 +22,8 @@ const QUESTIONS = [
   { type: 'input', name: 'project_name', message: 'Project name:', validate: (v) => v.trim() ? true : 'Required' },
   { type: 'list',  name: 'project_language', message: 'Default language:', choices: ['uk', 'en'], default: 'uk' },
   { type: 'confirm', name: 'stack_kotlin',   message: 'Stack: Kotlin?',   default: false },
+  // Only offered for a Kotlin project — the schema rejects kmp without kotlin.
+  { type: 'confirm', name: 'stack_kmp',      message: 'Stack: Kotlin Multiplatform / Compose Multiplatform?', default: false, when: (a) => a.stack_kotlin },
   { type: 'confirm', name: 'stack_postgres', message: 'Stack: PostgreSQL?', default: false },
   { type: 'confirm', name: 'stack_telegram', message: 'Stack: Telegram bot?', default: false },
   { type: 'confirm', name: 'stack_notion',   message: 'Stack: Notion integration?', default: false },
@@ -57,6 +59,7 @@ function answersToConfig(a) {
       postgres: a.stack_postgres,
       telegram: a.stack_telegram,
       notion: a.stack_notion,
+      kmp: a.stack_kmp === true,
     },
     git: {
       branch_prefix: a.git_branch_prefix.trim(),

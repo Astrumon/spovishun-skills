@@ -73,7 +73,9 @@ bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
 
 **Windsurf adapter (`adapters/windsurf/`).** Generates one `.md` file per skill and per rule under `.windsurf/rules/` in the consumer project. Agents and hooks are excluded (Windsurf has no agent concept). Files exceeding 6 000 characters are automatically split into `<id>-part-1.md`, `<id>-part-2.md`, ... (char split, prefers newline boundary past the halfway mark). Rule files from `rules/` use `--` as path separator in their filename (e.g. `common/git-workflow.md` → `common--git-workflow.md`).
 
-**Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`.
+**Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion | docker | kmp`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`. The flag list lives in three places that must stay in sync: `STACK_FLAGS` in `lib/stack-filter.js`, the `requires` enum in `schema/manifest.schema.json`, and `stack` properties in `schema/config.schema.json`.
+
+**Rules stack gating (directory = flag).** `rules/` files carry no manifest, so the top-level group name *is* the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`rules/kotlin/`, `rules/kmp/`). A group whose name is not a stack flag (`rules/common/`) always installs. Implemented in `lib/rules-loader.js` (`collectRules(pkgRoot, stackFlags)`), consumed by all three adapters. Fails closed: no flags passed ⇒ only ungated groups. Note rules are still absent from the lockfile, so `doctor` does not see them and a group whose flag is turned off leaves stale files behind.
 
 **Lockfile.** `spovishun-skills.lock.yaml` in the consumer repo. Pins exact versions and checksums per artifact. Re-applied by `sync`, diffed by `update`.
 
@@ -100,6 +102,7 @@ stack:
   postgres: false
   telegram: true
   notion: true
+  kmp: false        # Kotlin/Compose Multiplatform; requires kotlin: true
 notion:
   token_env: "NOTION_TOKEN"
   database_id: "..."
@@ -146,11 +149,22 @@ This repo has no `.claude/rules/` directory of its own — it would only appear 
 
 The `rules/` directory at the repo root (NOT `.claude/rules/`) is **data**: canonical `.md` files that ship as part of the package and get installed into a consumer's `.claude/rules/` by the Claude adapter. They are configurable (support Mustache placeholders) but not executed here.
 
-Once we add the first packaged rule (likely in #5 — Migration), update the table below and create the file under `rules/<name>.md` with a corresponding `manifest.yaml`.
+Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory name (see Key Patterns): put a rule in `rules/<stack-flag>/` to gate it, or in `rules/common/` to ship it to everyone.
 
-| Rule | Source file | Category | Status |
+| Rule | Source file | Gate | Status |
 |---|---|---|---|
-| _(none yet)_ | — | — | — |
+| Design principles | `rules/common/design-principles.md` | always | shipped |
+| Feature documentation | `rules/common/feature-documentation.md` | always | shipped |
+| Git workflow | `rules/common/git-workflow.md` | always | shipped |
+| Security | `rules/common/security.md` | always | shipped |
+| Testing | `rules/common/testing.md` | always | shipped |
+| Kotlin style | `rules/kotlin/kotlin-style.md` | `stack.kotlin` | shipped |
+| KMP architecture (layers, MVI contract, Compose stability) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
+| KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
+| KMP navigation | `rules/kmp/navigation.md` | `stack.kmp` | shipped |
+| KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |
+| KMP localization | `rules/kmp/localization.md` | `stack.kmp` | shipped |
+| KMP testing (supersedes the common stack section) | `rules/kmp/testing.md` | `stack.kmp` | shipped |
 
 ## When to use scripts vs CLI
 
@@ -166,7 +180,7 @@ Once we add the first packaged rule (likely in #5 — Migration), update the tab
 - **Canonical body** — single source file for a skill/agent/hook (`SKILL.md`, `AGENT.md`, executable script).
 - **Adapter** — code in `adapters/<target>/` that translates canonical bodies into target-specific files.
 - **Target** — supported AI assistant: `claude` | `codex` | `windsurf` | `cursor`.
-- **Stack flag** — boolean in consumer config (`stack.kotlin`, `stack.notion`, …) that gates which `requires:`-tagged skills install.
+- **Stack flag** — boolean in consumer config (`stack.kotlin`, `stack.notion`, `stack.kmp`, …) that gates which `requires:`-tagged skills install, and which `rules/<group>/` directories ship.
 - **Placeholder** — Mustache `{{KEY}}` token in canonical bodies, resolved per `placeholders:` array in manifest.
 - **Lockfile** — `spovishun-skills.lock.yaml`, committed in consumer repo, pins installed versions for reproducibility.
 

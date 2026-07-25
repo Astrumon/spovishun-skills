@@ -1,0 +1,26 @@
+id: kmp-multiplatform-specialist
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Kotlin Multiplatform build and platform layer — source-set hierarchy, expect/actual placement, target configuration, KMP Gradle DSL with version catalog, Compose Resources, and per-target HTTP engines (OkHttp/Darwin/CIO). Delegates language-level Kotlin and Koin questions to other skills.
+provides:
+  - KMP source set and target configuration
+  - expect/actual guidance
+triggers:
+  en:
+    - "expect/actual"
+    - "commonMain"
+    - "androidMain"
+    - "iosMain"
+    - "source set"
+    - "KMP target"
+    - "Compose Resources"
+    - "add iOS target"
+  uk:
+    - "експект актуал"
+    - "сорс сет"
+    - "спільний код"
+    - "додати iOS таргет"
+    - "мультиплатформа"

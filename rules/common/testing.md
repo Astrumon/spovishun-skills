@@ -6,6 +6,10 @@
 - Tests are first-class code — same quality standards as production code
 
 ## Stack (Kotlin)
+> Kotlin Multiplatform projects: this section does **not** apply — JUnit5 and MockK are JVM-only and
+> break `commonTest` once a native target exists. See `kmp/testing.md` for the per-source-set stack.
+> Everything else on this page still applies.
+
 - Unit tests: JUnit5 + MockK
 - Coroutine tests: `runTest {}` from `kotlinx-coroutines-test`
 - Mocking: `mockk<Dependency>()`, `coEvery`, `coVerify`

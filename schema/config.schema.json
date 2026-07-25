@@ -23,7 +23,8 @@
         "postgres": { "type": "boolean" },
         "telegram": { "type": "boolean" },
         "notion":   { "type": "boolean" },
-        "docker":   { "type": "boolean" }
+        "docker":   { "type": "boolean" },
+        "kmp":      { "type": "boolean" }
       },
       "unevaluatedProperties": false
     },
@@ -70,6 +71,30 @@
     }
   },
   "allOf": [
+    {
+      "$comment": "A KMP project is by definition a Kotlin project — kmp: true without kotlin: true would silently drop every kotlin-flagged artifact the KMP track builds on.",
+      "if": {
+        "type": "object",
+        "properties": {
+          "stack": {
+            "type": "object",
+            "properties": { "kmp": { "const": true } },
+            "required": ["kmp"]
+          }
+        },
+        "required": ["stack"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "stack": {
+            "type": "object",
+            "properties": { "kotlin": { "const": true } },
+            "required": ["kotlin"]
+          }
+        }
+      }
+    },
     {
       "if": {
         "type": "object",

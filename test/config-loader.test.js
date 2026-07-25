@@ -48,6 +48,20 @@ test('fail: malformed notion.categories ID is rejected', () => {
   assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
 });
 
+test('happy: stack.kmp with kotlin passes validation', () => {
+  const cfg = baseNotionConfig();
+  cfg.stack.kotlin = true;
+  cfg.stack.kmp = true;
+  assert.doesNotThrow(() => validateConfig(cfg));
+});
+
+test('fail: stack.kmp without stack.kotlin is rejected', () => {
+  const cfg = baseNotionConfig();
+  cfg.stack.kotlin = false;
+  cfg.stack.kmp = true;
+  assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
+});
+
 test('happy: minimal config (all stack=false, no notion section) loads ok', () => {
   const cfg = loadConfig(fix('valid-minimal-no-notion.yaml'));
   assert.equal(cfg.project.name, 'MinimalProject');

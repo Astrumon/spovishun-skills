@@ -1,0 +1,15 @@
+project:
+  name: "FixtureKmpProject"
+  language: "uk"
+
+stack:
+  kotlin: true
+  postgres: false
+  telegram: false
+  notion: false
+  kmp: true
+
+git:
+  branch_prefix: "feature/"
+  main_branch: "main"
+  dev_branch: "develop"

@@ -149,7 +149,7 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
   // installHooks returns {} when there are no hooks to merge, so this single
   // call also guarantees settings.json exists.
   patchSettings(claudeDir, installHooks(pkgRoot, claudeDir, warn));
-  installRules(pkgRoot, claudeDir, configMap);
+  installRules(pkgRoot, claudeDir, configMap, config.stack ?? {});
   installScripts(pkgRoot, claudeDir, config);
 
   return lockEntries;
@@ -245,9 +245,12 @@ function installHooks(pkgRoot, claudeDir, warn) {
  * Renders all .md rule files from rules/ into .claude/rules/, preserving subdirectory
  * structure. Rule bodies support Mustache placeholders (resolved from the consumer config),
  * mirroring the codex and windsurf adapters — never copied verbatim.
+ *
+ * Groups named after a stack flag (`kotlin/`, `kmp/`) are gated on that flag by
+ * collectRules; `common/` always ships.
  */
-function installRules(pkgRoot, claudeDir, configMap) {
-  for (const rule of collectRules(pkgRoot)) {
+function installRules(pkgRoot, claudeDir, configMap, stackFlags) {
+  for (const rule of collectRules(pkgRoot, stackFlags)) {
     const destPath = join(claudeDir, 'rules', ...rule.id.split('/')) + '.md';
     mkdirSync(dirname(destPath), { recursive: true });
     // Rules carry no manifest, so every UPPER_SNAKE_CASE token must resolve from config.

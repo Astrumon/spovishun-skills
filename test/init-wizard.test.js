@@ -79,6 +79,27 @@ test('happy path: writes valid config.yaml to cwd', async () => {
   assert.equal(parsed.git.branch_prefix, 'feature/test');
 });
 
+test('kmp answer is written to stack.kmp', async () => {
+  const cwd = makeTmpDir();
+  const answers = { ...happyAnswers, stack_kotlin: true, stack_kmp: true };
+  await runInit({ cwd, prompter: makePrompter(answers), out: silentOut() });
+
+  const parsed = parseYaml(readFileSync(join(cwd, 'spovishun-skills.config.yaml'), 'utf8'));
+  assert.equal(parsed.stack.kotlin, true);
+  assert.equal(parsed.stack.kmp, true);
+});
+
+test('kmp question is skipped for a non-Kotlin project and stack.kmp stays false', async () => {
+  const cwd = makeTmpDir();
+  // stack_kmp is present in the answers but the prompter drops it because the
+  // question's `when` guard is false — mirrors inquirer's real behaviour.
+  const answers = { ...happyAnswers, stack_kotlin: false, stack_kmp: true };
+  await runInit({ cwd, prompter: makePrompter(answers), out: silentOut() });
+
+  const parsed = parseYaml(readFileSync(join(cwd, 'spovishun-skills.config.yaml'), 'utf8'));
+  assert.equal(parsed.stack.kmp, false);
+});
+
 test('notion enabled: config includes notion section', async () => {
   const cwd = makeTmpDir();
   await runInit({ cwd, prompter: makePrompter(notionAnswers), out: silentOut() });

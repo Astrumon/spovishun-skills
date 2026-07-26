@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] — 2026-07-26
+
+### Added
+
+- **Gradle build best practices (#144)**, shipped as two complementary artifacts on the
+  same split as ktlint/detekt: a short always-active rule that prevents violations while
+  build files are written, and a user-invocable skill that audits a build already written.
+- **`rules/kotlin/gradle-build.md`** (gated on `stack.kotlin`) — the ten practices as
+  `Don't → Do → why`: Kotlin DSL only, wrapper on the latest minor via
+  `./gradlew wrapper` (never a hand-edited `distributionUrl`), plugins through `plugins {}`
+  instead of `buildscript {}` + `apply()`, no explicit `kotlin-stdlib`, every version in
+  `gradle/libs.versions.toml`, repositories declared once in `settings.gradle.kts` under
+  `dependencyResolutionManagement` with `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, real
+  modules over extra `srcDir(...)` entries, convention plugins in a `build-logic` included
+  build rather than `subprojects {}`, all three of
+  `org.gradle.configuration-cache` / `caching` / `parallel`, and
+  `gradle/actions/wrapper-validation` in CI. Deliberately kept to 4.9 KB with single-line
+  code spans so it survives both adapter size limits intact.
+- **`gradle-build-auditor` skill** (`requires: [kotlin]`, user-invocable via
+  `/gradle-build-auditor`) — discovers the whole build surface, evaluates all ten practices
+  across modules rather than file-by-file, reports a
+  `practice | verdict | file:line | why` table, then proposes diffs and applies them **only**
+  on explicit confirmation, verifying with `./gradlew help --configuration-cache`. The
+  wrapper-version check resolves `services.gradle.org/versions/current` at run time and
+  degrades to `cannot verify — pinned version is X` on any network failure instead of
+  aborting the audit — the model must never answer that one from memory.
+- **`references/gradle-best-practices.md`** — the full Don't/Do code for all ten practices,
+  including configuration-cache-safe task authoring, loaded on demand at the fix step only.
+
+### Changed
+
+- **`kotlin-specialist` 2.1.0 → 2.2.0.** `references/gradle-dsl.md` no longer duplicates the
+  new rule: the version-catalog, dependency-declaration and "Rules" sections are gone, and
+  what remains (compiler options, custom tasks, extra test source sets) is now generic
+  instead of hardcoding Spovishun's Exposed / Koin / telegrambots / Kotlin 2.3.0 into a
+  portable package. Its Decision Table row was split — build *structure* now routes to the
+  rule and the auditor, build *script authoring* stays in the reference.
+
 ## [1.14.0] — 2026-07-25
 
 ### Added

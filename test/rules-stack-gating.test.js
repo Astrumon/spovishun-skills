@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { collectRules } from '../lib/rules-loader.js';
 import { STACK_FLAGS } from '../lib/stack-filter.js';
+import { CHAR_LIMIT } from '../adapters/windsurf/index.js';
+
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * Builds a throwaway package root whose rules/ tree covers every case the gate
@@ -75,4 +79,37 @@ test('kmp is a known stack flag', () => {
 test('missing rules dir returns an empty list', () => {
   const empty = mkdtempSync(join(tmpdir(), 'rules-gating-empty-'));
   assert.deepEqual(collectRules(empty, { kmp: true }), []);
+});
+
+// The tests above use a synthetic tree; these run against the real rules/ that
+// ships in the package, so a misplaced file is caught here and not by a consumer.
+
+test('the shipped gradle-build rule is gated on stack.kotlin', () => {
+  assert.ok(
+    ids(PKG_ROOT, { kotlin: true }).includes('kotlin/gradle-build'),
+    'kotlin: true must ship rules/kotlin/gradle-build.md'
+  );
+  assert.ok(
+    !ids(PKG_ROOT, {}).includes('kotlin/gradle-build'),
+    'no flags must not ship a kotlin-gated rule'
+  );
+  assert.ok(
+    !ids(PKG_ROOT, { kmp: true }).includes('kotlin/gradle-build'),
+    'kmp alone must not pull in the kotlin group'
+  );
+});
+
+test('gradle-build fits in one windsurf file', () => {
+  // Past CHAR_LIMIT the windsurf adapter splits a rule into `-part-N.md`
+  // fragments that are then read independently. This rule is deliberately terse
+  // to stay whole — the long-form Don't/Do code lives in
+  // skills/gradle-build-auditor/references/gradle-best-practices.md instead.
+  // Scoped to this rule on purpose: rules/kmp/architecture.md already exceeds
+  // the threshold and is split today, which is a separate pre-existing issue.
+  const rule = collectRules(PKG_ROOT, { kotlin: true }).find((r) => r.id === 'kotlin/gradle-build');
+  assert.ok(rule, 'rules/kotlin/gradle-build.md must exist');
+  assert.ok(
+    rule.body.length <= CHAR_LIMIT,
+    `rules/kotlin/gradle-build.md is ${rule.body.length} chars — over the ${CHAR_LIMIT} windsurf split threshold`
+  );
 });

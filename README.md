@@ -12,10 +12,10 @@ One canonical source. Multiple AI assistants. Configurable per project.
 
 A single `npx` command installs a curated set of:
 
-- **40 skills** — task decomposition, code review, Notion workflows, Kotlin/Postgres helpers, KMP feature scaffolding, etc.
+- **41 skills** — task decomposition, code review, Notion workflows, Kotlin/Postgres helpers, KMP feature scaffolding, Gradle build audits, etc.
 - **9 agents** — specialized reviewers (architecture, refactor, docs, …)
 - **6 hooks** *(Claude only)* — session start/end, learning capture, Notion task injection
-- **12 rules** — design principles, git workflow, security, testing, Kotlin style, plus a Kotlin/Compose Multiplatform set (architecture + MVI, feature structure, navigation, design system, localization, testing)
+- **13 rules** — design principles, git workflow, security, testing, Kotlin style, Gradle build practices, plus a Kotlin/Compose Multiplatform set (architecture + MVI, feature structure, navigation, design system, localization, testing)
 
 Artifacts are filtered by your stack flags (kotlin / postgres / telegram / notion / docker / kmp) — you get only what's relevant to your project.
 

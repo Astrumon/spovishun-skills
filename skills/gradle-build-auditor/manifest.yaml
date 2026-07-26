@@ -1,0 +1,20 @@
+id: gradle-build-auditor
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+user_invocable: true
+description: Audits a whole Gradle build against the 10 Gradle best practices — Kotlin DSL, wrapper version, plugins block, version catalog, central repositories, modularization, convention plugins, caches and CI wrapper validation. Reports a verdict table; applies fixes only on confirmation.
+provides:
+  - Gradle build audit
+triggers:
+  en:
+    - "review my Gradle build for best practices"
+    - "check my build for best practices"
+    - "audit build logic"
+    - "lint my build logic"
+    - "audit my Gradle build"
+  uk:
+    - "перевір gradle білд"
+    - "аудит білду"
+    - "перевір build.gradle"

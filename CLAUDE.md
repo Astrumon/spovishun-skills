@@ -159,6 +159,7 @@ Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory
 | Security | `rules/common/security.md` | always | shipped |
 | Testing | `rules/common/testing.md` | always | shipped |
 | Kotlin style | `rules/kotlin/kotlin-style.md` | `stack.kotlin` | shipped |
+| Gradle build (10 practices; deep audit via `gradle-build-auditor`) | `rules/kotlin/gradle-build.md` | `stack.kotlin` | shipped |
 | KMP architecture (layers, MVI contract, Compose stability) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
 | KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
 | KMP navigation | `rules/kmp/navigation.md` | `stack.kmp` | shipped |

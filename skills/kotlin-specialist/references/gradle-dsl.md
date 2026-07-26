@@ -1,42 +1,13 @@
-# Gradle Kotlin DSL & Version Catalog — Spovishun
+# Gradle Kotlin DSL — build script authoring
 
-## Version catalog structure (libs.versions.toml)
+Scope: writing Kotlin DSL inside a `build.gradle.kts` — compiler options, custom tasks, extra source
+sets.
 
-```toml
-[versions]
-kotlin        = "2.3.0"
-coroutines    = "1.9.0"
-exposed       = "0.55.0"
-flyway        = "10.0.0"
-koin          = "3.5.0"
-telegrambots  = "7.0.0"
+Build *structure* is not covered here and lives in one place:
 
-[libraries]
-kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
-exposed-core            = { group = "org.jetbrains.exposed", name = "exposed-core", version.ref = "exposed" }
-exposed-jdbc            = { group = "org.jetbrains.exposed", name = "exposed-jdbc", version.ref = "exposed" }
-koin-core               = { group = "io.insert-koin", name = "koin-core", version.ref = "koin" }
-telegrambots-longpolling = { group = "org.telegram", name = "telegrambots-longpolling", version.ref = "telegrambots" }
-
-[plugins]
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-```
-
-## build.gradle.kts — adding a dependency
-
-```kotlin
-dependencies {
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.exposed.core)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.koin.core)
-
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.mockk)
-}
-```
-
-Access catalog entries via `libs.<group>.<name>` — replace `.` with `-` in the TOML key.
+- `.claude/rules/kotlin/gradle-build.md` — version catalog, dependency declaration, repositories,
+  wrapper, plugins block, convention plugins, cache flags, CI wrapper validation
+- `/gradle-build-auditor` — deep audit of an existing build against all ten of those practices
 
 ## Kotlin compiler options
 
@@ -50,21 +21,52 @@ kotlin {
 }
 ```
 
+`jvmToolchain` makes Gradle provision the JDK, so the build does not depend on whichever JDK the
+developer happens to have on `PATH`. Set `jvmTarget` as well when the toolchain and the bytecode
+target must differ.
+
+Opt-ins belong in `freeCompilerArgs` at the module level rather than as `@OptIn` on every call site —
+but only for APIs the whole module genuinely relies on.
+
 ## Custom Gradle task
 
 ```kotlin
 tasks.register("generateMigration") {
     group = "database"
-    description = "Interactively create a new Flyway migration file"
+    description = "Creates a new timestamped migration file"
     doLast {
-        // interactive prompt logic
+        // generation logic
     }
 }
 ```
 
-Run with: `./gradlew generateMigration`
+Run with `./gradlew generateMigration`.
 
-## Test source sets
+Use `register` (lazy), not `create` (eager) — an eagerly created task is configured on every build,
+including builds that never run it.
+
+For anything with real inputs and outputs, write a typed task class instead. Without declared
+`@Input` / `@OutputFile` properties the task can never be up-to-date or cached, and it breaks the
+configuration cache:
+
+```kotlin
+abstract class GenerateBuildInfo : DefaultTask() {
+    @get:Input abstract val version: Property<String>
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun generate() = outputFile.get().asFile.writeText("version=${version.get()}")
+}
+
+tasks.register<GenerateBuildInfo>("generateBuildInfo") {
+    version.set(providers.provider { project.version.toString() })
+    outputFile.set(layout.buildDirectory.file("generated/build-info.properties"))
+}
+```
+
+## Extra test source sets
+
+An `integrationTest` source set separate from `test`, so slow tests can be run independently:
 
 ```kotlin
 sourceSets {
@@ -81,12 +83,18 @@ tasks.register<Test>("integrationTest") {
     group = "verification"
     testClassesDirs = sourceSets["integrationTest"].output.classesDirs
     classpath = sourceSets["integrationTest"].runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter(tasks.test)
 }
 ```
 
-## Rules
+`shouldRunAfter` orders the two without creating a dependency, so `integrationTest` still runs when
+unit tests are skipped.
 
-- All dependency versions live in `libs.versions.toml` — never hardcode a version string in `build.gradle.kts`.
-- Add new libraries via catalog first; reference via `libs.*` accessor.
-- Keep plugin declarations in the `[plugins]` block with version refs.
-- Target: Kotlin 2.3.0, JVM 21.
+Extra source sets are for extra *test* dimensions only. Do not use `srcDir` to bolt production
+layers onto a single project — that is what modules are for (see the rule, practice 7).
+
+## JVM toolchain vs. multiplatform
+
+The `kotlin { }` block above is the JVM plugin's. On a Kotlin Multiplatform project the same settings
+are configured per target — see `kmp-multiplatform-specialist`.

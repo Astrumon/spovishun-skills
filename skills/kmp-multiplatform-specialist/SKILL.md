@@ -4,7 +4,13 @@ The build and platform layer of a Kotlin Multiplatform / Compose Multiplatform p
 `expect`/`actual`, targets, the KMP Gradle DSL, Compose Resources, and per-platform engines.
 
 Architecture, layering and the MVI contract live in `.claude/rules/kmp/architecture.md` — this skill
-implements against those rules, it does not restate them.
+implements against those rules, it does not restate them. That rule is deliberately free of Kotlin;
+the code it describes is here:
+
+| If you need… | Read |
+|---|---|
+| The `MviViewModel` base class, a screen written against it, the typed-error `load()` helper, the `composeCompiler { }` and `stability.txt` wiring | `references/mvi-and-stability.md` |
+| The normative architecture, MVI and Compose-stability rules | `.claude/rules/kmp/architecture.md` |
 
 ## Scope
 
@@ -109,6 +115,7 @@ module cannot read another module's `Res`. Placement rules are in
 - Do NOT put an `expect` in `domain`, or an `actual` in a different layer than its `expect`.
 - Do NOT put MockK or JUnit5 in `commonTest`.
 - Do NOT restate architecture or MVI rules — reference `.claude/rules/kmp/architecture.md`.
+- Do NOT load `references/mvi-and-stability.md` during discovery — only when writing that code.
 - Do NOT edit generated artifacts or `build/` output.
 
 ## Error handling

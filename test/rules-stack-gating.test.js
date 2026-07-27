@@ -99,17 +99,19 @@ test('the shipped gradle-build rule is gated on stack.kotlin', () => {
   );
 });
 
-test('gradle-build fits in one windsurf file', () => {
+test('every shipped rule fits in one windsurf file', () => {
   // Past CHAR_LIMIT the windsurf adapter splits a rule into `-part-N.md`
-  // fragments that are then read independently. This rule is deliberately terse
-  // to stay whole — the long-form Don't/Do code lives in
-  // skills/gradle-build-auditor/references/gradle-best-practices.md instead.
-  // Scoped to this rule on purpose: rules/kmp/architecture.md already exceeds
-  // the threshold and is split today, which is a separate pre-existing issue.
-  const rule = collectRules(PKG_ROOT, { kotlin: true }).find((r) => r.id === 'kotlin/gradle-build');
-  assert.ok(rule, 'rules/kotlin/gradle-build.md must exist');
-  assert.ok(
-    rule.body.length <= CHAR_LIMIT,
-    `rules/kotlin/gradle-build.md is ${rule.body.length} chars — over the ${CHAR_LIMIT} windsurf split threshold`
-  );
+  // fragments that are then read as independent rules, so a reader never sees
+  // the rule whole. Rules stay terse on purpose — long-form code belongs in a
+  // skill's references/, not in a rule.
+  const allFlags = Object.fromEntries(STACK_FLAGS.map((flag) => [flag, true]));
+  const rules = collectRules(PKG_ROOT, allFlags);
+  assert.ok(rules.length > 0, 'no rules collected — the gate or the shipped rules/ tree is broken');
+  for (const rule of rules) {
+    assert.ok(
+      rule.body.length <= CHAR_LIMIT,
+      `rules/${rule.id}.md is ${rule.body.length} chars — ` +
+        `${rule.body.length - CHAR_LIMIT} over the ${CHAR_LIMIT} windsurf split threshold`
+    );
+  }
 });

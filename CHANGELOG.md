@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] — 2026-07-27
+
+### Changed
+
+- **`rules/kmp/architecture.md` trimmed from 7 398 to 4 934 characters (#150)** so it fits in a
+  single Windsurf rule file. Past `CHAR_LIMIT = 6000` the Windsurf adapter split it into
+  `kmp--architecture-part-1.md` / `-part-2.md`, which Windsurf then read as two independent
+  rules — the MVI contract, error handling and Compose stability were severed from the layer
+  rules that frame them. The rule is now normative and free of Kotlin, matching the shape
+  `rules/kotlin/gradle-build.md` already uses. Three cuts: the `MviViewModel<S, I, E>` base class,
+  the `composeCompiler { }` / `stability.txt` wiring, and the typed-error `load()` helper all moved
+  to the skill; the `Source sets and expect/actual` section was removed as a near-verbatim duplicate
+  of `kmp-multiplatform-specialist` (source sets and `expect`/`actual` are the build layer, which
+  the skill owns). No guidance was lost — every normative statement stayed, as prose.
+- **`test/rules-stack-gating.test.js`** — `gradle-build fits in one windsurf file` became
+  `every shipped rule fits in one windsurf file`, looping over `collectRules()` with every
+  `STACK_FLAGS` entry enabled. The old test was deliberately narrowed to one rule in #144 because
+  `kmp/architecture.md` already exceeded the threshold; that carve-out and its comment are gone.
+  Flags are derived from `STACK_FLAGS`, so a future `rules/<flag>/` group is covered automatically.
+
+### Added
+
+- **`skills/kmp-multiplatform-specialist/references/mvi-and-stability.md`** — the first `references/`
+  file for this skill: the full `MviViewModel<S, I, E>` base class, a screen written against it
+  (Intent / UiState / Effect / ViewModel), the `load()` helper that re-throws `CancellationException`
+  before mapping an expected failure to a typed state, the `composeCompiler { }` block and
+  `stability.txt`, plus how to read the generated `*-composables.txt` reports. Skill bumped to
+  `1.1.0`.
+
 ## [1.15.0] — 2026-07-26
 
 ### Added

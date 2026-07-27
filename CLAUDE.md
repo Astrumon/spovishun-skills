@@ -151,6 +151,8 @@ The `rules/` directory at the repo root (NOT `.claude/rules/`) is **data**: cano
 
 Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory name (see Key Patterns): put a rule in `rules/<stack-flag>/` to gate it, or in `rules/common/` to ship it to everyone.
 
+Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it the adapter splits the file into `-part-N.md` fragments that Windsurf then reads as independent rules. Enforced by `every shipped rule fits in one windsurf file` in `test/rules-stack-gating.test.js`. Keep rules normative and prose-only; long-form code belongs in a skill's `references/` (`kotlin/gradle-build.md` → `gradle-build-auditor`, `kmp/architecture.md` → `kmp-multiplatform-specialist`).
+
 | Rule | Source file | Gate | Status |
 |---|---|---|---|
 | Design principles | `rules/common/design-principles.md` | always | shipped |
@@ -160,7 +162,7 @@ Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory
 | Testing | `rules/common/testing.md` | always | shipped |
 | Kotlin style | `rules/kotlin/kotlin-style.md` | `stack.kotlin` | shipped |
 | Gradle build (10 practices; deep audit via `gradle-build-auditor`) | `rules/kotlin/gradle-build.md` | `stack.kotlin` | shipped |
-| KMP architecture (layers, MVI contract, Compose stability) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
+| KMP architecture (layers, MVI contract, Compose stability; Kotlin-free — code lives in `kmp-multiplatform-specialist/references/mvi-and-stability.md`) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
 | KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
 | KMP navigation | `rules/kmp/navigation.md` | `stack.kmp` | shipped |
 | KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |

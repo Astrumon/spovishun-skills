@@ -557,3 +557,171 @@ test('migration: pre-marker install backfills the marker without rewriting the b
   assert.equal(stripMarker(after), preMarker, 'body content unchanged — no spurious overwrite');
   assert.doesNotMatch(warn.text(), /local edits|owner-authored/, 'no false conflict/collision warnings');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rules: lockfile tracking + ownership
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RULE_PATH = (consumer, id) => join(consumer, '.claude', 'rules', ...id.split('/')) + '.md';
+
+/**
+ * A package root carrying only a rules/ tree: one ungated group and one gated
+ * on stack.kmp. Artifacts still come from FIXTURES_SOURCE, so these tests never
+ * depend on the rule bodies the package actually ships.
+ */
+function makeRulesPkg() {
+  const root = mkdtempSync(join(tmpdir(), 'rules-pkg-'));
+  mkdirSync(join(root, 'rules', 'common'), { recursive: true });
+  mkdirSync(join(root, 'rules', 'kmp'), { recursive: true });
+  writeFileSync(join(root, 'rules', 'common', 'style.md'), '# Style\n{{PROJECT_NAME}} style rule.\n', 'utf8');
+  writeFileSync(join(root, 'rules', 'kmp', 'architecture.md'), '# KMP architecture\nLayers.\n', 'utf8');
+  return root;
+}
+
+/** Installs against a rules-only pkgRoot and pins the result in the lockfile. */
+async function installRulesFixture(consumer, pkg, configName) {
+  copyConfig(consumer, configName);
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  const warn = captureWarn();
+  const lockEntries = await installClaude({ consumerCwd: consumer, pkgRoot: pkg, config, artifacts, warn });
+  writeLockfile(join(consumer, LOCKFILE_NAME), { pluginVersion: '1.0.0', target: 'claude', artifacts: lockEntries, now: FIXED_NOW });
+  return { config, artifacts, lockEntries, warn };
+}
+
+test('rule lock entries cover the active groups only', async () => {
+  const pkg = makeRulesPkg();
+
+  const kmpConsumer = makeConsumerDir();
+  const kmp = await installRulesFixture(kmpConsumer, pkg, 'install-config-kmp.yaml');
+  const kmpIds = kmp.lockEntries.filter((e) => e.kind === 'rule').map((e) => e.id);
+  assert.deepEqual(kmpIds.sort(), ['common/style', 'kmp/architecture']);
+
+  const plainConsumer = makeConsumerDir();
+  const plain = await installRulesFixture(plainConsumer, pkg, 'install-config-no-notion.yaml');
+  const plainIds = plain.lockEntries.filter((e) => e.kind === 'rule').map((e) => e.id);
+  assert.deepEqual(plainIds, ['common/style'], 'a gated group must not be locked when its flag is off');
+});
+
+test('rule lock entries carry the unversioned sentinel and a checksum of the rendered body', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  const { lockEntries } = await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  const entry = lockEntries.find((e) => e.id === 'common/style');
+  assert.equal(entry.kind, 'rule');
+  assert.equal(entry.version, '0.0.0', 'rules are unversioned data — version is a sentinel');
+  assert.equal(
+    entry.checksum,
+    sha256(readFileSync(RULE_PATH(consumer, 'common/style'), 'utf8')),
+    'checksum must cover the rendered body exactly as written to disk'
+  );
+});
+
+test('turning a stack flag off removes the untouched rule and drops its lock entry', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+  assert.ok(existsSync(RULE_PATH(consumer, 'kmp/architecture')));
+
+  const { lockEntries, warn } = await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  assert.ok(!existsSync(RULE_PATH(consumer, 'kmp/architecture')), 'de-selected rule file should be removed');
+  assert.ok(!existsSync(join(consumer, '.claude', 'rules', 'kmp')), 'the emptied group dir should be pruned');
+  assert.ok(!lockEntries.some((e) => e.id === 'kmp/architecture'), 'entry should be dropped');
+  assert.match(warn.text(), /Removed stale rule file/);
+  assert.ok(existsSync(RULE_PATH(consumer, 'common/style')), 'ungated rules stay');
+});
+
+test('turning a stack flag off leaves a locally edited rule untouched', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+
+  const edited = '# KMP architecture\nMY OWN NOTES\n';
+  writeFileSync(RULE_PATH(consumer, 'kmp/architecture'), edited, 'utf8');
+
+  const { warn } = await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  assert.equal(readFileSync(RULE_PATH(consumer, 'kmp/architecture'), 'utf8'), edited, 'owner edit preserved');
+  assert.match(warn.text(), /kmp\/architecture: no longer selected by the active stack but locally edited/);
+});
+
+test('install does not overwrite a locally edited rule; --force does', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  const { config, artifacts } = await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  const edited = '# Style\nMY OWN RULE\n';
+  writeFileSync(RULE_PATH(consumer, 'common/style'), edited, 'utf8');
+
+  const warn = captureWarn();
+  const entries = await installClaude({ consumerCwd: consumer, pkgRoot: pkg, config, artifacts, warn });
+  assert.equal(readFileSync(RULE_PATH(consumer, 'common/style'), 'utf8'), edited, 'edit preserved');
+  assert.match(warn.text(), /rule:common\/style: local edits present/);
+  assert.ok(entries.some((e) => e.id === 'common/style'), 'the id stays tracked while skipped');
+
+  await installClaude({ consumerCwd: consumer, pkgRoot: pkg, config, artifacts, force: true, warn: { write: () => {} } });
+  assert.ok(
+    !readFileSync(RULE_PATH(consumer, 'common/style'), 'utf8').includes('MY OWN RULE'),
+    'edit reset by --force'
+  );
+});
+
+test('an owner-authored file at a rule id is never overwritten and is not locked', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+
+  const ownerBody = '# My own style rule\nhand-authored\n';
+  mkdirSync(join(consumer, '.claude', 'rules', 'common'), { recursive: true });
+  writeFileSync(RULE_PATH(consumer, 'common/style'), ownerBody, 'utf8');
+
+  const warn = captureWarn();
+  const entries = await installClaude({ consumerCwd: consumer, pkgRoot: pkg, config, artifacts, force: true, warn });
+
+  assert.equal(readFileSync(RULE_PATH(consumer, 'common/style'), 'utf8'), ownerBody, 'owner file untouched even with --force');
+  assert.ok(!entries.some((e) => e.id === 'common/style'), 'collision id not added to lockfile');
+  assert.match(warn.text(), /rule:common\/style: owner-authored file occupies this id/);
+});
+
+test('migration: rules already on disk with no rule lock entries are adopted silently', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  const { config, artifacts, lockEntries } = await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+
+  // A ≤1.15.0 consumer: rule files on disk, but the lockfile knows nothing about them.
+  writeLockfile(join(consumer, LOCKFILE_NAME), {
+    pluginVersion: '1.15.0',
+    target: 'claude',
+    artifacts: lockEntries.filter((e) => e.kind !== 'rule'),
+    now: FIXED_NOW,
+  });
+
+  const warn = captureWarn();
+  const entries = await installClaude({ consumerCwd: consumer, pkgRoot: pkg, config, artifacts, warn });
+
+  assert.deepEqual(
+    entries.filter((e) => e.kind === 'rule').map((e) => e.id).sort(),
+    ['common/style', 'kmp/architecture'],
+    'existing rules are adopted into the lockfile'
+  );
+  assert.equal(warn.text(), '', 'adoption must be silent — no anomaly wave on upgrade');
+  assert.ok(existsSync(RULE_PATH(consumer, 'kmp/architecture')), 'no file removed during migration');
+});
+
+test('a user-authored file under .claude/rules/ is never removed', async () => {
+  const pkg = makeRulesPkg();
+  const consumer = makeConsumerDir();
+  await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+
+  const minePath = join(consumer, '.claude', 'rules', 'mine', 'notes.md');
+  mkdirSync(dirname(minePath), { recursive: true });
+  writeFileSync(minePath, '# My notes\n', 'utf8');
+
+  await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  assert.ok(existsSync(minePath), 'files at ids the plugin never shipped are not candidates for removal');
+});

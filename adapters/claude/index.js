@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
-import { collectRules } from '../../lib/rules-loader.js';
-import { filterByStack } from '../../lib/stack-filter.js';
+import { collectRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
+import { filterByStack, STACK_FLAGS } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { sha256 } from '../../lib/checksum.js';
@@ -149,7 +149,19 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
   // installHooks returns {} when there are no hooks to merge, so this single
   // call also guarantees settings.json exists.
   patchSettings(claudeDir, installHooks(pkgRoot, claudeDir, warn));
-  installRules(pkgRoot, claudeDir, configMap, config.stack ?? {});
+  lockEntries.push(
+    ...installRules({
+      pkgRoot,
+      consumerCwd,
+      claudeDir,
+      configMap,
+      stackFlags: config.stack ?? {},
+      lockEntryMap,
+      installed,
+      force,
+      warn,
+    })
+  );
   installScripts(pkgRoot, claudeDir, config);
 
   return lockEntries;
@@ -248,14 +260,141 @@ function installHooks(pkgRoot, claudeDir, warn) {
  *
  * Groups named after a stack flag (`kotlin/`, `kmp/`) are gated on that flag by
  * collectRules; `common/` always ships.
+ *
+ * Rules run through the same ownership model as skills and agents, with one
+ * difference: they carry no YAML frontmatter, so there is no `x-spovishun`
+ * provenance marker to consult. Ownership is decided by CHECKSUM EQUALITY
+ * ALONE — see ownsRule() below.
+ *
+ * @returns {Array<{kind, id, version, checksum}>} lock entries for the rules we own
  */
-function installRules(pkgRoot, claudeDir, configMap, stackFlags) {
-  for (const rule of collectRules(pkgRoot, stackFlags)) {
-    const destPath = join(claudeDir, 'rules', ...rule.id.split('/')) + '.md';
-    mkdirSync(dirname(destPath), { recursive: true });
-    // Rules carry no manifest, so every UPPER_SNAKE_CASE token must resolve from config.
-    const rendered = renderTemplate(rule.body, { configMap, manifestPlaceholders: [] });
-    writeFileSync(destPath, rendered, 'utf8');
+function installRules({ pkgRoot, consumerCwd, claudeDir, configMap, stackFlags, lockEntryMap, installed, force, warn }) {
+  const rules = collectRules(pkgRoot, stackFlags);
+  const entries = [];
+
+  for (const rule of rules) {
+    const key = `rule:${rule.id}`;
+    const rendered = renderRule(rule, configMap);
+    const freshEntry = ruleLockEntry(rule, configMap);
+    const checksum = freshEntry.checksum;
+
+    const lockEntry = lockEntryMap.get(key) ?? null;
+    const installedEntry = installed.get(key) ?? null;
+    const onDiskChecksum = installedEntry ? installedEntry.checksum : null;
+
+    const action = onDiskChecksum === checksum
+      // The file already holds exactly what we would write — whether we put it
+      // there, the owner hand-applied the same change, or this is a pre-1.16
+      // install being adopted. Short-circuit so an adopted rule stays silent
+      // and a hand-applied upstream change is not reported as a CONFLICT.
+      ? ACTIONS.UNCHANGED
+      : classifyArtifact({
+          upstream: { version: RULE_LOCK_VERSION, checksum },
+          lockEntry,
+          onDiskChecksum,
+          onDiskOwned: lockEntry != null,
+        });
+
+    switch (action) {
+      case ACTIONS.NEW:
+      case ACTIONS.UNCHANGED:
+      case ACTIONS.AUTO_APPLY:
+      case ACTIONS.MISSING_ON_DISK:
+        writeRule(claudeDir, rule.id, rendered);
+        entries.push(freshEntry);
+        break;
+
+      case ACTIONS.LOCAL_ONLY:
+      case ACTIONS.CONFLICT:
+        if (force) {
+          writeRule(claudeDir, rule.id, rendered);
+          entries.push(freshEntry);
+        } else {
+          warn.write(`${key}: local edits present — skipped (run \`install --force\` to overwrite).\n`);
+          entries.push(lockEntry); // keep the id tracked
+        }
+        break;
+
+      case ACTIONS.COLLISION:
+        // No lock entry and the file differs from our render: an owner-authored
+        // rule occupies this id. Sacred even under --force, same as skills.
+        warn.write(`${key}: owner-authored file occupies this id — left untouched, not added to lockfile.\n`);
+        break;
+    }
+  }
+
+  reconcileStaleRules({ pkgRoot, consumerCwd, claudeDir, configMap, rules, lockEntryMap, installed, warn });
+
+  return entries;
+}
+
+function writeRule(claudeDir, id, rendered) {
+  const destPath = join(claudeDir, 'rules', ...id.split('/')) + '.md';
+  mkdirSync(dirname(destPath), { recursive: true });
+  writeFileSync(destPath, rendered, 'utf8');
+}
+
+/**
+ * Deletes rule files the plugin owns but the current stack no longer selects —
+ * the case a consumer hits when flipping `kmp: true → false`.
+ *
+ * Candidate ids are plugin-known ids only, drawn from two sources:
+ *   1. `rule:` entries in the prior lockfile;
+ *   2. every rule the package ships with ALL stack flags on.
+ * (2) exists for migration: a consumer upgrading from ≤ 1.15.0 has rule files
+ * on disk and no rule lock entries at all, so a lockfile-only candidate set
+ * would strand their de-selected rules forever. Anything outside both sets is
+ * an owner-authored file in .claude/rules/ and is never a candidate.
+ *
+ * A candidate is removed only when its on-disk content matches the locked
+ * checksum or the current render — i.e. we can prove the file is ours. A
+ * locally edited rule is owner-authored and is left in place with a warning.
+ */
+function reconcileStaleRules({ pkgRoot, consumerCwd, claudeDir, configMap, rules, lockEntryMap, installed, warn }) {
+  const selected = new Set(rules.map((r) => r.id));
+
+  const allFlagsOn = Object.fromEntries(STACK_FLAGS.map((flag) => [flag, true]));
+  const knownRenders = new Map(
+    collectRules(pkgRoot, allFlagsOn).map((rule) => [rule.id, renderRule(rule, configMap)])
+  );
+
+  const candidates = new Set(knownRenders.keys());
+  for (const key of lockEntryMap.keys()) {
+    if (key.startsWith('rule:')) candidates.add(key.slice('rule:'.length));
+  }
+
+  for (const id of candidates) {
+    if (selected.has(id)) continue;
+    const installedEntry = installed.get(`rule:${id}`);
+    if (!installedEntry) continue;
+
+    const lockEntry = lockEntryMap.get(`rule:${id}`) ?? null;
+    const known = knownRenders.get(id);
+    const owned =
+      (lockEntry != null && installedEntry.checksum === lockEntry.checksum) ||
+      (known != null && installedEntry.checksum === sha256(known));
+
+    const rulePath = join(claudeDir, 'rules', ...id.split('/')) + '.md';
+    if (!owned) {
+      warn.write(`rule:${id}: no longer selected by the active stack but locally edited — left untouched.\n`);
+      continue;
+    }
+    rmSync(rulePath, { force: true });
+    warn.write(`Removed stale rule file: ${relative(consumerCwd, rulePath)}\n`);
+    pruneEmptyDirs(dirname(rulePath), join(claudeDir, 'rules'));
+  }
+}
+
+/**
+ * Removes now-empty group directories up to (but never including) stopDir, so
+ * turning `kmp` off does not leave a hollow `.claude/rules/kmp/` behind.
+ */
+function pruneEmptyDirs(dir, stopDir) {
+  let current = dir;
+  while (current !== stopDir && current.startsWith(stopDir) && existsSync(current)) {
+    if (readdirSync(current).length > 0) return;
+    rmSync(current, { recursive: true, force: true });
+    current = dirname(current);
   }
 }
 

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync } from 'node:
 import { join, relative } from 'node:path';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
-import { collectRules } from '../../lib/rules-loader.js';
+import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { sha256 } from '../../lib/checksum.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
@@ -68,12 +68,9 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
   }
 
   for (const rule of rules) {
-    const rendered = renderTemplate(rule.body, { configMap });
-    const checksum = sha256(rendered);
     const ruleId = rule.id.replace(/\//g, '--');
-
-    writeChunked(rulesDir, ruleId, rendered, written);
-    lockEntries.push({ kind: 'rule', id: rule.id, version: '0.0.0', checksum });
+    writeChunked(rulesDir, ruleId, renderRule(rule, configMap), written);
+    lockEntries.push(ruleLockEntry(rule, configMap));
   }
 
   reconcileStaleFiles(consumerCwd, rulesDir, written, warn);

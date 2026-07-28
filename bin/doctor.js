@@ -391,10 +391,14 @@ function checkSettingsJsonHooks(ctx) {
  * on disk. Checksum drift is reported as informational detail, NOT a failure —
  * local edits are a supported workflow (update classifies them LOCAL_ONLY /
  * CONFLICT); a missing file, however, means the install is broken.
+ *
+ * Rules are checked here too. They carry no YAML frontmatter, so the
+ * `x-spovishun` provenance marker does not apply to them and ownership can only
+ * be decided by checksum equality — which is exactly what this check compares.
  */
 function checkInstalledArtifacts(ctx) {
   const lockArtifacts = (ctx.lockData?.artifacts ?? []).filter((a) =>
-    ['skill', 'agent', 'template'].includes(a.kind)
+    ['skill', 'agent', 'template', 'rule'].includes(a.kind)
   );
   if (lockArtifacts.length === 0) {
     return { name: 'installed-artifacts', status: 'pass', detail: 'no artifact entries in lockfile' };
@@ -466,7 +470,11 @@ function checkOwnershipAnomalies(ctx) {
     const sep = key.indexOf(':');
     const kind = key.slice(0, sep);
     const id = key.slice(sep + 1);
-    if (kind !== 'skill' && kind !== 'agent') continue; // markers only live on these
+    // Markers only live on skills and agents. Templates and rules have no
+    // frontmatter to carry one, so orphaned-marker and renamed-folder anomalies
+    // are undetectable for them by construction — their integrity is covered by
+    // the checksum comparison in checkInstalledArtifacts instead.
+    if (kind !== 'skill' && kind !== 'agent') continue;
 
     const lockEntry = lockMap.get(key) ?? null;
     const owned = entry.hasMarker || (lockEntry != null && entry.checksum === lockEntry.checksum);

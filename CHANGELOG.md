@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] — 2026-07-28
+
+### Added
+
+- **Rules are now first-class lockfile artifacts (#148).** Every installed rule gets a
+  `kind: rule` entry in `spovishun-skills.lock.yaml` on all three targets. Codex and Windsurf
+  already emitted them; the Claude adapter wrote `.claude/rules/*.md` with no record at all, which
+  left `doctor` blind to rules and made a de-selected stack flag leave orphaned files on disk
+  forever. Rule entries carry `version: 0.0.0` — a sentinel meaning "unversioned data artifact;
+  the checksum is the identity". Deliberately not the plugin version: that would flip every rule
+  to `AUTO_APPLY` on each release even when its body is byte-identical.
+- **`doctor` checks rules.** The `installed-artifacts` check now covers `kind: rule`: a missing
+  rule file fails the check with a `sync` hint, a drifted one is annotated `locally modified`
+  (local edits are a supported workflow, same contract as skills and agents).
+- **Stale rules are removed when their group's flag goes off.** Flipping `kmp: true → false` and
+  running `install` / `sync` deletes the `rules/kmp/` files the plugin owns and prunes the emptied
+  group directory. Candidates are plugin-known ids only — prior `rule:` lock entries plus every
+  rule the package ships with all flags on. The second source is what lets a consumer upgrading
+  from an older version shed its de-selected rules instead of stranding them.
+
+### Changed
+
+- **Rules follow the ownership model (#148).** `install` no longer overwrites `.claude/rules/*.md`
+  unconditionally. Rules have no YAML frontmatter, so the `x-spovishun` provenance marker does not
+  apply and ownership falls back to checksum equality alone: a rule whose on-disk body matches
+  either the locked checksum or the current render is ours. Anything else is owner-authored —
+  `install` skips it with a warning and the stale-rule pass leaves it on disk. `--force` resets a
+  *locked* local edit; a file at an id the plugin never locked stays sacred even then. Consumers
+  upgrading from `≤ 1.16.0` have rules on disk and no `rule:` entries — those adopt silently on the
+  first `install`, because the on-disk body already equals the render.
+- **`lib/rules-loader.js`** exports `ruleLockEntry()` / `renderRule()` / `RULE_LOCK_VERSION`; all
+  three adapters build rule lock entries through it instead of repeating the render+hash
+  expression. Codex and Windsurf output is unchanged (verified byte-identical against `main`).
+- **`lib/installed-files-loader.js`** walks `.claude/rules/**.md` for the claude target, keyed
+  `rule:<id>`. Checksums are taken over the raw body, not the marker-stripped one, because rules
+  are written without a marker.
+
+`update` needed no change: it already skips `rule:` keys (rules have no manifest, so they never
+appear in the upstream artifact map) and preserves their entries — rules are regenerated wholesale
+by `install` / `sync`.
+
 ## [1.16.0] — 2026-07-27
 
 ### Changed

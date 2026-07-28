@@ -140,23 +140,28 @@ requires:
 
 An artifact installs **iff all `requires:` flags are `true`** in your `spovishun-skills.config.yaml`. Universal artifacts (no `requires:`) install for everyone.
 
-Rules carry no manifest, so their directory name is the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`kotlin/`, `kmp/`). `rules/common/` always installs.
+Rules carry no manifest, so their directory name is the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`kotlin/`, `kmp/`). `rules/common/` always installs. Turning a flag off removes the rules of that group on the next `install` / `sync` — except any you edited yourself, which are left in place with a warning.
 
 ## Reproducible installs (lockfile)
 
-After `install`, `spovishun-skills.lock.yaml` is written to your project root. It pins exact versions + checksums of every installed artifact. **Commit this file** — `sync` and `update` both rely on it.
+After `install`, `spovishun-skills.lock.yaml` is written to your project root. It pins exact versions + checksums of every installed artifact — skills, agents, templates and rules. **Commit this file** — `sync`, `update` and `doctor` all rely on it.
 
 ```yaml
-version: 1
-generated_at: "2026-05-25T17:00:00Z"
+generatedAt: "2026-05-25T17:00:00Z"
+pluginVersion: 1.16.0
 target: claude
 artifacts:
-  - id: code-reviewer
-    type: skill
+  - kind: skill
+    id: code-reviewer
     version: 1.2.0
     checksum: "sha256:…"
-  - …
+  - kind: rule
+    id: common/git-workflow
+    version: 0.0.0        # rules are unversioned data — the checksum is the identity
+    checksum: "sha256:…"
 ```
+
+`doctor` fails if a locked file is missing from disk and annotates any that drifted from its checksum — local edits are a supported workflow, not an error.
 
 ## Placeholders
 

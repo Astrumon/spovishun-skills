@@ -392,3 +392,58 @@ test('installed-artifacts: fails when a locked artifact body is missing on disk'
   assert.equal(statusOf(text, 'installed-artifacts'), 'fail');
   assert.ok(findResult(text, 'installed-artifacts').includes('skill:universal-skill'));
 });
+
+/**
+ * FIXTURES_SOURCE ships no rules/, so rule checks need a package root that
+ * carries one. Copy the fixture artifacts and add a single ungated rule.
+ */
+function makeRulesPkgRoot() {
+  const root = mkdtempSync(join(tmpdir(), 'doctor-rules-pkg-'));
+  cpSync(FIXTURES_SOURCE, root, { recursive: true });
+  mkdirSync(join(root, 'rules', 'common'), { recursive: true });
+  writeFileSync(join(root, 'rules', 'common', 'style.md'), '# Style\n{{PROJECT_NAME}} style rule.\n', 'utf8');
+  return root;
+}
+
+function installWithRules(consumer, configName) {
+  copyConfig(consumer, configName);
+  return runInstall({
+    target: 'claude',
+    cwd: consumer,
+    pkgRoot: makeRulesPkgRoot(),
+    out: { write: () => {} },
+  });
+}
+
+test('installed-artifacts: fails when a locked rule file is missing on disk', async () => {
+  const consumer = makeConsumer();
+  await installWithRules(consumer, 'install-config-no-notion.yaml');
+  writeGitignore(consumer, ['.claude/settings.local.json']);
+
+  rmSync(join(consumer, '.claude', 'rules', 'common', 'style.md'), { force: true });
+
+  const out = silentOut();
+  const ok = await runDoctor({ cwd: consumer, env: {}, out });
+  const text = out.text();
+
+  assert.equal(ok, false, 'doctor must fail when a locked rule is missing');
+  assert.equal(statusOf(text, 'installed-artifacts'), 'fail');
+  assert.ok(findResult(text, 'installed-artifacts').includes('rule:common/style'));
+});
+
+test('installed-artifacts: reports a drifted rule as a local edit, not a failure', async () => {
+  const consumer = makeConsumer();
+  await installWithRules(consumer, 'install-config-no-notion.yaml');
+  writeGitignore(consumer, ['.claude/settings.local.json']);
+
+  const rulePath = join(consumer, '.claude', 'rules', 'common', 'style.md');
+  writeFileSync(rulePath, readFileSync(rulePath, 'utf8') + '\nlocal edit\n', 'utf8');
+
+  const out = silentOut();
+  const ok = await runDoctor({ cwd: consumer, env: {}, out });
+  const text = out.text();
+
+  assert.equal(ok, true, `expected pass, output was:\n${text}`);
+  assert.equal(statusOf(text, 'installed-artifacts'), 'pass');
+  assert.ok(findResult(text, 'installed-artifacts').includes('locally modified'), 'rule drift must be annotated');
+});

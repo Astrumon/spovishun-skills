@@ -199,6 +199,12 @@ test('lockfile entries cover skills, agents and rules with sha256-prefixed check
   assert.ok(kinds.has('skill'));
   assert.ok(kinds.has('agent'));
   assert.ok(kinds.has('rule'));
+
+  // Rules have no manifest and therefore no version — '0.0.0' is the sentinel
+  // every adapter stamps, so a rule entry means the same thing on any target.
+  for (const entry of lockEntries.filter((e) => e.kind === 'rule')) {
+    assert.equal(entry.version, '0.0.0');
+  }
 });
 
 test('header contains plugin version and project name', async () => {

@@ -1,5 +1,5 @@
 id: kmp-multiplatform-specialist
-version: 1.1.0
+version: 1.2.0
 category: stack-specific
 requires:
   - kotlin
@@ -8,6 +8,7 @@ description: Kotlin Multiplatform build and platform layer — source-set hierar
 provides:
   - KMP source set and target configuration
   - expect/actual guidance
+  - AGP 9 KMP-library plugin constraints
 triggers:
   en:
     - "expect/actual"

@@ -83,6 +83,10 @@ bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
 
 **Three-way merge.** Base = lockfile version · theirs = upstream · ours = local. Unchanged files auto-apply. Changed files emit diff-marker conflicts for manual resolution.
 
+**Upstream attribution (`source:`).** An artifact adapted from a third-party repo declares `source: { repo, ref?, files: [{ path, sha }] }` in its `manifest.yaml`, pinning **every** upstream file it was derived from, and gets a matching row per file in `NOTICE.md`. `scripts/validate-all-manifests.js` compares the two registries in both directions (neither is generated from the other, so comparison is what keeps them honest); the same check runs in `test/attribution.test.js`. `npm run check:drift` queries the GitHub API for the current blob SHAs and reports movement — **report-only, always exits 0**, and deliberately not part of `lint`, because `lint` gates npm publishing in `release.yml` and must stay offline. Shared logic lives in `lib/attribution.js`.
+
+**KMP skills supersede, never edit, the backend skills.** `dependency-injection-architecture` and `unit-testing-kotlin` are gated `[kotlin]` only, so they install into KMP projects too, carrying backend-specific Always-Active Rules. Rather than edit them (the Spovishun backend consumer relies on them), `koin-kmp` and `kmp-testing` carry a `## Supersedes <X> in KMP projects` block and KMP-only triggers. The gating defect itself is still open — see the 1.18.0 CHANGELOG note.
+
 ## Testing
 
 - **Unit** — `node --test` runner + `node:assert/strict`. Tests live in `test/<module>.test.js`. Mock filesystem with `node:fs/promises` + `os.tmpdir()` dirs.
@@ -165,6 +169,9 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 | Kotlin style | `rules/kotlin/kotlin-style.md` | `stack.kotlin` | shipped |
 | Gradle build (10 practices; deep audit via `gradle-build-auditor`) | `rules/kotlin/gradle-build.md` | `stack.kotlin` | shipped |
 | KMP architecture (layers, MVI contract, Compose stability; Kotlin-free — code lives in `kmp-multiplatform-specialist/references/mvi-and-stability.md`) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
+| KMP networking (repository as error boundary, one `expectSuccess` model; code in `ktor-client-kmp`) | `rules/kmp/networking.md` | `stack.kmp` | shipped |
+| KMP modularization (visibility ladder, `internal` impls behind `public` interfaces) | `rules/kmp/modularization.md` | `stack.kmp` | shipped |
+| KMP persistence (storage selection, schema history, migrations; code in `kmp-persistence`) | `rules/kmp/persistence.md` | `stack.kmp` | shipped |
 | KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
 | KMP navigation | `rules/kmp/navigation.md` | `stack.kmp` | shipped |
 | KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |
@@ -177,6 +184,7 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 |---|---|
 | Validate one skill | `node bin/spovishun-skills.js validate skills/<id>` |
 | Validate every skill in the repo | `node scripts/validate-all-manifests.js` (also run by CI lint) |
+| Check whether upstream sources moved | `npm run check:drift` (report-only; NOT part of `lint`) |
 | Inspect package version | `node bin/spovishun-skills.js --version` |
 | Add a new skill | Create `skills/<id>/` with `manifest.yaml` + `SKILL.md`, then validate |
 

@@ -204,3 +204,7 @@ See [CHANGELOG.md](./CHANGELOG.md).
 ## License
 
 [MIT](./LICENSE) © Danylo Bidnyk
+
+Some skills are adapted from other MIT-licensed projects. [NOTICE.md](./NOTICE.md) records what was
+derived from where, pinned to the exact upstream revision; `npm run check:drift` reports whether any
+of those upstream files have moved since.

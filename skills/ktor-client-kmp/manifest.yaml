@@ -1,0 +1,34 @@
+id: ktor-client-kmp
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Ktor HTTP client configuration in a KMP project — plugin install order (HttpRequestRetry before HttpTimeout), the encodeDefaults trap, one expectSuccess model, bearer refresh with markAsRefreshTokenRequest, WebSocket/SSE converters, and MockEngine testing.
+provides:
+  - Ktor client configuration and plugin ordering
+  - Bearer auth refresh flow
+  - MockEngine test setup
+triggers:
+  en:
+    - "HttpClient"
+    - "Ktor client"
+    - "HttpRequestRetry"
+    - "HttpTimeout"
+    - "expectSuccess"
+    - "MockEngine"
+    - "markAsRefreshTokenRequest"
+    - "ContentNegotiation"
+    - "bearer token refresh"
+  uk:
+    - "Ktor клієнт"
+    - "налаштувати HttpClient"
+    - "оновлення токена"
+    - "ретрай запиту"
+    - "мок движок Ktor"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/kmp-ktor/SKILL.md
+      sha: 9b8943f73011d5dd38d325e866fc8c4c000417d4

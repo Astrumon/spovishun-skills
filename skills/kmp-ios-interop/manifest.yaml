@@ -1,0 +1,32 @@
+id: kmp-ios-interop
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: The Kotlin-to-Swift boundary of a KMP module — naming, type-width and nullability bridging, SKIE suspend-to-async and Flow-to-AsyncSequence, sealed-class exhaustiveness, keeping the ObjC header small, and embedding SwiftUI in Compose. Stops immediately if the project declares no iOS target.
+provides:
+  - Kotlin/Swift boundary design
+  - SKIE bridging guidance
+  - SwiftUI embedding in Compose
+triggers:
+  en:
+    - "SKIE"
+    - "iosMain"
+    - "Swift interop"
+    - "UIViewController"
+    - "AsyncSequence"
+    - "HiddenFromObjC"
+    - "UIKitView"
+    - "expose to SwiftUI"
+  uk:
+    - "інтероп зі Swift"
+    - "iOS фреймворк"
+    - "віддати у SwiftUI"
+    - "міст Kotlin Swift"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/kmp-boundaries/references/ios-interop.md
+      sha: 601fc24e18a66d901c9843999ac45a043eb11843

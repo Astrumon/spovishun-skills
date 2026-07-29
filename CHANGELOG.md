@@ -5,6 +5,93 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] — 2026-07-29
+
+### Added
+
+- **Six new KMP skills, all gated `requires: [kotlin, kmp]` (#157).** `ktor-client-kmp`,
+  `compose-multiplatform` (+ four references), `kmp-persistence`, `kmp-ios-interop`, `koin-kmp` and
+  `kmp-testing`. They close the gaps the existing KMP layer never covered: Ktor client configuration,
+  Compose state and performance mechanics, local storage, the Kotlin↔Swift boundary, and KMP-shaped
+  Koin and testing. Adapted from [`rcosteira79/android-skills`](https://github.com/rcosteira79/android-skills)
+  (MIT) — see `NOTICE.md`.
+- **Three new rules:** `rules/kmp/networking.md` (the repository is the error boundary; no HTTP type
+  leaves `data`; one `expectSuccess` model), `rules/kmp/modularization.md` (lowest visibility that
+  compiles; DI-bound implementations stay `internal` behind `public` interfaces) and
+  `rules/kmp/persistence.md` (storage selection, schema history, migrations, security asymmetry).
+- **`source:` in the manifest schema** — `{ repo, ref?, files: [{ path, sha }] }`, optional, pinning
+  every upstream file a derived artifact was adapted from. It pins *all* of them rather than one
+  primary path, because four of the six new skills derive from more than one upstream file and a
+  single pin would leave the rest undetected.
+- **`NOTICE.md`** — the MIT notice plus an artifact→source table. `scripts/validate-all-manifests.js`
+  now checks it against every `source:` block **in both directions**: a manifest missing from the
+  table fails, and so does a table row with no such manifest. Neither registry is generated from the
+  other, so comparing them is what keeps them honest. The same predicate runs in `npm test`
+  (`test/attribution.test.js`) — a forgotten attribution row is a licensing defect, not just a lint
+  nit.
+- **`npm run check:drift`** (`scripts/check-upstream-drift.js`) — asks the GitHub API for the current
+  blob SHA of every pinned path and reports what has moved. **Report-only: always exits 0**, including
+  on network failure or rate limiting. Deliberately *not* wired into `lint`, which `ci.yml` and
+  `release.yml` both run — publishing to npm must not depend on `api.github.com` being reachable or on
+  a 60 req/h anonymous limit.
+- **`references/agp9-kmp-library.md`** in `kmp-multiplatform-specialist` — the AGP 9
+  `com.android.kotlin.multiplatform.library` constraints, including `androidResources { enable = true }`,
+  whose absence lets a Compose Resources module build green and crash at runtime.
+
+### Changed
+
+- **`kotlin-specialist` 2.2.0 → 2.3.0.** The Always-Active rule *"Only `data/db/DatabaseFactory.kt` may
+  use `Dispatchers.IO`"* is now *"Inject `CoroutineDispatcher` via DI; never hardcode a dispatcher
+  inside a class."* The file-specific form was wrong in a stack-generic skill, and `Dispatchers.IO`
+  does not exist on native or wasm targets at all. `references/flow.md` and `references/coroutines.md`
+  were rewritten around the actual traps — `Channel` vs `SharedFlow` for one-shot events (which is
+  what the MVI effect contract rests on), `callbackFlow` + `awaitClose`, `.catch` scope and
+  `CancellationException`, retry guards, and scope ownership.
+- **`kmp-multiplatform-specialist` 1.1.0 → 1.2.0** — the AGP 9 reference above, two new rows in the
+  failure table, and cross-links to the new skills.
+- **`rules/kmp/uikit.md`** gained Material 3 tokens (contrast levels, motion tokens, reduced motion)
+  and adaptive layout (window size classes, foldable postures). 3 286 → 5 410 chars, still inside the
+  6 000-char Windsurf split threshold.
+- **`package.json` `files`** now includes `NOTICE.md`, so the notice ships in the npm tarball and not
+  only in git.
+
+### Notes
+
+- **The backend skills were deliberately not touched.** `dependency-injection-architecture` and
+  `unit-testing-kotlin` are gated `requires: [kotlin]` only, so they still install into KMP projects
+  carrying backend-specific Always-Active Rules (`Use Service, never UseCase`;
+  `presentation → domain ← data`; `mockk<UserRepository>()`). The Spovishun backend consumer depends
+  on them as they are. `koin-kmp` and `kmp-testing` each carry an explicit
+  `## Supersedes <X> in KMP projects` block and triggers narrowed to KMP-only terms so the two never
+  compete for the same prompt. **The underlying gating defect remains open** — the real fix is moving
+  backend specifics out of `[kotlin]`-gated skills into a `postgres`/`telegram`-gated rules group.
+- **Roughly a third of the new content is unverified** and says so inline. Ktor plugin ordering, auth
+  refresh, Room, DataStore and everything iOS have no consumer project to check against; those
+  sections carry an explicit `Unverified` marker naming the upstream file they came from. What *was*
+  verified — against Kotlin 2.4.0 / AGP 9.0.1 / Ktor 3.5.1 / Koin 4.2.2 / Compose MP 1.11.1 — is the
+  AGP 9 `androidLibrary` DSL, the `koinInject`-vs-`koinViewModel` trap, multiplatform-settings
+  backings, and the `androidx.compose.ui.test.v2.runComposeUiTest` package (which differs from the
+  Android-only form the upstream source states).
+- **These skills have no consumer yet.** The reference project is frozen and will not sync to this
+  version, so this is work ahead of demand — accepted deliberately when the task was scoped.
+
+### Known follow-ups
+
+- **The codex `AGENTS.md` is now 298 KiB**, against a 32 KiB Codex soft limit. The adapter warns and
+  writes it anyway, as before. This is not new — `main` already produced 181 KiB — but this release
+  makes it ~65 % worse, and Codex may truncate. The fix is the split the warning already suggests
+  (universal content to `~/.codex/AGENTS.md`, project-specific to `./AGENTS.md`), or per-target
+  artifact filtering; both are out of scope here.
+- **Six of the new skills exceed the Windsurf 6 000-char file limit** and are installed as
+  `-part-N.md` fragments, which Windsurf then reads as independent rules. `gradle-build-auditor` and
+  `new-feature` already behaved this way, so the shape is pre-existing — but the enforced budget still
+  covers `rules/**` only (`test/rules-stack-gating.test.js`). Verified in this release: **no rule file
+  splits**; all nine `rules/kmp/*.md` install whole.
+
+### Manifests bumped
+
+`kotlin-specialist` 2.3.0 · `kmp-multiplatform-specialist` 1.2.0
+
 ## [1.17.0] — 2026-07-28
 
 ### Added

@@ -83,7 +83,9 @@ told otherwise.
 
 ## Related rules
 
-`feature-structure.md` (module and package layout) · `navigation.md` · `testing.md` · `uikit.md` · `localization.md`
+`feature-structure.md` (module and package layout) · `modularization.md` (visibility and module
+boundaries) · `networking.md` (the error boundary in `data`) · `persistence.md` (local storage) ·
+`navigation.md` · `testing.md` · `uikit.md` · `localization.md`
 
 This rule stays normative and free of Kotlin. Its implementations live in the
 `kmp-multiplatform-specialist` skill: the `MviViewModel` base class, a screen written against it,

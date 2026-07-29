@@ -1,0 +1,32 @@
+id: koin-kmp
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Koin wiring for Kotlin Multiplatform — expect val platformModule, per-target dispatcher and engine bindings, koinViewModel vs koinInject in Compose, scopes, Classic DSL vs KSP annotations, and checkModules() verification. Supersedes dependency-injection-architecture in KMP projects.
+provides:
+  - KMP Koin module layout
+  - Compose ViewModel injection
+  - DI graph verification
+triggers:
+  en:
+    - "platformModule"
+    - "koinViewModel"
+    - "expect val platformModule"
+    - "checkModules"
+    - "koin-compose-viewmodel"
+    - "KMP DI"
+    - "shared DI module"
+    - "viewModelOf"
+  uk:
+    - "платформ модуль Koin"
+    - "DI в KMP"
+    - "спільний модуль залежностей"
+    - "інʼєкція ViewModel у Compose"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/koin/SKILL.md
+      sha: f9eaad00844fe8009fdabd22678d556b71bfd3fc

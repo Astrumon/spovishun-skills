@@ -1,0 +1,35 @@
+id: kmp-persistence
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Local storage in a KMP project — choosing between multiplatform-settings, DataStore and Room, per-platform file paths and secure backings, the IOException and CorruptionException traps, and Room in commonMain with @ConstructedBy, BundledSQLiteDriver and per-target KSP.
+provides:
+  - KMP storage selection
+  - DataStore and Room KMP setup
+  - Per-platform storage paths
+triggers:
+  en:
+    - "DataStore"
+    - "Room KMP"
+    - "multiplatform-settings"
+    - "BundledSQLiteDriver"
+    - "ConstructedBy"
+    - "persist settings"
+    - "local database KMP"
+    - "CorruptionException"
+  uk:
+    - "зберегти налаштування"
+    - "локальна база KMP"
+    - "персистентність"
+    - "Room у commonMain"
+    - "сховище налаштувань"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/datastore/SKILL.md
+      sha: 1490ab1747272a11043c4b54accce8eee45ed707
+    - path: plugins/android-skills/skills/android-data-layer/SKILL.md
+      sha: 2d51cc5e191718f5e24929ec2db98850c3f6cc87

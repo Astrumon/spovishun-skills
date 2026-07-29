@@ -1,0 +1,40 @@
+id: compose-multiplatform
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Compose Multiplatform UI mechanics — remember keying and the unified key rule, cross-phase back-writing, the modifier API contract and chain order, lazy-list keys and prefetch, and the stability/phase model behind unwanted recomposition. Design-system boundaries stay in rules/kmp/uikit.md.
+provides:
+  - Compose state and effect keying
+  - Modifier API contract
+  - Recomposition diagnosis
+triggers:
+  en:
+    - "recomposition"
+    - "derivedStateOf"
+    - "rememberSaveable"
+    - "LazyColumn"
+    - "modifier parameter"
+    - "strong skipping"
+    - "Immutable annotation"
+    - "graphicsLayer"
+    - "compose performance"
+  uk:
+    - "рекомпозиція"
+    - "стан у Compose"
+    - "модифікатор"
+    - "лінива колонка"
+    - "продуктивність Compose"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/compose/references/state-management.md
+      sha: "224843171c18b85ac98168946b9af488c55f2622"
+    - path: plugins/android-skills/skills/compose/references/performance.md
+      sha: cf6a2477519f54e72a8f36d4ef9577f8c9c4615e
+    - path: plugins/android-skills/skills/compose/references/lists-scrolling.md
+      sha: a723a3f8784c265ff35889938544fc1e73a0357f
+    - path: plugins/android-skills/skills/compose/references/modifiers.md
+      sha: d7cc8e779804d7460e5d7f1b57e639ba7148b2ab

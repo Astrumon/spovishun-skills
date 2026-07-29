@@ -260,7 +260,23 @@ test('flag-named rule groups install when their stack flag is active', async () 
   const rulesDir = join(consumer, '.claude', 'rules');
   assert.ok(existsSync(join(rulesDir, 'common', 'design-principles.md')), 'common/ still ships');
   assert.ok(existsSync(join(rulesDir, 'kotlin', 'kotlin-style.md')), 'stack.kotlin enables kotlin/');
-  assert.ok(existsSync(join(rulesDir, 'kmp', 'architecture.md')), 'stack.kmp enables kmp/');
+
+  // The whole kmp/ group must land, not just the file that happened to exist
+  // when this test was written — a rule added without an install path is invisible.
+  const kmpRules = [
+    'architecture.md',
+    'feature-structure.md',
+    'localization.md',
+    'modularization.md',
+    'navigation.md',
+    'networking.md',
+    'persistence.md',
+    'testing.md',
+    'uikit.md',
+  ];
+  for (const rule of kmpRules) {
+    assert.ok(existsSync(join(rulesDir, 'kmp', rule)), `stack.kmp should install kmp/${rule}`);
+  }
 });
 
 test('rule placeholders are rendered from config (not copied verbatim)', async () => {

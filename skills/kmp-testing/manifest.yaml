@@ -1,0 +1,33 @@
+id: kmp-testing
+version: 1.0.0
+category: stack-specific
+requires:
+  - kotlin
+  - kmp
+description: Testing technique for Kotlin Multiplatform — the test-first loop, Compose test dispatching and the two-schedulers trap, semantics-first selectors, choosing the smallest test shape, test clock vs wall clock, and animation/screenshot determinism. Supersedes unit-testing-kotlin in KMP projects.
+provides:
+  - Compose test dispatching and determinism
+  - Test shape selection
+  - KMP test diagnosis
+triggers:
+  en:
+    - "commonTest"
+    - "runComposeUiTest"
+    - "StandardTestDispatcher"
+    - "androidDeviceTest"
+    - "mainClock"
+    - "flaky compose test"
+    - "onNodeWithText"
+    - "advanceUntilIdle"
+  uk:
+    - "тести в commonTest"
+    - "Compose UI тест"
+    - "флакі тест"
+    - "тестовий диспетчер"
+    - "мультиплатформенні тести"
+source:
+  repo: rcosteira79/android-skills
+  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+  files:
+    - path: plugins/android-skills/skills/android-testing/SKILL.md
+      sha: 033cde57206353a57ded7b22a8a0a1250be268e4

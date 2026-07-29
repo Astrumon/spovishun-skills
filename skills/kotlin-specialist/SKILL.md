@@ -23,7 +23,7 @@
 
 ## Always-Active Rules
 
-- Only `data/db/DatabaseFactory.kt` may use `Dispatchers.IO` — inject `CoroutineDispatcher` via Koin everywhere else.
+- Inject `CoroutineDispatcher` via DI; never hardcode a dispatcher inside a class. `Dispatchers.IO` does not exist on native/wasm targets, so a hardcoded reference is both untestable and unportable.
 - Never use `runBlocking` in production coroutine context — causes deadlock.
 - Never use `GlobalScope.launch` — breaks structured concurrency and causes memory leaks.
 - Never swallow `CancellationException` — always rethrow or propagate it.
@@ -35,7 +35,7 @@
 - Do NOT load all references at once — pick exactly one based on the Decision Table.
 - Do NOT use `!!` without a documented invariant that guarantees non-null at that point.
 - Do NOT use `runBlocking`, `GlobalScope`, or undocumented `!!` — hard bans.
-- Do NOT hardcode `Dispatchers.IO` outside `DatabaseFactory.kt`.
+- Do NOT hardcode any dispatcher inside a class — take it as a constructor parameter.
 
 ## Error Handling
 

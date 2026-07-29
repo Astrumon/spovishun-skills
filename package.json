@@ -1,6 +1,6 @@
 {
   "name": "spovishun-skills",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "Portable Claude Code skills, agents, hooks and rules — bootstrapped from the Spovishun project. Installs into Claude Code, Codex, Windsurf and Cursor via per-assistant adapters.",
   "type": "module",
   "publishConfig": {
@@ -22,6 +22,7 @@
     "schema",
     ".claude-plugin",
     "LICENSE",
+    "NOTICE.md",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -30,6 +31,7 @@
   },
   "scripts": {
     "lint": "node --check bin/spovishun-skills.js && node scripts/validate-all-manifests.js && node scripts/check-vendored-marked.js",
+    "check:drift": "node scripts/check-upstream-drift.js",
     "test": "node --test --test-reporter=spec"
   },
   "keywords": [

@@ -10,6 +10,7 @@ the code it describes is here:
 | If you need… | Read |
 |---|---|
 | The `MviViewModel` base class, a screen written against it, the typed-error `load()` helper, the `composeCompiler { }` and `stability.txt` wiring | `references/mvi-and-stability.md` |
+| The AGP 9 `androidLibrary { }` DSL — what it has, what it dropped (`BuildConfig`, variants, kapt, NDK), and the `androidResources` trap | `references/agp9-kmp-library.md` |
 | The normative architecture, MVI and Compose-stability rules | `.claude/rules/kmp/architecture.md` |
 
 ## Scope
@@ -102,6 +103,8 @@ module cannot read another module's `Res`. Placement rules are in
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `Res.*` crashes at runtime, build stayed green | `androidResources { enable = true }` missing under AGP 9 `androidLibrary` | enable it — see `references/agp9-kmp-library.md` |
+| An `android { }` option does not resolve | the module uses the AGP 9 KMP-library plugin, not `com.android.library` | `references/agp9-kmp-library.md` |
 | Unresolved reference in shared code, only on iOS | JVM-only dependency in `commonMain` | move it to `jvmMain`/`androidMain`, or find a KMP alternative |
 | "Expected declaration has no actual" | new target, or a new `expect` | add the `actual` to every declared target |
 | `runComposeUiTest` fails on the Android host target | UI test placed in `commonTest` | move it to `jvmTest` + `androidDeviceTest` |
@@ -115,7 +118,8 @@ module cannot read another module's `Res`. Placement rules are in
 - Do NOT put an `expect` in `domain`, or an `actual` in a different layer than its `expect`.
 - Do NOT put MockK or JUnit5 in `commonTest`.
 - Do NOT restate architecture or MVI rules — reference `.claude/rules/kmp/architecture.md`.
-- Do NOT load `references/mvi-and-stability.md` during discovery — only when writing that code.
+- Do NOT apply `com.android.library` snippets to a module using the AGP 9 KMP-library plugin.
+- Do NOT load a reference during discovery — only when writing that code.
 - Do NOT edit generated artifacts or `build/` output.
 
 ## Error handling
@@ -145,6 +149,10 @@ is named explicitly in the summary.
 
 - `new-feature` — scaffolding a feature module pair
 - `kotlin-specialist` — coroutines, Flow, sealed classes, idiomatic Kotlin
-- `dependency-injection-architecture` — Koin modules and layer boundaries
-- `unit-testing-kotlin` — general Kotlin testing practice
+- `koin-kmp` — Koin modules, `platformModule`, layer boundaries in KMP
+- `kmp-testing` — test source sets, Compose test dispatching
+- `ktor-client-kmp` — the client the platform engines belong to
+- `kmp-persistence` — storage libraries and per-target KSP wiring
+- `compose-multiplatform` — Compose state, modifiers and stability
+- `kmp-ios-interop` — the Kotlin↔Swift boundary once an iOS target exists
 - `ci-cd-pipeline-builder` — building the multiplatform matrix in CI

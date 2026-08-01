@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { collectRules } from '../lib/rules-loader.js';
+import { collectRules, collectAllRules } from '../lib/rules-loader.js';
 import { STACK_FLAGS } from '../lib/stack-filter.js';
 import { CHAR_LIMIT } from '../adapters/windsurf/index.js';
 
@@ -114,4 +114,51 @@ test('every shipped rule fits in one windsurf file', () => {
         `${rule.body.length - CHAR_LIMIT} over the ${CHAR_LIMIT} windsurf split threshold`
     );
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// collectAllRules — the single-walk source both collectRules and the stale-rule
+// reconciliation read from.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('collectAllRules returns de-selected rules, flagged inactive', () => {
+  const root = makePkgRoot();
+  const all = collectAllRules(root, { kotlin: true });
+  const byId = new Map(all.map((r) => [r.id, r]));
+
+  assert.equal(byId.get('kotlin/a').active, true, 'an active flag selects its group');
+  assert.equal(byId.get('kmp/a').active, false, 'an inactive flag returns the rule, marked inactive');
+  assert.equal(byId.get('kmp/deep/b').active, false, 'gating applies to the whole subtree');
+  assert.equal(byId.get('common/a').active, true, 'ungated groups are always active');
+  assert.equal(byId.get('nested/a').active, true, 'unknown group names are not gated');
+  assert.equal(byId.get('root-level').active, true, 'files directly under rules/ are ungated');
+});
+
+test('collectAllRules bodies are readable for inactive rules too', () => {
+  // reconcileStaleRules renders de-selected rules to prove a file on disk is
+  // ours before deleting it — an empty body would make every stale rule look
+  // owner-authored and strand it forever.
+  const root = makePkgRoot();
+  const kmp = collectAllRules(root, {}).find((r) => r.id === 'kmp/a');
+  assert.equal(kmp.active, false);
+  assert.equal(kmp.body, '# kmp\n');
+});
+
+test('collectRules is exactly the active half of collectAllRules', () => {
+  const root = makePkgRoot();
+  for (const flags of [{}, { kotlin: true }, { kotlin: true, kmp: true }]) {
+    assert.deepEqual(
+      collectRules(root, flags).map((r) => r.id),
+      collectAllRules(root, flags).filter((r) => r.active).map((r) => r.id),
+      `mismatch for flags ${JSON.stringify(flags)}`
+    );
+  }
+});
+
+test('collectAllRules returns the same id set regardless of flags', () => {
+  // This is what replaced the "walk again with ALL flags on" pass: the candidate
+  // set for stale-rule reconciliation must not depend on the active stack.
+  const root = makePkgRoot();
+  const idsFor = (flags) => collectAllRules(root, flags).map((r) => r.id).sort();
+  assert.deepEqual(idsFor({}), idsFor({ kotlin: true, kmp: true }));
 });

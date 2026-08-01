@@ -1,4 +1,5 @@
 import { renderTemplate } from '../../lib/template-renderer.js';
+import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 
 const HEADING_DEMOTE = 2;
 const SUPPORTING_DEMOTE = 3;
@@ -32,21 +33,21 @@ export function buildAgentsMd({ artifacts, rules = [], config, configMap, plugin
   if (skills.length > 0) {
     lines.push('## Skills', '');
     for (const skill of skills) {
-      lines.push(...renderArtifact(skill, configMap, warn));
+      lines.push(...artifactSection(skill, configMap, warn));
     }
   }
 
   if (agents.length > 0) {
     lines.push('## Agents', '');
     for (const agent of agents) {
-      lines.push(...renderArtifact(agent, configMap, warn));
+      lines.push(...artifactSection(agent, configMap, warn));
     }
   }
 
   if (templates.length > 0) {
     lines.push('## Templates', '');
     for (const template of templates) {
-      lines.push(...renderArtifact(template, configMap, warn));
+      lines.push(...artifactSection(template, configMap, warn));
     }
   }
 
@@ -94,10 +95,10 @@ function renderProjectContext(config) {
   return lines;
 }
 
-function renderArtifact(artifact, configMap, warn) {
-  const body = prepareBody(artifact);
-  const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-  const rendered = renderTemplate(body, { configMap, manifestPlaceholders });
+function artifactSection(artifact, configMap, warn) {
+  // The body is preprocessed (frontmatter stripped) before rendering, hence the
+  // bodyText override — the placeholder plumbing is still the shared one.
+  const { rendered } = renderArtifact(artifact, configMap, { bodyText: prepareBody(artifact) });
   const demoted = demoteHeadings(rendered, HEADING_DEMOTE);
   const out = [
     `### ${artifact.id} (v${artifact.version})`,
@@ -114,7 +115,10 @@ function renderArtifact(artifact, configMap, warn) {
       );
       continue;
     }
-    const fileRendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+    const fileRendered = renderTemplate(file.contents, {
+      configMap,
+      manifestPlaceholders: manifestPlaceholderKeys(artifact.manifest),
+    });
     const fileDemoted = demoteHeadings(fileRendered, SUPPORTING_DEMOTE);
     out.push(`#### ${artifact.id} — ${file.relPath}`, '', fileDemoted.trimEnd(), '');
   }

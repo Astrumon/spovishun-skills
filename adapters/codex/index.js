@@ -3,9 +3,8 @@ import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
-import { collectRules, ruleLockEntry } from '../../lib/rules-loader.js';
-import { renderTemplate } from '../../lib/template-renderer.js';
-import { sha256 } from '../../lib/checksum.js';
+import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.js';
+import { renderArtifact } from '../../lib/render-artifact.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
 export const AGENTS_MD_FILENAME = 'AGENTS.md';
@@ -16,9 +15,14 @@ const CODEX_KINDS = new Set(['skill', 'agent', 'template']);
 /**
  * Generates AGENTS.md for Codex at the consumer project root.
  *
- * Skips hooks and other Claude-only artifacts. Renders Mustache placeholders
+ * Skips hooks and other Claude-only artifacts. Renders {{KEY}} placeholders
  * the same way the Claude adapter does. If the resulting file exceeds the
  * 32 KiB AGENTS.md soft limit, emits a stderr warning but still writes the file.
+ *
+ * Takes the uniform installer argument object (see adapters/registry.js) and
+ * destructures the fields it uses; `force` is not among them — AGENTS.md is
+ * regenerated wholesale on every install, so there is no per-artifact edit to
+ * preserve or overwrite.
  *
  * @param {object} opts
  * @param {string}   opts.consumerCwd    — absolute path to consumer project root
@@ -68,17 +72,19 @@ export async function installCodex({
   // as the claude and windsurf adapters, so lock entries mean the same thing
   // regardless of target.
   const artifactEntries = included.map((artifact) => {
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    // No marker: codex inlines every body into AGENTS.md, so there is no
+    // per-artifact file to stamp. stripMarker is a no-op on an unmarked body,
+    // which keeps this checksum identical to the pre-registry one.
+    const { checksum } = renderArtifact(artifact, configMap);
     return {
       kind: artifact.kind,
       id: artifact.id,
       version: artifact.version,
-      checksum: sha256(rendered),
+      checksum,
     };
   });
 
-  const ruleEntries = rules.map((rule) => ruleLockEntry(rule, configMap));
+  const ruleEntries = rules.map((rule) => ruleLockEntry(rule, renderRule(rule, configMap)));
 
   return [...artifactEntries, ...ruleEntries];
 }

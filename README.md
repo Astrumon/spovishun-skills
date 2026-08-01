@@ -165,7 +165,7 @@ artifacts:
 
 ## Placeholders
 
-Canonical artifact bodies use Mustache `{{KEY}}` placeholders for project-specific values (project name, language, Notion DB ids, etc.). Keys must be `UPPER_SNAKE_CASE`. Resolved at install time from your config.
+Canonical artifact bodies use Mustache-style `{{KEY}}` placeholders for project-specific values (project name, language, Notion DB ids, etc.). Keys must be `UPPER_SNAKE_CASE`. Resolved at install time from your config.
 
 Tokens that don't match the pattern (e.g. GitHub Actions `${{ runner.os }}`) are preserved verbatim.
 

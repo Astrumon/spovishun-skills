@@ -40,10 +40,10 @@ spovishun-skills/
 ├── agents/              — canonical agent bodies (AGENT.md + manifest.yaml per agent)
 ├── hooks/               — hook scripts + hooks.json (event → script mapping) [Claude-only]
 ├── rules/               — configurable rule files
-├── adapters/            — per-target installers (claude/, codex/, windsurf/, cursor/)
+├── adapters/            — registry.js (target table) + per-target installers (claude/, codex/, windsurf/)
 ├── scripts/             — utility scripts (validate-all-manifests.js, …)
 ├── bin/                 — CLI entry (spovishun-skills.js) — only entry point
-├── lib/                 — pure modules: config-resolver, skill-loader, lockfile, merge, manifest-validator
+├── lib/                 — pure modules: config-loader, artifact-loader, render-artifact, lockfile, merge, manifest-validator
 ├── schema/              — JSON Schema definitions (manifest.schema.json, config.schema.json)
 └── test/                — node:test files (mirrors lib/ and adapters/ structure)
 ```
@@ -53,15 +53,18 @@ spovishun-skills/
 Dependency direction:
 
 ```
-bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
+bin/  →  adapters/registry.js  →  adapters/<target>/  →  lib/  →  read skills/, agents/, hooks/, rules/
 ```
 
 - `lib/` MUST NOT depend on a specific adapter — it exposes primitives any adapter composes.
 - `adapters/<target>/` MUST NOT cross-import each other. Each is a closed unit.
+- `adapters/registry.js` is the ONLY module that imports adapters. Nothing in `lib/` or `adapters/<target>/` may import it — the registry imports them, so reaching back closes a cycle. An adapter needing a `lib/` helper that the registry also references (`loadClaudeFiles`) imports it straight from `lib/`.
 - `skills/`, `agents/`, `hooks/`, `rules/` are **data**, not code (markdown + yaml). Loaded at runtime, never `import`-ed.
 - `bin/` is the only entry. Never instantiate the CLI from `lib/` or `adapters/`.
 
 ## Key Patterns
+
+**Target registry (`adapters/registry.js`).** One row per target — `{ install, update, readInstalled, hint, ownership, supportsUpdate }` — and the only place that knows which targets exist. Adding a target is one row plus one `adapters/<target>/` directory; **no edit to `bin/` is expected**, and a PR that needs one is a signal the registry is missing a column. All three `install` functions take the same argument object (`{ consumerCwd, pkgRoot, config, artifacts, pluginVersion, force, warn }`) and destructure what they use — the uniformity is what makes the table callable, so do not trim a signature back down to "only what this adapter needs". `getTarget(name)` throws an actionable error for an unknown target; `findTarget(name)` returns `null` for read paths like `doctor`, which must report on a lockfile naming a target it does not know rather than crash. `supportsUpdate` must always equal `update !== null` (asserted in `test/registry.test.js`).
 
 **Canonical body + manifest.** Every skill / agent / hook has exactly one canonical source (`SKILL.md`, `AGENT.md`, executable script) and one `manifest.yaml`. Adapters generate per-target files — never edit generated output manually.
 
@@ -79,11 +82,15 @@ bin/  →  lib/ + adapters/  →  read skills/, agents/, hooks/, rules/
 
 **Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion | docker | kmp`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`. The flag list lives in three places that must stay in sync: `STACK_FLAGS` in `lib/stack-filter.js`, the `requires` enum in `schema/manifest.schema.json`, and `stack` properties in `schema/config.schema.json`.
 
-**Rules stack gating (directory = flag).** `rules/` files carry no manifest, so the top-level group name *is* the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`rules/kotlin/`, `rules/kmp/`). A group whose name is not a stack flag (`rules/common/`) always installs. Implemented in `lib/rules-loader.js` (`collectRules(pkgRoot, stackFlags)`), consumed by all three adapters. Fails closed: no flags passed ⇒ only ungated groups. Turning a flag off removes the rules the plugin owns on the next `install`/`sync` (see Rules ownership below).
+**Rules stack gating (directory = flag).** `rules/` files carry no manifest, so the top-level group name *is* the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`rules/kotlin/`, `rules/kmp/`). A group whose name is not a stack flag (`rules/common/`) always installs. Implemented in `lib/rules-loader.js`: `collectAllRules(pkgRoot, stackFlags)` walks `rules/` once and flags each rule `active`; `collectRules` is the active half and is what the adapters consume. The inactive half is not waste — `install` needs those bodies to prove a de-selected file on disk is one of ours before deleting it, which is why the package is never walked or rendered twice. Fails closed: no flags passed ⇒ only ungated groups. Turning a flag off removes the rules the plugin owns on the next `install`/`sync` (see Rules ownership below).
 
 **Lockfile.** `spovishun-skills.lock.yaml` in the consumer repo. Pins exact versions and checksums per artifact. Re-applied by `sync`, diffed by `update`. Kinds: `skill`, `agent`, `template`, `rule`. Rule entries always carry `version: 0.0.0` — a sentinel meaning "unversioned data artifact; the checksum is the identity". Deliberately not the plugin version: that would flip every rule to `AUTO_APPLY` on each release even when its body is byte-identical. `update` never touches `rule:` entries (rules have no manifest, so they never appear in the upstream artifact map); they are regenerated wholesale by `install`/`sync`.
 
-**Rules ownership.** Rules go through the same ownership model as skills and agents (`lib/update-classifier.js`), with one difference: they carry no YAML frontmatter, so the `x-spovishun` provenance marker does not apply and ownership is decided by **checksum equality alone**. A rule whose on-disk body matches either the locked checksum or the current render is ours — `install` rewrites it and, when its group's flag goes off, deletes it. Anything else is owner-authored: `install` skips it with a warning (`--force` overwrites a *locked* edit; a file at an id we never locked is sacred even then), and the stale-rule pass leaves it on disk. Consumers upgrading from ≤ 1.15.0 have rules on disk and no `rule:` lock entries — those are adopted silently on the first `install`, because the on-disk body already equals the render.
+**Rules ownership.** Rules go through the same ownership model as skills and agents (`lib/update-classifier.js`), selected via `ownership: 'checksum'` rather than `'marker'`: they carry no YAML frontmatter, so the `x-spovishun` provenance marker does not apply and ownership is decided by **checksum equality alone**. `ADOPT` and `DISOWNED` are unreachable under that model — in particular a locked rule that was edited locally stays `LOCAL_ONLY` (entry kept, warned) and must never become `DISOWNED` (entry dropped). A rule whose on-disk body matches either the locked checksum or the current render is ours — `install` rewrites it and, when its group's flag goes off, deletes it. Anything else is owner-authored: `install` skips it with a warning (`--force` overwrites a *locked* edit; a file at an id we never locked is sacred even then), and the stale-rule pass leaves it on disk. Consumers upgrading from ≤ 1.15.0 have rules on disk and no `rule:` lock entries — those are adopted silently on the first `install`, because the on-disk body already equals the render.
+
+**One classify-and-act path.** `install` classifies every artifact and every rule through `planInstall` + the `INSTALL_HANDLERS` table in `adapters/claude/index.js`, mirroring `ACTION_HANDLERS` in `bin/update.js`. The two loops differ only in where they write and in the hint a skipped local edit carries — rules say `install --force` because `update` genuinely cannot merge them (it skips every `rule:` lock entry). Warning strings are asserted by `test/install-claude.test.js`; treat them as output contract.
+
+**One render per artifact.** `lib/render-artifact.js` owns the `placeholders → renderTemplate → sha256` triplet for every adapter and for `update`. The checksum is ALWAYS taken over the marker-stripped body — an identity operation when there is no marker, which is what keeps codex/windsurf checksums equal to the marked claude ones for the same content.
 
 **Three-way merge.** Base = lockfile version · theirs = upstream · ours = local. Unchanged files auto-apply. Changed files emit diff-marker conflicts for manual resolution.
 

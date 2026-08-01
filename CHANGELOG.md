@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Nine Major maintainability findings from the thermo-nuclear review (#166). Every item is a
+behaviour-preserving refactor: install, doctor and lockfile output were compared byte-for-byte
+against 1.19.0 across all three targets, and every generated file is identical.
+
+### Added
+
+- **Target registry — `adapters/registry.js` (M-0).** One row per target, carrying
+  `{ install, update, readInstalled, hint, ownership, supportsUpdate }`. `claude | codex | windsurf`
+  used to be re-branched by hand in seven places, with three drifted adapter signatures
+  (`installCodex` needed `pluginVersion`, `installClaude` needed `force`, `installWindsurf`
+  neither), so adding a target meant editing `bin/`. It no longer does: a new target is one row
+  plus one `adapters/<target>/` directory. The registry is the composition root — nothing in `lib/`
+  or `adapters/<target>/` may import it.
+- **`lib/render-artifact.js` (M-4).** The `placeholders → renderTemplate → sha256` triplet was
+  duplicated verbatim in five places, where a change to one silently desynchronised the checksums
+  the lockfile compares.
+- **`collectAllRules(pkgRoot, stackFlags)` (M-5).** Returns every rule flagged with whether the
+  active stack selects it. `collectRules` is now the active half of it.
+
+### Changed
+
+- **`install` classifies artifacts and rules through one path (M-3).** `classifyArtifact` takes the
+  ownership *model* (`marker` | `checksum` | `assume-owned`) instead of a caller-computed boolean,
+  and both loops share a `planInstall` + `INSTALL_HANDLERS` table mirroring `ACTION_HANDLERS` in
+  `bin/update.js`. `installClaude` drops from 90 lines to 33.
+- **`doctor`'s checks are declared, not orchestrated (M-1).** A `{ name, run, when, dependsOn,
+  skipDetail }` list replaces 87 lines of nested `if/else` with seven duplicated skip literals. The
+  claude-only gate now reads `ownership === 'marker'` — what those checks actually require — rather
+  than naming one target. The on-disk scan that two checks each performed is memoised and lazy.
+- **Rules are rendered once per install (M-5).** `reconcileStaleRules` used to walk `rules/` a second
+  time with all stack flags on and re-render the whole package, purely to build its ownership oracle.
+  `ruleLockEntry(rule, rendered)` now takes the rendered body instead of the config map, which also
+  removes windsurf's render-twice-per-rule.
+- **`mergeSettings` merges in one pass (M-10).** The third of three passes existed to delete the empty
+  arrays the first had created. 41 lines → 25; `structuredClone` replaces the JSON round-trip.
+
+### Fixed
+
+- **Placeholder substitution no longer runs through Mustache (M-2).** The renderer drove Mustache
+  through a custom `escapedValue` hook, which only intercepts interpolation — so every other Mustache
+  syntax routed around it and silently destroyed content: `${{{ runner.os }}}` became `$`,
+  `{{#X}}a{{/X}}`, `{{>partial}}` and `{{! comment }}` all rendered empty. No shipped artifact
+  contained one, so nothing was lost in practice, but the first GitHub Actions snippet to reach an
+  artifact body would have been mangled with no error and no diff. Replaced with a two-pass
+  `String.replace`; the `mustache` dependency is gone (5 → 4 runtime deps).
+- **Every missing config key is reported at once (M-7).** `validateConfig` threw on the first Ajv
+  `required` violation although Ajv had collected them all — a config missing three `git.*` keys cost
+  three sequential `install` runs to diagnose. The reported path also read `/git.main_branch`, a
+  string matching nothing in the file it tells you to edit; it now reads `git.main_branch`.
+- **`update` no longer reports work it did not do (M-9).** `applyArtifact` and `applyConflict` were
+  two-branch dispatchers with no `else`, so a target outside that pair wrote nothing while the summary
+  still counted it as auto-applied. Both are deleted; `applyPlan` calls the registry's `update`.
+
+### Removed
+
+- **The unreachable `hook` and `rule` artifact kinds (M-6).** `loadArtifacts` declared four kinds and
+  could only ever yield three: `hooks/` is flat `.js` (the loader descends into subdirectories only)
+  and `rule` was never in the kind map at all, yet still had a `BODY_FILES` entry pointing at a
+  `RULE.md` that exists nowhere. Both directories keep shipping through their own paths.
+
 ## [1.19.0] — 2026-08-01
 
 ### Changed

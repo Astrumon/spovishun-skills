@@ -190,18 +190,6 @@ function emptySummary() {
   };
 }
 
-/**
- * Only the 'marker' ownership model is wired up. For 'assume-owned' targets
- * (windsurf) the model is deferred — markers in chunked -part-N files need a
- * separate decision (spovishun-162) — so treat their files as owned to preserve
- * the pre-ownership classification.
- */
-function ownershipOf({ targetDef, installedEntry, lockEntry }) {
-  if (targetDef.ownership !== 'marker') return true;
-  if (!installedEntry) return false;
-  return installedEntry.hasMarker || (lockEntry != null && installedEntry.checksum === lockEntry.checksum);
-}
-
 function freshLock({ artifact }, checksum) {
   return { kind: artifact.kind, id: artifact.id, version: artifact.version, checksum };
 }
@@ -301,7 +289,8 @@ async function processKey(key, ctx) {
     upstream: upstreamEntry && { version: upstreamEntry.artifact.version, checksum: upstreamEntry.checksum },
     lockEntry,
     onDiskChecksum,
-    onDiskOwned: ownershipOf({ targetDef: ctx.targetDef, installedEntry, lockEntry }),
+    hasMarker: installedEntry?.hasMarker ?? false,
+    ownership: ctx.targetDef.ownership,
   });
 
   ctx.write(`  ${action.padEnd(16)} ${key}\n`);

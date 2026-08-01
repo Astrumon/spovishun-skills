@@ -78,8 +78,9 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
 
   for (const rule of rules) {
     const ruleId = rule.id.replace(/\//g, '--');
-    writeChunked(rulesDir, ruleId, renderRule(rule, configMap), written);
-    lockEntries.push(ruleLockEntry(rule, configMap));
+    const rendered = renderRule(rule, configMap);
+    writeChunked(rulesDir, ruleId, rendered, written);
+    lockEntries.push(ruleLockEntry(rule, rendered));
   }
 
   reconcileStaleFiles(consumerCwd, rulesDir, written, warn);

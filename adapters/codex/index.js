@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
-import { collectRules, ruleLockEntry } from '../../lib/rules-loader.js';
+import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.js';
 import { renderArtifact } from '../../lib/render-artifact.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
@@ -84,7 +84,7 @@ export async function installCodex({
     };
   });
 
-  const ruleEntries = rules.map((rule) => ruleLockEntry(rule, configMap));
+  const ruleEntries = rules.map((rule) => ruleLockEntry(rule, renderRule(rule, configMap)));
 
   return [...artifactEntries, ...ruleEntries];
 }

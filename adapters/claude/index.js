@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
-import { collectRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
-import { filterByStack, STACK_FLAGS } from '../../lib/stack-filter.js';
+import { collectAllRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
+import { filterByStack } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
@@ -324,24 +324,29 @@ function installHooks(pkgRoot, claudeDir, warn) {
  * structure. Rule bodies support Mustache placeholders (resolved from the consumer config),
  * mirroring the codex and windsurf adapters — never copied verbatim.
  *
- * Groups named after a stack flag (`kotlin/`, `kmp/`) are gated on that flag by
- * collectRules; `common/` always ships.
+ * Groups named after a stack flag (`kotlin/`, `kmp/`) are gated on that flag;
+ * `common/` always ships.
+ *
+ * Every rule the package ships is rendered exactly once here — the selected
+ * ones to write, the de-selected ones to serve as reconcileStaleRules'
+ * ownership oracle — so the package is never walked or rendered twice.
  *
  * Rules run through the same ownership model as skills and agents, with one
  * difference: they carry no YAML frontmatter, so there is no `x-spovishun`
  * provenance marker to consult. Ownership is decided by CHECKSUM EQUALITY
- * ALONE — see ownsRule() below.
+ * ALONE — see the OWNERSHIP MODELS block in lib/update-classifier.js.
  *
  * @returns {Array<{kind, id, version, checksum}>} lock entries for the rules we own
  */
 function installRules({ pkgRoot, consumerCwd, claudeDir, configMap, stackFlags, lockEntryMap, installed, force, warn }) {
-  const rules = collectRules(pkgRoot, stackFlags);
+  const allRules = collectAllRules(pkgRoot, stackFlags);
+  const renders = new Map(allRules.map((rule) => [rule.id, renderRule(rule, configMap)]));
   const entries = [];
 
-  for (const rule of rules) {
+  for (const rule of allRules.filter((r) => r.active)) {
     const key = `rule:${rule.id}`;
-    const rendered = renderRule(rule, configMap);
-    const freshEntry = ruleLockEntry(rule, configMap);
+    const rendered = renders.get(rule.id);
+    const freshEntry = ruleLockEntry(rule, rendered);
 
     // ownership: 'checksum' — rules carry no frontmatter and therefore no
     // provenance marker, so content alone answers "is this ours?". ADOPT and
@@ -362,7 +367,7 @@ function installRules({ pkgRoot, consumerCwd, claudeDir, configMap, stackFlags, 
     if (lock) entries.push(lock);
   }
 
-  reconcileStaleRules({ pkgRoot, consumerCwd, claudeDir, configMap, rules, lockEntryMap, installed, warn });
+  reconcileStaleRules({ consumerCwd, claudeDir, allRules, renders, lockEntryMap, installed, warn });
 
   return entries;
 }
@@ -379,7 +384,8 @@ function writeRule(claudeDir, id, rendered) {
  *
  * Candidate ids are plugin-known ids only, drawn from two sources:
  *   1. `rule:` entries in the prior lockfile;
- *   2. every rule the package ships with ALL stack flags on.
+ *   2. every rule the package ships, selected or not — the `renders` map that
+ *      installRules already built.
  * (2) exists for migration: a consumer upgrading from ≤ 1.15.0 has rule files
  * on disk and no rule lock entries at all, so a lockfile-only candidate set
  * would strand their de-selected rules forever. Anything outside both sets is
@@ -389,15 +395,10 @@ function writeRule(claudeDir, id, rendered) {
  * checksum or the current render — i.e. we can prove the file is ours. A
  * locally edited rule is owner-authored and is left in place with a warning.
  */
-function reconcileStaleRules({ pkgRoot, consumerCwd, claudeDir, configMap, rules, lockEntryMap, installed, warn }) {
-  const selected = new Set(rules.map((r) => r.id));
+function reconcileStaleRules({ consumerCwd, claudeDir, allRules, renders, lockEntryMap, installed, warn }) {
+  const selected = new Set(allRules.filter((r) => r.active).map((r) => r.id));
 
-  const allFlagsOn = Object.fromEntries(STACK_FLAGS.map((flag) => [flag, true]));
-  const knownRenders = new Map(
-    collectRules(pkgRoot, allFlagsOn).map((rule) => [rule.id, renderRule(rule, configMap)])
-  );
-
-  const candidates = new Set(knownRenders.keys());
+  const candidates = new Set(renders.keys());
   for (const key of lockEntryMap.keys()) {
     if (key.startsWith('rule:')) candidates.add(key.slice('rule:'.length));
   }
@@ -408,7 +409,7 @@ function reconcileStaleRules({ pkgRoot, consumerCwd, claudeDir, configMap, rules
     if (!installedEntry) continue;
 
     const lockEntry = lockEntryMap.get(`rule:${id}`) ?? null;
-    const known = knownRenders.get(id);
+    const known = renders.get(id);
     const owned =
       (lockEntry != null && installedEntry.checksum === lockEntry.checksum) ||
       (known != null && installedEntry.checksum === sha256(known));

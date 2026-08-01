@@ -87,3 +87,47 @@ test('_spovishun marker is added to every plugin entry', () => {
     assert.equal(entry._spovishun, true);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invariants the single-pass rewrite must not lose.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('event key order: existing events keep their position, new ones append', () => {
+  const existing = { hooks: { SessionStart: [{ command: 'mine' }], PreToolUse: [{ command: 'mine2' }] } };
+  const merged = mergeSettings(existing, { PostToolUse: [{ command: 'ours' }] });
+  assert.deepEqual(Object.keys(merged.hooks), ['SessionStart', 'PreToolUse', 'PostToolUse']);
+});
+
+test('a non-array hooks[event] value passes through untouched', () => {
+  // Hand-mangled settings must not be silently normalised into an array — the
+  // owner's file is theirs, and we only replace what we tagged.
+  const existing = { hooks: { SessionStart: 'not-an-array' } };
+  const merged = mergeSettings(existing, {});
+  assert.equal(merged.hooks.SessionStart, 'not-an-array');
+});
+
+test('an event that is empty on both sides is not created', () => {
+  const existing = { hooks: { SessionStart: [{ command: 'x', _spovishun: true }] } };
+  const merged = mergeSettings(existing, {});
+  assert.equal(merged.hooks, undefined, 'the whole hooks section goes when nothing is left');
+});
+
+test('non-hook settings keys are preserved', () => {
+  const existing = { model: 'opus', permissions: { allow: ['Bash'] }, hooks: {} };
+  const merged = mergeSettings(existing, { SessionStart: [{ command: 'ours' }] });
+  assert.equal(merged.model, 'opus');
+  assert.deepEqual(merged.permissions, { allow: ['Bash'] });
+});
+
+test('nested objects in the input are deep-cloned, not shared', () => {
+  const existing = { permissions: { allow: ['Bash'] } };
+  const merged = mergeSettings(existing, {});
+  merged.permissions.allow.push('Read');
+  assert.deepEqual(existing.permissions.allow, ['Bash'], 'the caller\u2019s object must not be mutated');
+});
+
+test('a missing or null existing settings object is accepted', () => {
+  assert.deepEqual(mergeSettings(undefined, {}), {});
+  assert.deepEqual(mergeSettings(null, {}), {});
+  assert.deepEqual(mergeSettings({}, undefined), {});
+});

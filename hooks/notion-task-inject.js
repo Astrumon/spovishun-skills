@@ -59,77 +59,10 @@ function loadEnv() {
 
 loadEnv();
 
-// Minimal scalar reader for spovishun-skills.config.yaml — avoids a js-yaml
-// dependency in the standalone hook. Supports both 1-level (`section`, `'key'`)
-// and 2-level dotted (`section`, `'sub.key'`) lookups. Returns '' when the
-// section/key is absent.
-function readConfigValue(section, keyPath) {
-  const configFile = path.join(process.cwd(), 'spovishun-skills.config.yaml');
-  if (!fs.existsSync(configFile)) return '';
-  const lines = fs.readFileSync(configFile, 'utf8').split('\n');
-  const segments = keyPath.split('.');
-
-  let inSection = false;
-  let subIndent = -1;
-  let inSubsection = false;
-  let subIndentInner = -1;
-
-  for (const rawLine of lines) {
-    // Top-level section boundary.
-    if (/^[A-Za-z0-9_]+:/.test(rawLine)) {
-      inSection = rawLine.startsWith(`${section}:`);
-      subIndent = -1;
-      inSubsection = false;
-      subIndentInner = -1;
-      continue;
-    }
-    if (!inSection) continue;
-
-    const indentMatch = rawLine.match(/^(\s+)/);
-    const indent = indentMatch ? indentMatch[1].length : 0;
-    if (indent === 0) continue;
-
-    if (segments.length === 1) {
-      const m = rawLine.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
-      if (m && m[1] === segments[0]) return m[2].replace(/^["']|["']$/g, '');
-      continue;
-    }
-
-    // 2-level path: first find the subsection header, then a scalar within it
-    // at a deeper indent.
-    if (!inSubsection) {
-      const mHeader = rawLine.match(/^(\s+)([A-Za-z0-9_]+):\s*$/);
-      if (mHeader && mHeader[2] === segments[0]) {
-        subIndent = mHeader[1].length;
-        inSubsection = true;
-        subIndentInner = -1;
-      }
-      continue;
-    }
-
-    // Inside subsection: exit when indentation returns to subIndent or shallower
-    // and the line declares a different key.
-    if (indent <= subIndent) {
-      inSubsection = false;
-      subIndentInner = -1;
-      // Re-check this same line as a potential subsection header for segments[0].
-      const mHeader = rawLine.match(/^(\s+)([A-Za-z0-9_]+):\s*$/);
-      if (mHeader && mHeader[2] === segments[0]) {
-        subIndent = mHeader[1].length;
-        inSubsection = true;
-      }
-      continue;
-    }
-
-    const mVal = rawLine.match(/^\s+([A-Za-z0-9_]+):\s*(.+?)\s*$/);
-    if (mVal && mVal[1] === segments[1]) return mVal[2].replace(/^["']|["']$/g, '');
-  }
-  return '';
-}
-
-function slug(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
+// Config reading lives in ONE place — see hooks/config-reader.js for why the
+// scanner is hand-written (no node_modules in a consumer's .claude/) and why
+// this file must not grow a copy of it again.
+const { readConfigValue, readConfigValueOrWarn, slugify: slug } = require('./config-reader.js');
 
 // $CLAUDE_PROJECT_DIR is injected by the harness ONLY into hook subprocesses (like
 // this one) — never into the agent's Bash tool shell, where it expands empty. Command
@@ -157,12 +90,35 @@ const { token: NOTION_TOKEN, source: TOKEN_SOURCE } = resolveToken();
 // NOTION_BOARD_COLLECTION_ID is the deprecated 1.2.0/1.2.1 alias — it was always
 // a misnomer (the hook queries /v1/databases/{id}/query, not a data source).
 // Keep accepting it so existing consumer .env files keep working.
+//
+// Every config-sourced constant below resolves through readConfigValueOrWarn:
+// a value that cannot be read out of a config file that is sitting right there
+// is a broken config, and the placeholder it degrades to is silently wrong
+// (a bad PROJECT_PREFIX makes the hook query the board for tasks that do not
+// exist and report "no tasks" instead of an error). The warning goes to stderr
+// and the hook still exits 0 — it must never brick a session.
+const HOOK_LABEL = 'notion-task-inject';
+
+// `notion:` is absent by design when stack.notion=false, so a missing
+// database_id is correct there — only demand one when the stack claims Notion.
+function notionStackEnabled() {
+  return readConfigValue('stack', 'notion') === 'true';
+}
+
 const DATABASE_ID = process.env.NOTION_DATABASE_ID
   || process.env.NOTION_BOARD_COLLECTION_ID
-  || readConfigValue('notion', 'database_id');
-const PROJECT_PREFIX = process.env.PROJECT_PREFIX || slug(readConfigValue('project', 'name')) || 'project';
-const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH || readConfigValue('git', 'dev_branch') || 'develop';
-// Board v2 (Scrum) optional Stage select filter. Empty string = unset = no filter (Board v1).
+  || (notionStackEnabled()
+    ? readConfigValueOrWarn('notion', 'database_id', { fallback: '', label: HOOK_LABEL })
+    : readConfigValue('notion', 'database_id'));
+// slug('project') === 'project', so the fallback survives the slugification
+// intact; the trailing || guards a name that slugifies to nothing ("!!!").
+const PROJECT_PREFIX = process.env.PROJECT_PREFIX
+  || slug(readConfigValueOrWarn('project', 'name', { fallback: 'project', label: HOOK_LABEL }))
+  || 'project';
+const DEVELOP_BRANCH = process.env.GIT_DEVELOP_BRANCH
+  || readConfigValueOrWarn('git', 'dev_branch', { fallback: 'develop', label: HOOK_LABEL });
+// Board v2 (Scrum) optional Stage select filter. Empty string = unset = no filter
+// (Board v1) — a legitimate value, so this one resolves without warning.
 const STAGE_FILTER = process.env.NOTION_PICKER_STAGE_FILTER || readConfigValue('notion', 'picker.stage_filter');
 
 function stageFilterClause() {

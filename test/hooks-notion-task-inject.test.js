@@ -37,9 +37,15 @@ function loadHook(envOverrides = {}, configBody = null) {
   }
   process.chdir(cwd);
   delete require.cache[require.resolve(HOOK_PATH)];
+  // The config-sourced constants warn on stderr at require time when they have
+  // to fall back, so capture stderr across the require to assert on it.
+  const stderr = [];
+  const realWrite = process.stderr.write;
+  process.stderr.write = (chunk) => { stderr.push(String(chunk)); return true; };
   try {
-    return { hook: require(HOOK_PATH), cwd };
+    return { hook: require(HOOK_PATH), cwd, stderr };
   } finally {
+    process.stderr.write = realWrite;
     process.chdir(oldCwd);
     for (const [k, v] of Object.entries(oldEnv)) {
       if (v === undefined) delete process.env[k];
@@ -229,4 +235,52 @@ test('readConfigValue resolves 2-level dotted keys (parity with scripts lib)', (
   // readConfigValue through a fresh chdir to the same cwd is not possible here,
   // so assert via the constants the module derived from the same config.
   assert.deepEqual(hook.stageFilterClause(), { property: 'Stage', select: { equals: 'Sprint' } });
+});
+
+// A UTF-8 BOM (which Windows editors add unprompted) used to make the hook's
+// own scanner miss every top-level key, so PROJECT_PREFIX silently became the
+// literal "project" and the picker queried the board for tasks that cannot
+// exist. The shared reader strips it.
+test('PROJECT_PREFIX survives a UTF-8 BOM in the config', () => {
+  const config = 'project:\n  name: "Spovishun"\nstack:\n  notion: false\ngit:\n  dev_branch: "develop"\n';
+  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, '﻿' + config);
+  assert.equal(
+    hook.deriveBranchFromName('feature/spovishun-42: Add ban command'),
+    'feature/spovishun-42-add-ban-command'
+  );
+  assert.deepEqual(stderr, [], 'a readable config must not warn');
+});
+
+test('a config that exists but cannot answer project.name warns loudly', () => {
+  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, 'project:\n  language: "uk"\n');
+  // Still falls back so the session keeps working …
+  assert.equal(hook.deriveBranchFromName('feature/x-7: Foo'), 'feature/project-7-foo');
+  // … but never silently.
+  const warning = stderr.find((line) => line.includes('project.name'));
+  assert.ok(warning, `expected a project.name warning, got ${JSON.stringify(stderr)}`);
+  assert.match(warning, /\[notion-task-inject\]/);
+  assert.match(warning, /spovishun-skills\.config\.yaml/);
+});
+
+test('no config file at all resolves defaults silently', () => {
+  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, null);
+  assert.equal(hook.deriveBranchFromName('feature/x-7: Foo'), 'feature/project-7-foo');
+  assert.deepEqual(stderr, [], 'env-only setups are supported, not broken');
+});
+
+test('missing notion.database_id warns only when stack.notion is on', () => {
+  const off = loadHook(
+    { NOTION_DATABASE_ID: undefined },
+    'project:\n  name: "X"\nstack:\n  notion: false\ngit:\n  dev_branch: "develop"\n'
+  );
+  assert.deepEqual(off.stderr, [], 'stack.notion=false legitimately has no notion section');
+
+  const on = loadHook(
+    { NOTION_DATABASE_ID: undefined },
+    'project:\n  name: "X"\nstack:\n  notion: true\ngit:\n  dev_branch: "develop"\n'
+  );
+  assert.ok(
+    on.stderr.some((line) => line.includes('notion.database_id')),
+    `expected a database_id warning, got ${JSON.stringify(on.stderr)}`
+  );
 });

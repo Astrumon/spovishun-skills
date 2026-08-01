@@ -4,12 +4,14 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { loadConfig } from '../lib/config-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { installClaude } from '../adapters/claude/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(here, '..');
+const require = createRequire(import.meta.url);
 
 const NOTION_CONFIG = [
   'project:',
@@ -109,6 +111,30 @@ test('scripts/notion/lib/ modules are copied as a subdirectory', async () => {
   ];
   for (const name of expectedLib) {
     assert.ok(existsSync(join(libDir, name)), `lib/${name} must be installed`);
+  }
+});
+
+// scripts/notion/lib/config-reader.js is a re-export of hooks/config-reader.js.
+// The `../../../hooks/` hop has to resolve in the INSTALLED tree too
+// (.claude/scripts/notion/lib → .claude/hooks), which no repo-local test can
+// prove — so require it out of a real install and make it read a real config.
+test('installed config-reader resolves through .claude/hooks/ and reads the config', async () => {
+  const consumer = await install(NOTION_CONFIG);
+  const installedReader = join(consumer, '.claude', 'scripts', 'notion', 'lib', 'config-reader.js');
+  assert.ok(existsSync(installedReader), 'lib/config-reader.js must be installed');
+  assert.ok(
+    existsSync(join(consumer, '.claude', 'hooks', 'config-reader.js')),
+    'the canonical reader must be installed alongside the hooks'
+  );
+
+  const oldCwd = process.cwd();
+  process.chdir(consumer);
+  try {
+    const { readConfigValue } = require(installedReader);
+    assert.equal(readConfigValue('project', 'name'), 'Scripts delivery test');
+    assert.equal(readConfigValue('notion', 'database_id'), 'aaaaaaaa11111111bbbbbbbb22222222');
+  } finally {
+    process.chdir(oldCwd);
   }
 });
 

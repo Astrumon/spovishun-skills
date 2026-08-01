@@ -22,9 +22,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   35 lines. The 10-branch `switch` is gone: each action is a 3–6 line arrow returning
   `{ counter, lock, effect?, note? }`, so the decision table carries no IO and the writes happen at
   one site. Behaviour is otherwise unchanged — every pre-existing test passes untouched.
+- **One config reader, one file (#164).** `hooks/config-reader.js` is now the single implementation;
+  `scripts/notion/lib/config-reader.js` re-exports it (the `../../../hooks/` hop resolves
+  identically in the repo and in an installed `.claude/`), and the ~63-line copy inside
+  `hooks/notion-task-inject.js` is gone. It lives under `hooks/` because `hooks/` installs
+  unconditionally while `scripts/notion/` ships only when `stack.notion: true` — scripts may
+  depend on hooks, never the reverse. Still dependency-free by necessity: consumers get
+  `.claude/` without a `node_modules`, so `require('js-yaml')` there is `MODULE_NOT_FOUND`.
+  `lib/config-loader.js` is unchanged and stays the plugin-side js-yaml + Ajv loader.
+- **Config fallbacks no longer degrade in silence (#164).** `readConfigValueOrWarn()` distinguishes
+  "no config file" (a supported env-only setup) from "config file present but the key is
+  unreadable" (a broken config), and warns on stderr with the file and key names for the latter.
+  Wired into `PROJECT_PREFIX`, `git.dev_branch` and `notion.database_id` in the hook, and into
+  `projectPrefix()` in the notion scripts. `notion.database_id` only demands a value when
+  `stack.notion` is on; `notion.picker.stage_filter` stays silently optional (empty is a
+  legitimate Board-v1 value). The hook still exits 0 throughout — it must never brick a session.
+- `slugify()` moved to the shared reader, replacing the three near-identical copies that turned
+  `project.name` into a branch prefix (#164).
 
 ### Fixed
 
+- **A config with a UTF-8 BOM silently sent the task hook to the wrong branch prefix (#164).**
+  `spovishun-skills.config.yaml` was read by three separate implementations, two of which were
+  hand-written line scanners that had already drifted: only `scripts/notion/lib/config-reader.js`
+  stripped the BOM. JavaScript counts `U+FEFF` as `\s`, so in the hook's copy a BOM'd `project:`
+  failed the top-level-section regex and *every* lookup returned `''`. `PROJECT_PREFIX` then fell
+  through to the literal `project`, and the hook queried the board for tasks that cannot exist —
+  reporting "No Tasks Available" instead of an error. Windows editors add the BOM unprompted, so
+  this fired on a real consumer.
 - **`update` reported a vanished file as a local edit (#165).** `MISSING_ON_DISK` incremented the
   `localOnly` counter — the opposite meaning. It now has its own `restored` counter, surfaced in the
   closing summary line.

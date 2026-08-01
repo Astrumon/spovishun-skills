@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { ConfigError } from '../lib/errors.js';
@@ -188,4 +189,25 @@ test('loads template kind from templates/ directory', () => {
   assert.equal(artifacts[0].kind, 'template');
   assert.equal(artifacts[0].id, 'sample');
   assert.ok(artifacts[0].bodyText.includes('Sample template'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kind reachability. `hook` and `rule` were declared in the loader for years and
+// never produced a single artifact: hooks/ holds flat .js files (loadArtifacts
+// only descends into subdirectories) and rules/ was never in KIND_MAP at all.
+// This pins the live set so neither comes back as dead code.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('loadArtifacts yields only skill, agent and template kinds', () => {
+  const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const kinds = new Set(loadArtifacts(pkgRoot).map((a) => a.kind));
+  assert.deepEqual([...kinds].sort(), ['agent', 'skill', 'template']);
+});
+
+test('hooks/ is not scanned for artifacts', () => {
+  // The hooks the plugin ships are copied verbatim by installHooks(); if this
+  // ever fails, hooks/ has grown a subdirectory that the loader now treats as
+  // an artifact and will reject for having no manifest.yaml.
+  const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  assert.ok(!loadArtifacts(pkgRoot).some((a) => a.artifactDir.includes(`${sep}hooks${sep}`)));
 });

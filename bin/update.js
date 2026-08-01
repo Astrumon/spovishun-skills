@@ -10,11 +10,8 @@ import { loadArtifacts } from '../lib/artifact-loader.js';
 import { getTarget } from '../adapters/registry.js';
 import { filterByStack } from '../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../lib/placeholder-map.js';
-import { renderTemplate } from '../lib/template-renderer.js';
-import { sha256 } from '../lib/checksum.js';
+import { renderArtifact } from '../lib/render-artifact.js';
 import { classifyArtifact, ACTIONS } from '../lib/update-classifier.js';
-import { markBody } from '../lib/skill-frontmatter.js';
-import { stripMarker } from '../lib/marker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -141,17 +138,15 @@ function requireOrThrow(condition, message, actionable) {
 function buildUpstreamMap({ artifacts, configMap, targetDef }) {
   const map = new Map();
   for (const artifact of artifacts) {
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
     // Marker-ownership targets synthesize skill frontmatter and stamp a
     // provenance marker on skills/agents (see adapters/claude/index.js). Mirror
     // that here so the written body carries the marker, while the checksum is
     // taken over the marker-stripped body to stay invariant (matches lockfile +
     // on-disk).
-    const rendered = targetDef.ownership === 'marker'
-      ? markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest })
-      : renderedBody;
-    map.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum: sha256(stripMarker(rendered)) });
+    const { rendered, checksum } = renderArtifact(artifact, configMap, {
+      mark: targetDef.ownership === 'marker',
+    });
+    map.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum });
   }
   return map;
 }

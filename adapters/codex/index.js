@@ -4,8 +4,7 @@ import { Buffer } from 'node:buffer';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { collectRules, ruleLockEntry } from '../../lib/rules-loader.js';
-import { renderTemplate } from '../../lib/template-renderer.js';
-import { sha256 } from '../../lib/checksum.js';
+import { renderArtifact } from '../../lib/render-artifact.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
 export const AGENTS_MD_FILENAME = 'AGENTS.md';
@@ -73,13 +72,15 @@ export async function installCodex({
   // as the claude and windsurf adapters, so lock entries mean the same thing
   // regardless of target.
   const artifactEntries = included.map((artifact) => {
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
+    // No marker: codex inlines every body into AGENTS.md, so there is no
+    // per-artifact file to stamp. stripMarker is a no-op on an unmarked body,
+    // which keeps this checksum identical to the pre-registry one.
+    const { checksum } = renderArtifact(artifact, configMap);
     return {
       kind: artifact.kind,
       id: artifact.id,
       version: artifact.version,
-      checksum: sha256(rendered),
+      checksum,
     };
   });
 

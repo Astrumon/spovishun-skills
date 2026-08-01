@@ -4,7 +4,7 @@ import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
-import { sha256 } from '../../lib/checksum.js';
+import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
 
 export const RULES_DIR = '.windsurf/rules';
@@ -49,9 +49,10 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
   const written = new Set();
 
   for (const artifact of included) {
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const rendered = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    const checksum = sha256(rendered);
+    // No marker: the ownership model for chunked -part-N files is still open
+    // (spovishun-162). stripMarker is a no-op on an unmarked body, so this
+    // checksum is identical to the pre-registry one.
+    const { rendered, checksum } = renderArtifact(artifact, configMap);
 
     const ruleBaseId = artifact.kind === 'template' ? `templates--${artifact.id}` : artifact.id;
     writeChunked(rulesDir, ruleBaseId, rendered, written);
@@ -64,7 +65,10 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
         );
         continue;
       }
-      const fileRendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+      const fileRendered = renderTemplate(file.contents, {
+        configMap,
+        manifestPlaceholders: manifestPlaceholderKeys(artifact.manifest),
+      });
       const fileRuleId = `${ruleBaseId}--${file.relPath.replace(/\//g, '--').replace(/\.md$/, '')}`;
       writeChunked(rulesDir, fileRuleId, fileRendered, written);
     }

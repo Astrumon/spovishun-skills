@@ -4,12 +4,11 @@ import { Buffer } from 'node:buffer';
 import { collectRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
 import { filterByStack, STACK_FLAGS } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
+import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { sha256 } from '../../lib/checksum.js';
 import { mergeSettings } from '../../lib/settings-merger.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
-import { markBody } from '../../lib/skill-frontmatter.js';
-import { stripMarker } from '../../lib/marker.js';
 // Imported straight from lib/, never via adapters/registry.js — the registry
 // imports this adapter, so reaching back for it would close a cycle.
 import { loadClaudeFiles } from '../../lib/installed-files-loader.js';
@@ -62,13 +61,10 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
     const layout = KIND_LAYOUT[artifact.kind];
     if (!layout) continue;
 
-    const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
-    const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    const bodyToWrite = markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest });
     // Checksum is taken over the marker-stripped body so it is identical to the
     // pre-marker lockfile checksum — that invariance is what makes migration
-    // and the ownership predicate work.
-    const checksum = sha256(stripMarker(bodyToWrite));
+    // and the ownership predicate work. See lib/render-artifact.js.
+    const { rendered: bodyToWrite, checksum } = renderArtifact(artifact, configMap, { mark: true });
 
     const key = `${artifact.kind}:${artifact.id}`;
     const lockEntry = lockEntryMap.get(key) ?? null;
@@ -139,7 +135,10 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
         const destPath = join(artifactDir, file.relPath);
         mkdirSync(dirname(destPath), { recursive: true });
         if (file.encoding === 'utf8') {
-          const rendered = renderTemplate(file.contents, { configMap, manifestPlaceholders });
+          const rendered = renderTemplate(file.contents, {
+            configMap,
+            manifestPlaceholders: manifestPlaceholderKeys(artifact.manifest),
+          });
           writeFileSync(destPath, rendered, 'utf8');
         } else {
           writeFileSync(destPath, Buffer.from(file.contents, 'base64'));

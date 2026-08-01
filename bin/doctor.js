@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../lib/config-loader.js';
 import { readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
-import { loadInstalledFiles } from '../lib/installed-files-loader.js';
+import { loadClaudeFiles } from '../lib/installed-files-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { readMarker } from '../lib/marker.js';
 import { notionRequest } from '../lib/notion-client.js';
@@ -404,7 +404,7 @@ function checkInstalledArtifacts(ctx) {
     return { name: 'installed-artifacts', status: 'pass', detail: 'no artifact entries in lockfile' };
   }
 
-  const installed = loadInstalledFiles(ctx.cwd, 'claude');
+  const installed = loadClaudeFiles(ctx.cwd);
   const missing = [];
   let modified = 0;
   for (const a of lockArtifacts) {
@@ -448,7 +448,7 @@ function checkInstalledArtifacts(ctx) {
  * Orphaned markers and renames signal a real inconsistency → fail.
  */
 function checkOwnershipAnomalies(ctx) {
-  const installed = loadInstalledFiles(ctx.cwd, 'claude');
+  const installed = loadClaudeFiles(ctx.cwd);
   const lockMap = new Map(
     (ctx.lockData?.artifacts ?? []).map((a) => [`${a.kind}:${a.id}`, a])
   );

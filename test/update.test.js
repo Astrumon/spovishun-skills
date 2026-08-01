@@ -243,8 +243,8 @@ test('rule lock entries are preserved by update (not dropped as REMOVED)', async
 // ─────────────────────────────────────────────────────────────────────────────
 // installed-files-loader: windsurf template files keyed as template:<id>
 // ─────────────────────────────────────────────────────────────────────────────
-test('loadInstalledFiles keys windsurf templates--<id>.md files under template:<id>', async () => {
-  const { loadInstalledFiles } = await import('../lib/installed-files-loader.js');
+test('loadWindsurfFiles keys windsurf templates--<id>.md files under template:<id>', async () => {
+  const { loadWindsurfFiles } = await import('../lib/installed-files-loader.js');
   const { mkdirSync } = await import('node:fs');
 
   const consumer = makeConsumerDir();
@@ -253,7 +253,7 @@ test('loadInstalledFiles keys windsurf templates--<id>.md files under template:<
   writeFileSync(join(rulesDir, 'templates--epic-page.md'), '# Epic template\n', 'utf8');
   writeFileSync(join(rulesDir, 'some-skill.md'), '# Skill\n', 'utf8');
 
-  const map = loadInstalledFiles(consumer, 'windsurf');
+  const map = loadWindsurfFiles(consumer);
 
   assert.ok(map.has('template:epic-page'), 'template file must be keyed by kind template');
   assert.equal(map.has('skill:templates--epic-page'), false, 'template must not leak under skill kind');

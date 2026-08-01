@@ -7,14 +7,12 @@ import { ConfigError } from '../lib/errors.js';
 import { readLockfile, writeLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
 import { loadConfig } from '../lib/config-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
-import { loadInstalledFiles } from '../lib/installed-files-loader.js';
+import { getTarget } from '../adapters/registry.js';
 import { filterByStack } from '../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../lib/placeholder-map.js';
 import { renderTemplate } from '../lib/template-renderer.js';
 import { sha256 } from '../lib/checksum.js';
 import { classifyArtifact, ACTIONS } from '../lib/update-classifier.js';
-import { updateClaude } from '../adapters/claude/update.js';
-import { updateWindsurf } from '../adapters/windsurf/update.js';
 import { markBody } from '../lib/skill-frontmatter.js';
 import { stripMarker } from '../lib/marker.js';
 
@@ -25,6 +23,8 @@ const CONFIG_NAME = 'spovishun-skills.config.yaml';
 const CODEX_UNSUPPORTED =
   `[update] codex target is not supported in V1 — AGENTS.md is monolithic and cannot be updated per-artifact.\n` +
   `  Workaround: edit AGENTS.md manually, then run \`spovishun-skills install --target=codex\` to regenerate.\n`;
+
+const UNSUPPORTED_MESSAGE = { codex: CODEX_UNSUPPORTED };
 
 /**
  * Compares installed artifacts against an upstream copy and applies safe changes.
@@ -42,14 +42,15 @@ export async function runUpdate({ cwd, upstreamRoot, skillId, dryRun = false, ou
 
   const { configPath, lockfilePath, lockData } = validateUpdatePreconditions({ cwd, upstreamRoot });
   const { target } = lockData;
+  const targetDef = getTarget(target);
 
-  if (target === 'codex') {
-    write(CODEX_UNSUPPORTED);
+  if (!targetDef.supportsUpdate) {
+    write(UNSUPPORTED_MESSAGE[target] ?? `[update] ${target} target does not support per-artifact update.\n`);
     return emptySummary();
   }
 
   const pluginVersion = readPluginVersion();
-  const ctx = buildContext({ cwd, configPath, upstreamRoot, lockData, target, dryRun, write, pluginVersion });
+  const ctx = buildContext({ cwd, configPath, upstreamRoot, lockData, targetDef, dryRun, write, pluginVersion });
 
   const summary = emptySummary();
   const newLockEntries = [];
@@ -79,19 +80,19 @@ function readPluginVersion() {
  * Loads everything the per-key pass reads — the rendered upstream artifacts, the
  * lockfile entries and the on-disk snapshot — into the context `processKey` takes.
  */
-function buildContext({ cwd, configPath, upstreamRoot, lockData, target, dryRun, write, pluginVersion }) {
+function buildContext({ cwd, configPath, upstreamRoot, lockData, targetDef, dryRun, write, pluginVersion }) {
   const config = loadConfig(configPath);
   const artifacts = filterByStack(loadArtifacts(upstreamRoot), config.stack ?? {});
 
   return {
-    target,
+    targetDef,
     cwd,
     dryRun,
     write,
     pluginVersion,
-    upstreamMap: buildUpstreamMap({ artifacts, configMap: buildPlaceholderMap(config), target }),
+    upstreamMap: buildUpstreamMap({ artifacts, configMap: buildPlaceholderMap(config), targetDef }),
     lockEntryMap: new Map((lockData.artifacts ?? []).map((e) => [`${e.kind}:${e.id}`, e])),
-    installedFiles: loadInstalledFiles(cwd, target),
+    installedFiles: targetDef.readInstalled(cwd),
   };
 }
 
@@ -137,16 +138,17 @@ function requireOrThrow(condition, message, actionable) {
  *
  * @returns {Map<string, {artifact: object, rendered: string, checksum: string}>}
  */
-function buildUpstreamMap({ artifacts, configMap, target }) {
+function buildUpstreamMap({ artifacts, configMap, targetDef }) {
   const map = new Map();
   for (const artifact of artifacts) {
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
     const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
-    // Claude installs synthesize skill frontmatter and stamp a provenance
-    // marker on skills/agents (see adapters/claude/index.js). Mirror that here
-    // so the written body carries the marker, while the checksum is taken over
-    // the marker-stripped body to stay invariant (matches lockfile + on-disk).
-    const rendered = target === 'claude'
+    // Marker-ownership targets synthesize skill frontmatter and stamp a
+    // provenance marker on skills/agents (see adapters/claude/index.js). Mirror
+    // that here so the written body carries the marker, while the checksum is
+    // taken over the marker-stripped body to stay invariant (matches lockfile +
+    // on-disk).
+    const rendered = targetDef.ownership === 'marker'
       ? markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest })
       : renderedBody;
     map.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum: sha256(stripMarker(rendered)) });
@@ -194,12 +196,13 @@ function emptySummary() {
 }
 
 /**
- * Ownership states are only wired up for claude. For windsurf the model is
- * deferred (markers in chunked -part-N files need a separate decision), so
- * treat its files as owned to preserve the pre-ownership classification.
+ * Only the 'marker' ownership model is wired up. For 'assume-owned' targets
+ * (windsurf) the model is deferred — markers in chunked -part-N files need a
+ * separate decision (spovishun-162) — so treat their files as owned to preserve
+ * the pre-ownership classification.
  */
-function ownershipOf({ target, installedEntry, lockEntry }) {
-  if (target !== 'claude') return true;
+function ownershipOf({ targetDef, installedEntry, lockEntry }) {
+  if (targetDef.ownership !== 'marker') return true;
   if (!installedEntry) return false;
   return installedEntry.hasMarker || (lockEntry != null && installedEntry.checksum === lockEntry.checksum);
 }
@@ -303,7 +306,7 @@ async function processKey(key, ctx) {
     upstream: upstreamEntry && { version: upstreamEntry.artifact.version, checksum: upstreamEntry.checksum },
     lockEntry,
     onDiskChecksum,
-    onDiskOwned: ownershipOf({ target: ctx.target, installedEntry, lockEntry }),
+    onDiskOwned: ownershipOf({ targetDef: ctx.targetDef, installedEntry, lockEntry }),
   });
 
   ctx.write(`  ${action.padEnd(16)} ${key}\n`);
@@ -315,20 +318,23 @@ async function processKey(key, ctx) {
   return { counter: plan.counter, lock: plan.lock };
 }
 
+/**
+ * Performs the write the plan asked for. Both adapters share one update
+ * signature (see adapters/registry.js), so the conflict and non-conflict paths
+ * differ only by the labels the diff markers carry — no target branching.
+ */
 async function applyPlan(plan, ctx, { upstreamEntry, installedEntry }) {
-  const { target, cwd } = ctx;
-  if (plan.effect === 'conflict') {
-    await applyConflict({
-      target,
-      cwd,
-      upstreamEntry,
-      installedEntry,
-      oursLabel: relative(cwd, installedEntry.paths[0]),
+  const conflict = plan.effect === 'conflict';
+  await ctx.targetDef.update({
+    consumerCwd: ctx.cwd,
+    upstreamEntry,
+    installedEntry,
+    conflict,
+    ...(conflict && {
+      oursLabel: relative(ctx.cwd, installedEntry.paths[0]),
       theirsLabel: `spovishun-skills@${ctx.pluginVersion}`,
-    });
-    return;
-  }
-  await applyArtifact({ target, cwd, upstreamEntry, installedEntry });
+    }),
+  });
 }
 
 /**
@@ -355,20 +361,4 @@ export function formatSummary(summary, { dryRun = false } = {}) {
   }
 
   return `\nDone (${dryRun ? 'dry-run, ' : ''}${segments.join(', ')})\n`;
-}
-
-async function applyArtifact({ target, cwd, upstreamEntry, installedEntry }) {
-  if (target === 'claude') {
-    await updateClaude({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: false });
-  } else if (target === 'windsurf') {
-    await updateWindsurf({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: false });
-  }
-}
-
-async function applyConflict({ target, cwd, upstreamEntry, installedEntry, oursLabel, theirsLabel }) {
-  if (target === 'claude') {
-    await updateClaude({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: true, oursLabel, theirsLabel });
-  } else if (target === 'windsurf') {
-    await updateWindsurf({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: true, oursLabel, theirsLabel });
-  }
 }

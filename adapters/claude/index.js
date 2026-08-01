@@ -10,7 +10,9 @@ import { mergeSettings } from '../../lib/settings-merger.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
 import { markBody } from '../../lib/skill-frontmatter.js';
 import { stripMarker } from '../../lib/marker.js';
-import { loadInstalledFiles } from '../../lib/installed-files-loader.js';
+// Imported straight from lib/, never via adapters/registry.js — the registry
+// imports this adapter, so reaching back for it would close a cycle.
+import { loadClaudeFiles } from '../../lib/installed-files-loader.js';
 import { classifyArtifact, ACTIONS } from '../../lib/update-classifier.js';
 
 const KIND_LAYOUT = {
@@ -52,7 +54,7 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
 
   // Snapshot what is already on disk (checksums are marker-stripped) so the
   // ownership predicate can tell our own files from owner-authored collisions.
-  const installed = loadInstalledFiles(consumerCwd, 'claude');
+  const installed = loadClaudeFiles(consumerCwd);
 
   const lockEntries = [];
 

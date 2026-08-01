@@ -23,6 +23,11 @@ const WINDSURF_KINDS = new Set(['skill', 'template']);
  * Agent and hook artifacts are skipped (Windsurf has no agent concept). Binary
  * supporting files are skipped with a stderr warning.
  *
+ * Takes the uniform installer argument object (see adapters/registry.js) and
+ * destructures the fields it uses. `pluginVersion` and `force` are not among
+ * them: nothing in .windsurf/rules/ carries a version header, and the ownership
+ * model this target would need for --force is still open (spovishun-162).
+ *
  * @param {object} opts
  * @param {string}   opts.consumerCwd   — absolute path to consumer project root
  * @param {string}   opts.pkgRoot       — absolute path to the spovishun-skills package root (for rules/)

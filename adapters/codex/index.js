@@ -20,6 +20,11 @@ const CODEX_KINDS = new Set(['skill', 'agent', 'template']);
  * the same way the Claude adapter does. If the resulting file exceeds the
  * 32 KiB AGENTS.md soft limit, emits a stderr warning but still writes the file.
  *
+ * Takes the uniform installer argument object (see adapters/registry.js) and
+ * destructures the fields it uses; `force` is not among them — AGENTS.md is
+ * regenerated wholesale on every install, so there is no per-artifact edit to
+ * preserve or overwrite.
+ *
  * @param {object} opts
  * @param {string}   opts.consumerCwd    — absolute path to consumer project root
  * @param {string}   opts.pkgRoot        — absolute path to the spovishun-skills package root (for rules/)

@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../lib/config-loader.js';
 import { readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
-import { loadClaudeFiles } from '../lib/installed-files-loader.js';
+import { findTarget } from '../adapters/registry.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { readMarker } from '../lib/marker.js';
 import { notionRequest } from '../lib/notion-client.js';
@@ -31,80 +31,11 @@ const SYM = { pass: '✓', fail: '✗', skip: '·' };
  */
 export async function runDoctor({ cwd, env = process.env, out = process.stdout, fetchImpl = globalThis.fetch } = {}) {
   const write = (msg) => out.write(msg);
-  const results = [];
-  const ctx = { cwd, env, fetchImpl, config: null, lockData: null };
+  const ctx = makeContext({ cwd, env, fetchImpl });
 
   write(`Checking spovishun-skills installation in ${cwd}\n\n`);
 
-  // Checks 1-2: config
-  const r1 = checkConfigPresent(ctx);
-  results.push(r1);
-  if (r1.status === 'pass') {
-    const r2 = checkConfigValid(ctx);
-    results.push(r2);
-  } else {
-    results.push({ name: 'config-valid', status: 'skip', detail: 'config not found' });
-  }
-
-  // Checks 3-4: lockfile
-  const r3 = checkLockfilePresent(ctx);
-  results.push(r3);
-  if (r3.status === 'pass') {
-    results.push(checkLockfileValid(ctx));
-  } else {
-    results.push({ name: 'lockfile-valid', status: 'skip', detail: 'lockfile not found' });
-  }
-
-  // Checks 5-7: Notion (only if stack.notion === true)
-  const notionEnabled = ctx.config?.stack?.notion === true;
-  if (!notionEnabled) {
-    results.push({ name: 'notion-token-env',       status: 'skip', detail: 'stack.notion=false' });
-    results.push({ name: 'notion-token-valid',     status: 'skip', detail: 'stack.notion=false' });
-    results.push({ name: 'notion-database-access', status: 'skip', detail: 'stack.notion=false' });
-  } else {
-    const r5 = checkNotionTokenEnv(ctx);
-    results.push(r5);
-    if (r5.status === 'pass') {
-      const r6 = await checkNotionTokenValid(ctx);
-      results.push(r6);
-      if (r6.status === 'pass') {
-        results.push(await checkNotionDatabaseAccess(ctx));
-      } else {
-        results.push({ name: 'notion-database-access', status: 'skip', detail: 'prior check failed' });
-      }
-    } else {
-      results.push({ name: 'notion-token-valid',     status: 'skip', detail: 'prior check failed' });
-      results.push({ name: 'notion-database-access', status: 'skip', detail: 'prior check failed' });
-    }
-  }
-
-  // Checks 8-9: .gitignore
-  if (notionEnabled) {
-    results.push(checkGitignoreConfig(ctx));
-  } else {
-    results.push({ name: 'gitignore-config', status: 'skip', detail: 'stack.notion=false' });
-  }
-  results.push(checkGitignoreLocalSettings(ctx));
-
-  // Checks 10-12: claude target only
-  const target = ctx.lockData?.target;
-  if (target === 'claude') {
-    const r10 = checkSettingsJsonPresent(ctx);
-    results.push(r10);
-    if (r10.status === 'pass') {
-      results.push(checkSettingsJsonHooks(ctx));
-    } else {
-      results.push({ name: 'settings-json-hooks', status: 'skip', detail: 'settings.json missing or invalid' });
-    }
-    results.push(checkInstalledArtifacts(ctx));
-    results.push(checkOwnershipAnomalies(ctx));
-  } else {
-    const reason = target ? `target=${target}` : 'lockfile missing or no target';
-    results.push({ name: 'settings-json-present',  status: 'skip', detail: reason });
-    results.push({ name: 'settings-json-hooks',    status: 'skip', detail: reason });
-    results.push({ name: 'installed-artifacts',    status: 'skip', detail: reason });
-    results.push({ name: 'ownership-anomalies',    status: 'skip', detail: reason });
-  }
+  const results = await runChecks(CHECKS, ctx);
 
   printResults(write, results);
 
@@ -115,6 +46,98 @@ export async function runDoctor({ cwd, env = process.env, out = process.stdout, 
   }
   write(`\n${failed} check(s) failed.\n`);
   return false;
+}
+
+/**
+ * The check list, in report order. Declaring the skip conditions instead of
+ * hand-writing them removed seven duplicated skip literals and the risk that a
+ * new check forgets to push a placeholder result for its skipped branch —
+ * `doctor` reports a fixed set of names either way.
+ *
+ *   run        — (ctx) => result, sync or async. Only called when the check runs.
+ *   dependsOn  — name of a check that must have PASSED first.
+ *   skipDetail — reason shown when skipped; a string, or (ctx) => string. Used
+ *                for a `when` skip and, unless overridden, for a dependsOn skip.
+ *   whenFailed — reason for a dependsOn skip, when it differs from skipDetail.
+ *   when       — (ctx) => boolean gate; false means "not applicable here".
+ */
+const notionEnabled = (ctx) => ctx.config?.stack?.notion === true;
+const ownedTarget = (ctx) => findTarget(ctx.lockData?.target)?.ownership === 'marker';
+const targetReason = (ctx) =>
+  ctx.lockData?.target ? `target=${ctx.lockData.target}` : 'lockfile missing or no target';
+
+const CHECKS = Object.freeze([
+  { name: 'config-present', run: checkConfigPresent },
+  { name: 'config-valid', run: checkConfigValid, dependsOn: 'config-present', whenFailed: 'config not found' },
+
+  { name: 'lockfile-present', run: checkLockfilePresent },
+  { name: 'lockfile-valid', run: checkLockfileValid, dependsOn: 'lockfile-present', whenFailed: 'lockfile not found' },
+
+  { name: 'notion-token-env', run: checkNotionTokenEnv, when: notionEnabled, skipDetail: 'stack.notion=false' },
+  { name: 'notion-token-valid', run: checkNotionTokenValid, when: notionEnabled,
+    skipDetail: 'stack.notion=false', dependsOn: 'notion-token-env', whenFailed: 'prior check failed' },
+  { name: 'notion-database-access', run: checkNotionDatabaseAccess, when: notionEnabled,
+    skipDetail: 'stack.notion=false', dependsOn: 'notion-token-valid', whenFailed: 'prior check failed' },
+
+  { name: 'gitignore-config', run: checkGitignoreConfig, when: notionEnabled, skipDetail: 'stack.notion=false' },
+  { name: 'gitignore-local-settings', run: checkGitignoreLocalSettings },
+
+  // Ownership-model targets only: the remaining checks read .claude/ and the
+  // provenance markers, neither of which exists for codex or windsurf.
+  { name: 'settings-json-present', run: checkSettingsJsonPresent, when: ownedTarget, skipDetail: targetReason },
+  { name: 'settings-json-hooks', run: checkSettingsJsonHooks, when: ownedTarget, skipDetail: targetReason,
+    dependsOn: 'settings-json-present', whenFailed: 'settings.json missing or invalid' },
+  { name: 'installed-artifacts', run: checkInstalledArtifacts, when: ownedTarget, skipDetail: targetReason },
+  { name: 'ownership-anomalies', run: checkOwnershipAnomalies, when: ownedTarget, skipDetail: targetReason },
+]);
+
+/**
+ * Runs the checks in order, resolving `when` and `dependsOn` into skip results.
+ * A skipped check still produces a row, so the report shape is fixed.
+ */
+async function runChecks(checks, ctx) {
+  const byName = new Map();
+  const results = [];
+
+  for (const check of checks) {
+    const skip = (detail) => ({ name: check.name, status: 'skip', detail: resolve(detail, ctx) });
+
+    let result;
+    if (check.when && !check.when(ctx)) {
+      result = skip(check.skipDetail);
+    } else if (check.dependsOn && byName.get(check.dependsOn)?.status !== 'pass') {
+      result = skip(check.whenFailed ?? check.skipDetail);
+    } else {
+      result = await check.run(ctx);
+    }
+
+    byName.set(check.name, result);
+    results.push(result);
+  }
+
+  return results;
+}
+
+const resolve = (value, ctx) => (typeof value === 'function' ? value(ctx) : value);
+
+/**
+ * Shared per-run state. `installed` is memoised and lazy: two checks read the
+ * same on-disk snapshot, and neither runs unless the target has an ownership
+ * model — so a codex install never pays for a scan it would discard.
+ */
+function makeContext({ cwd, env, fetchImpl }) {
+  let installed = null;
+  return {
+    cwd,
+    env,
+    fetchImpl,
+    config: null,
+    lockData: null,
+    installedFiles() {
+      installed ??= findTarget(this.lockData?.target)?.readInstalled(cwd) ?? new Map();
+      return installed;
+    },
+  };
 }
 
 function checkConfigPresent(ctx) {
@@ -404,7 +427,7 @@ function checkInstalledArtifacts(ctx) {
     return { name: 'installed-artifacts', status: 'pass', detail: 'no artifact entries in lockfile' };
   }
 
-  const installed = loadClaudeFiles(ctx.cwd);
+  const installed = ctx.installedFiles();
   const missing = [];
   let modified = 0;
   for (const a of lockArtifacts) {
@@ -448,7 +471,7 @@ function checkInstalledArtifacts(ctx) {
  * Orphaned markers and renames signal a real inconsistency → fail.
  */
 function checkOwnershipAnomalies(ctx) {
-  const installed = loadClaudeFiles(ctx.cwd);
+  const installed = ctx.installedFiles();
   const lockMap = new Map(
     (ctx.lockData?.artifacts ?? []).map((a) => [`${a.kind}:${a.id}`, a])
   );

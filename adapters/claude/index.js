@@ -91,6 +91,8 @@ export async function installClaude({ consumerCwd, pkgRoot, config, artifacts, f
       case ACTIONS.NEW:
       case ACTIONS.UNCHANGED:
       case ACTIONS.AUTO_APPLY:
+      // MISSING_ON_DISK restores the file here and in `update` alike — see the
+      // contract in lib/update-classifier.js.
       case ACTIONS.MISSING_ON_DISK:
         writeBody = true;
         lockToPush = freshEntry;

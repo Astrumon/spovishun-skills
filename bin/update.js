@@ -20,6 +20,12 @@ import { stripMarker } from '../lib/marker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+const CONFIG_NAME = 'spovishun-skills.config.yaml';
+
+const CODEX_UNSUPPORTED =
+  `[update] codex target is not supported in V1 — AGENTS.md is monolithic and cannot be updated per-artifact.\n` +
+  `  Workaround: edit AGENTS.md manually, then run \`spovishun-skills install --target=codex\` to regenerate.\n`;
+
 /**
  * Compares installed artifacts against an upstream copy and applies safe changes.
  *
@@ -31,73 +37,109 @@ const here = dirname(fileURLToPath(import.meta.url));
  * @param {object}   [opts.out]        — writable stream for messages
  * @param {Function} [opts.now]        — injectable clock for lockfile timestamp
  */
-export async function runUpdate({
-  cwd,
-  upstreamRoot,
-  skillId,
-  dryRun = false,
-  out = process.stdout,
-  now,
-}) {
+export async function runUpdate({ cwd, upstreamRoot, skillId, dryRun = false, out = process.stdout, now }) {
   const write = (msg) => out.write(msg);
 
-  const configPath = join(cwd, 'spovishun-skills.config.yaml');
-  if (!existsSync(configPath)) {
-    throw new ConfigError(
-      'MISSING_REQUIRED',
-      'spovishun-skills.config.yaml not found.',
-      "Run `spovishun-skills init` first."
-    );
-  }
-
-  const lockfilePath = join(cwd, LOCKFILE_NAME);
-  const lockData = readLockfile(lockfilePath);
-  if (!lockData) {
-    throw new ConfigError(
-      'MISSING_REQUIRED',
-      `${LOCKFILE_NAME} not found.`,
-      "Run `spovishun-skills install --target=<target>` first."
-    );
-  }
-
-  if (!existsSync(upstreamRoot)) {
-    throw new ConfigError(
-      'MISSING_REQUIRED',
-      `Upstream directory not found: ${upstreamRoot}`,
-      "Provide the path to a local spovishun-skills package clone via --upstream=<dir>."
-    );
-  }
-  const upstreamSkillsDir = join(upstreamRoot, 'skills');
-  if (!existsSync(upstreamSkillsDir)) {
-    throw new ConfigError(
-      'MISSING_REQUIRED',
-      `Upstream directory does not look like a spovishun-skills package (missing skills/): ${upstreamRoot}`,
-      "Ensure --upstream points to a valid spovishun-skills package root."
-    );
-  }
-
+  const { configPath, lockfilePath, lockData } = validateUpdatePreconditions({ cwd, upstreamRoot });
   const { target } = lockData;
 
   if (target === 'codex') {
-    write(
-      `[update] codex target is not supported in V1 — AGENTS.md is monolithic and cannot be updated per-artifact.\n` +
-      `  Workaround: edit AGENTS.md manually, then run \`spovishun-skills install --target=codex\` to regenerate.\n`
-    );
-    return { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0 };
+    write(CODEX_UNSUPPORTED);
+    return emptySummary();
   }
 
-  const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
+  const pluginVersion = readPluginVersion();
+  const ctx = buildContext({ cwd, configPath, upstreamRoot, lockData, target, dryRun, write, pluginVersion });
+
+  const summary = emptySummary();
+  const newLockEntries = [];
+  for (const key of selectKeys(ctx, skillId)) {
+    const { counter, lock } = await processKey(key, ctx);
+    summary[counter]++;
+    if (lock) newLockEntries.push(lock);
+  }
+
+  // Re-include lock entries that were not part of the filtered set (--skill filter case)
+  if (skillId) newLockEntries.push(...unfilteredLockEntries(ctx.lockEntryMap, skillId));
+
+  if (!dryRun) {
+    writeLockfile(lockfilePath, { pluginVersion, target, artifacts: newLockEntries, now });
+  }
+
+  write(formatSummary(summary, { dryRun }));
+
+  return summary;
+}
+
+function readPluginVersion() {
+  return JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version;
+}
+
+/**
+ * Loads everything the per-key pass reads — the rendered upstream artifacts, the
+ * lockfile entries and the on-disk snapshot — into the context `processKey` takes.
+ */
+function buildContext({ cwd, configPath, upstreamRoot, lockData, target, dryRun, write, pluginVersion }) {
   const config = loadConfig(configPath);
-  const configMap = buildPlaceholderMap(config);
+  const artifacts = filterByStack(loadArtifacts(upstreamRoot), config.stack ?? {});
 
-  const upstreamArtifacts = filterByStack(loadArtifacts(upstreamRoot), config.stack ?? {});
-  const installedFiles = loadInstalledFiles(cwd, target);
+  return {
+    target,
+    cwd,
+    dryRun,
+    write,
+    pluginVersion,
+    upstreamMap: buildUpstreamMap({ artifacts, configMap: buildPlaceholderMap(config), target }),
+    lockEntryMap: new Map((lockData.artifacts ?? []).map((e) => [`${e.kind}:${e.id}`, e])),
+    installedFiles: loadInstalledFiles(cwd, target),
+  };
+}
 
-  const lockEntryMap = new Map(
-    (lockData.artifacts ?? []).map((e) => [`${e.kind}:${e.id}`, e])
+/**
+ * Guards every precondition `update` needs before it touches anything: the
+ * consumer config, the lockfile, and an upstream directory that actually looks
+ * like a spovishun-skills package.
+ *
+ * @returns {{configPath: string, lockfilePath: string, lockData: object}}
+ */
+function validateUpdatePreconditions({ cwd, upstreamRoot }) {
+  const configPath = join(cwd, CONFIG_NAME);
+  requireOrThrow(existsSync(configPath), `${CONFIG_NAME} not found.`, 'Run `spovishun-skills init` first.');
+
+  const lockfilePath = join(cwd, LOCKFILE_NAME);
+  const lockData = readLockfile(lockfilePath);
+  requireOrThrow(
+    lockData,
+    `${LOCKFILE_NAME} not found.`,
+    'Run `spovishun-skills install --target=<target>` first.'
   );
-  const upstreamMap = new Map();
-  for (const artifact of upstreamArtifacts) {
+
+  requireOrThrow(
+    existsSync(upstreamRoot),
+    `Upstream directory not found: ${upstreamRoot}`,
+    'Provide the path to a local spovishun-skills package clone via --upstream=<dir>.'
+  );
+  requireOrThrow(
+    existsSync(join(upstreamRoot, 'skills')),
+    `Upstream directory does not look like a spovishun-skills package (missing skills/): ${upstreamRoot}`,
+    'Ensure --upstream points to a valid spovishun-skills package root.'
+  );
+
+  return { configPath, lockfilePath, lockData };
+}
+
+function requireOrThrow(condition, message, actionable) {
+  if (!condition) throw new ConfigError('MISSING_REQUIRED', message, actionable);
+}
+
+/**
+ * Renders every upstream artifact and keys it by "<kind>:<id>".
+ *
+ * @returns {Map<string, {artifact: object, rendered: string, checksum: string}>}
+ */
+function buildUpstreamMap({ artifacts, configMap, target }) {
+  const map = new Map();
+  for (const artifact of artifacts) {
     const manifestPlaceholders = (artifact.manifest?.placeholders ?? []).map((p) => p.key);
     const renderedBody = renderTemplate(artifact.bodyText, { configMap, manifestPlaceholders });
     // Claude installs synthesize skill frontmatter and stamp a provenance
@@ -107,178 +149,219 @@ export async function runUpdate({
     const rendered = target === 'claude'
       ? markBody({ body: renderedBody, kind: artifact.kind, manifest: artifact.manifest })
       : renderedBody;
-    const checksum = sha256(stripMarker(rendered));
-    upstreamMap.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum });
+    map.set(`${artifact.kind}:${artifact.id}`, { artifact, rendered, checksum: sha256(stripMarker(rendered)) });
   }
-
-  // All keys across lockfile + upstream (filtered by --skill if given)
-  const allKeys = new Set([...lockEntryMap.keys(), ...upstreamMap.keys()]);
-  const filteredKeys = skillId
-    ? [...allKeys].filter((k) => k.split(':')[1] === skillId)
-    : [...allKeys];
-
-  if (skillId && filteredKeys.length === 0) {
-    throw new ConfigError(
-      'MISSING_REQUIRED',
-      `No artifact matching id "${skillId}" found in upstream or lockfile.`,
-      `Check the available artifact ids in the upstream package.`
-    );
-  }
-
-  const summary = { autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, localOnly: 0, unchanged: 0, rulesSkipped: 0, collisions: 0, adopted: 0, disowned: 0 };
-  const newLockEntries = [];
-
-  for (const key of filteredKeys) {
-    const lockEntry = lockEntryMap.get(key) ?? null;
-
-    // Rules are flat data files outside artifact-loader (no manifest), so they
-    // never appear in the upstream map — without this guard every rule lock
-    // entry would be misclassified as REMOVED and silently dropped. Rules are
-    // regenerated wholesale by install/sync; update preserves their entries.
-    if (key.startsWith('rule:')) {
-      summary.rulesSkipped++;
-      write(`  ${'RULE_SKIP'.padEnd(16)} ${key}\n`);
-      if (lockEntry) newLockEntries.push(lockEntry);
-      continue;
-    }
-    const upstreamEntry = upstreamMap.get(key) ?? null;
-    const installedEntry = installedFiles.get(key) ?? null;
-
-    const onDiskChecksum = installedEntry ? installedEntry.checksum : null;
-    const upstreamForClassifier = upstreamEntry
-      ? { version: upstreamEntry.artifact.version, checksum: upstreamEntry.checksum }
-      : null;
-
-    // Ownership states are only wired up for claude. For windsurf the model is
-    // deferred (markers in chunked -part-N files need a separate decision), so
-    // treat its files as owned to preserve the pre-ownership classification.
-    const onDiskOwned = target === 'claude'
-      ? Boolean(installedEntry && (installedEntry.hasMarker || (lockEntry && installedEntry.checksum === lockEntry.checksum)))
-      : true;
-
-    const action = classifyArtifact({ upstream: upstreamForClassifier, lockEntry, onDiskChecksum, onDiskOwned });
-
-    write(`  ${action.padEnd(16)} ${key}\n`);
-
-    switch (action) {
-      case ACTIONS.UNCHANGED:
-      case ACTIONS.LOCAL_ONLY:
-      case ACTIONS.MISSING_ON_DISK:
-        summary[action === ACTIONS.UNCHANGED ? 'unchanged' : 'localOnly']++;
-        if (lockEntry) newLockEntries.push(lockEntry);
-        break;
-
-      case ACTIONS.AUTO_APPLY: {
-        summary.autoApplied++;
-        if (!dryRun) {
-          await applyArtifact({ target, cwd, key, upstreamEntry, installedEntry });
-        }
-        newLockEntries.push({
-          kind: upstreamEntry.artifact.kind,
-          id: upstreamEntry.artifact.id,
-          version: upstreamEntry.artifact.version,
-          checksum: upstreamEntry.checksum,
-        });
-        break;
-      }
-
-      case ACTIONS.CONFLICT: {
-        summary.conflicts++;
-        const oursLabel = relative(cwd, installedEntry.paths[0]);
-        const theirsLabel = `spovishun-skills@${pkg.version}`;
-        if (!dryRun) {
-          await applyConflict({ target, cwd, key, upstreamEntry, installedEntry, oursLabel, theirsLabel });
-        }
-        // Keep old lock entry so the next run re-detects the conflict
-        if (lockEntry) newLockEntries.push(lockEntry);
-        break;
-      }
-
-      case ACTIONS.NEW: {
-        summary.newArtifacts++;
-        if (!dryRun) {
-          await applyArtifact({ target, cwd, key, upstreamEntry, installedEntry: null });
-        }
-        newLockEntries.push({
-          kind: upstreamEntry.artifact.kind,
-          id: upstreamEntry.artifact.id,
-          version: upstreamEntry.artifact.version,
-          checksum: upstreamEntry.checksum,
-        });
-        break;
-      }
-
-      case ACTIONS.REMOVED: {
-        summary.removed++;
-        write(`  (entry removed from lockfile; files on disk are kept — the next install/sync cleans them up)\n`);
-        // Drop from lockfile — do NOT push lockEntry
-        break;
-      }
-
-      case ACTIONS.COLLISION: {
-        summary.collisions++;
-        write(`  (owner-authored file occupies this id — left untouched, not added to lockfile)\n`);
-        // Owner wins: never write, never lock.
-        break;
-      }
-
-      case ACTIONS.ADOPT: {
-        summary.adopted++;
-        write(`  (marked file not in lockfile — registered on-disk content as baseline; rerun to merge)\n`);
-        // Register on-disk as the merge baseline without overwriting this run.
-        newLockEntries.push({
-          kind: upstreamEntry.artifact.kind,
-          id: upstreamEntry.artifact.id,
-          version: upstreamEntry.artifact.version,
-          checksum: onDiskChecksum,
-        });
-        break;
-      }
-
-      case ACTIONS.DISOWNED: {
-        summary.disowned++;
-        write(`  (on-disk file no longer recognisably plugin-generated — left untouched, dropped from lockfile)\n`);
-        // Leave file, drop from lockfile — do NOT push lockEntry
-        break;
-      }
-    }
-  }
-
-  // Re-include lock entries that were not part of the filtered set (--skill filter case)
-  if (skillId) {
-    for (const [key, entry] of lockEntryMap) {
-      if (key.split(':')[1] !== skillId) {
-        newLockEntries.push(entry);
-      }
-    }
-  }
-
-  if (!dryRun) {
-    const pluginVersion = pkg.version;
-    writeLockfile(lockfilePath, { pluginVersion, target, artifacts: newLockEntries, now });
-  }
-
-  write(
-    `\nDone (${dryRun ? 'dry-run, ' : ''}` +
-    `auto-applied: ${summary.autoApplied}, ` +
-    `conflicts: ${summary.conflicts}, ` +
-    `new: ${summary.newArtifacts}, ` +
-    `removed: ${summary.removed}` +
-    (summary.collisions > 0 ? `, collisions: ${summary.collisions}` : '') +
-    (summary.adopted > 0 ? `, adopted: ${summary.adopted}` : '') +
-    (summary.disowned > 0 ? `, disowned: ${summary.disowned}` : '') +
-    (summary.rulesSkipped > 0 ? `, rules skipped: ${summary.rulesSkipped} (rules update via install/sync only)` : '') +
-    `)\n`
-  );
-
-  return summary;
+  return map;
 }
 
-async function applyArtifact({ target, cwd, upstreamEntry }) {
+/**
+ * All keys across lockfile + upstream, narrowed to `skillId` when --skill is given.
+ * An id that matches nothing is a typo, not an empty result — it throws.
+ */
+function selectKeys({ lockEntryMap, upstreamMap }, skillId) {
+  const allKeys = [...new Set([...lockEntryMap.keys(), ...upstreamMap.keys()])];
+  if (!skillId) return allKeys;
+
+  const filtered = allKeys.filter((k) => k.split(':')[1] === skillId);
+  requireOrThrow(
+    filtered.length > 0,
+    `No artifact matching id "${skillId}" found in upstream or lockfile.`,
+    'Check the available artifact ids in the upstream package.'
+  );
+  return filtered;
+}
+
+function unfilteredLockEntries(lockEntryMap, skillId) {
+  return [...lockEntryMap]
+    .filter(([key]) => key.split(':')[1] !== skillId)
+    .map(([, entry]) => entry);
+}
+
+function emptySummary() {
+  return {
+    autoApplied: 0,
+    conflicts: 0,
+    newArtifacts: 0,
+    removed: 0,
+    restored: 0,
+    localOnly: 0,
+    unchanged: 0,
+    rulesSkipped: 0,
+    collisions: 0,
+    adopted: 0,
+    disowned: 0,
+  };
+}
+
+/**
+ * Ownership states are only wired up for claude. For windsurf the model is
+ * deferred (markers in chunked -part-N files need a separate decision), so
+ * treat its files as owned to preserve the pre-ownership classification.
+ */
+function ownershipOf({ target, installedEntry, lockEntry }) {
+  if (target !== 'claude') return true;
+  if (!installedEntry) return false;
+  return installedEntry.hasMarker || (lockEntry != null && installedEntry.checksum === lockEntry.checksum);
+}
+
+function freshLock({ artifact }, checksum) {
+  return { kind: artifact.kind, id: artifact.id, version: artifact.version, checksum };
+}
+
+/**
+ * One pure planner per classifier action. Each returns
+ *   { counter, lock, effect?: 'write' | 'conflict', note? }
+ * — `counter` names the summary field to bump, `lock` is the entry to carry into
+ * the new lockfile (null drops the id), `effect` is the write the caller performs
+ * unless --dry-run, and `note` is an extra explanatory output line.
+ *
+ * Handlers that dereference `upstreamEntry` are only reachable with one present:
+ * keys come from `lockEntryMap ∪ upstreamMap`, so a key with no lock entry
+ * (NEW / ADOPT / COLLISION) is by construction an upstream key, and the
+ * classifier returns REMOVED before any state that needs upstream otherwise.
+ */
+const ACTION_HANDLERS = Object.freeze({
+  [ACTIONS.UNCHANGED]: ({ lockEntry }) => ({ counter: 'unchanged', lock: lockEntry }),
+
+  [ACTIONS.LOCAL_ONLY]: ({ lockEntry }) => ({ counter: 'localOnly', lock: lockEntry }),
+
+  // The locked file is gone. Restore it from upstream — same as `install` does.
+  // See the MISSING_ON_DISK contract in lib/update-classifier.js.
+  [ACTIONS.MISSING_ON_DISK]: ({ upstreamEntry }) => ({
+    counter: 'restored',
+    lock: freshLock(upstreamEntry, upstreamEntry.checksum),
+    effect: 'write',
+    note: '(locked file missing on disk — restored from upstream)',
+  }),
+
+  [ACTIONS.AUTO_APPLY]: ({ upstreamEntry }) => ({
+    counter: 'autoApplied',
+    lock: freshLock(upstreamEntry, upstreamEntry.checksum),
+    effect: 'write',
+  }),
+
+  // Keep the old lock entry so the next run re-detects the conflict.
+  [ACTIONS.CONFLICT]: ({ lockEntry }) => ({ counter: 'conflicts', lock: lockEntry, effect: 'conflict' }),
+
+  [ACTIONS.NEW]: ({ upstreamEntry }) => ({
+    counter: 'newArtifacts',
+    lock: freshLock(upstreamEntry, upstreamEntry.checksum),
+    effect: 'write',
+  }),
+
+  // Drop from lockfile — do NOT carry the entry.
+  [ACTIONS.REMOVED]: () => ({
+    counter: 'removed',
+    lock: null,
+    note: '(entry removed from lockfile; files on disk are kept — the next install/sync cleans them up)',
+  }),
+
+  // Owner wins: never write, never lock.
+  [ACTIONS.COLLISION]: () => ({
+    counter: 'collisions',
+    lock: null,
+    note: '(owner-authored file occupies this id — left untouched, not added to lockfile)',
+  }),
+
+  // Register on-disk as the merge baseline without overwriting this run.
+  [ACTIONS.ADOPT]: ({ upstreamEntry, onDiskChecksum }) => ({
+    counter: 'adopted',
+    lock: freshLock(upstreamEntry, onDiskChecksum),
+    note: '(marked file not in lockfile — registered on-disk content as baseline; rerun to merge)',
+  }),
+
+  // Leave the file, drop it from the lockfile.
+  [ACTIONS.DISOWNED]: () => ({
+    counter: 'disowned',
+    lock: null,
+    note: '(on-disk file no longer recognisably plugin-generated — left untouched, dropped from lockfile)',
+  }),
+});
+
+/**
+ * Classifies one artifact key, reports it, and performs the planned write.
+ *
+ * @returns {{counter: string, lock: object|null}}
+ */
+async function processKey(key, ctx) {
+  const lockEntry = ctx.lockEntryMap.get(key) ?? null;
+
+  // Rules are flat data files outside artifact-loader (no manifest), so they
+  // never appear in the upstream map — without this guard every rule lock
+  // entry would be misclassified as REMOVED and silently dropped. Rules are
+  // regenerated wholesale by install/sync; update preserves their entries.
+  if (key.startsWith('rule:')) {
+    ctx.write(`  ${'RULE_SKIP'.padEnd(16)} ${key}\n`);
+    return { counter: 'rulesSkipped', lock: lockEntry };
+  }
+
+  const upstreamEntry = ctx.upstreamMap.get(key) ?? null;
+  const installedEntry = ctx.installedFiles.get(key) ?? null;
+  const onDiskChecksum = installedEntry ? installedEntry.checksum : null;
+
+  const action = classifyArtifact({
+    upstream: upstreamEntry && { version: upstreamEntry.artifact.version, checksum: upstreamEntry.checksum },
+    lockEntry,
+    onDiskChecksum,
+    onDiskOwned: ownershipOf({ target: ctx.target, installedEntry, lockEntry }),
+  });
+
+  ctx.write(`  ${action.padEnd(16)} ${key}\n`);
+
+  const plan = ACTION_HANDLERS[action]({ lockEntry, upstreamEntry, onDiskChecksum });
+  if (plan.note) ctx.write(`  ${plan.note}\n`);
+  if (plan.effect && !ctx.dryRun) await applyPlan(plan, ctx, { upstreamEntry, installedEntry });
+
+  return { counter: plan.counter, lock: plan.lock };
+}
+
+async function applyPlan(plan, ctx, { upstreamEntry, installedEntry }) {
+  const { target, cwd } = ctx;
+  if (plan.effect === 'conflict') {
+    await applyConflict({
+      target,
+      cwd,
+      upstreamEntry,
+      installedEntry,
+      oursLabel: relative(cwd, installedEntry.paths[0]),
+      theirsLabel: `spovishun-skills@${ctx.pluginVersion}`,
+    });
+    return;
+  }
+  await applyArtifact({ target, cwd, upstreamEntry, installedEntry });
+}
+
+/**
+ * Renders the closing "Done (...)" line. Pure — no filesystem, no streams — so
+ * the counter wording can be tested on its own.
+ */
+export function formatSummary(summary, { dryRun = false } = {}) {
+  const segments = [
+    `auto-applied: ${summary.autoApplied}`,
+    `conflicts: ${summary.conflicts}`,
+    `new: ${summary.newArtifacts}`,
+    `removed: ${summary.removed}`,
+  ];
+
+  const optional = [
+    ['restored', (n) => `restored: ${n}`],
+    ['collisions', (n) => `collisions: ${n}`],
+    ['adopted', (n) => `adopted: ${n}`],
+    ['disowned', (n) => `disowned: ${n}`],
+    ['rulesSkipped', (n) => `rules skipped: ${n} (rules update via install/sync only)`],
+  ];
+  for (const [field, render] of optional) {
+    if (summary[field] > 0) segments.push(render(summary[field]));
+  }
+
+  return `\nDone (${dryRun ? 'dry-run, ' : ''}${segments.join(', ')})\n`;
+}
+
+async function applyArtifact({ target, cwd, upstreamEntry, installedEntry }) {
   if (target === 'claude') {
-    await updateClaude({ consumerCwd: cwd, upstreamEntry, conflict: false });
+    await updateClaude({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: false });
   } else if (target === 'windsurf') {
-    await updateWindsurf({ consumerCwd: cwd, upstreamEntry, conflict: false });
+    await updateWindsurf({ consumerCwd: cwd, upstreamEntry, installedEntry, conflict: false });
   }
 }
 

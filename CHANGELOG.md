@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] — 2026-08-01
+
+### Changed
+
+- **`MISSING_ON_DISK` now means the same thing in `install` and `update` (#165).** A lockfile entry
+  whose file is gone is **restored** from the current render, in both commands. Previously `install`
+  rewrote the file while `update` did nothing — one classifier state, two opposite behaviours. The
+  lockfile is the record of what the plugin owns, so a locked id with no file on disk is an
+  inconsistent state, not a request to keep it deleted; and since `sync` *is* `install`, any other
+  choice made the two commands disagree on the very next run. To stop shipping an artifact, turn its
+  stack flag off — install then deletes it. The contract is documented in `lib/update-classifier.js`.
+- **`runUpdate` decomposed** from a single 242-line body into named units — `validateUpdatePreconditions`,
+  `buildContext`, `buildUpstreamMap`, `selectKeys`, an `ACTION_HANDLERS` table of pure per-action
+  planners, `processKey`, `applyPlan` and `formatSummary`. No function in `bin/update.js` exceeds
+  35 lines. The 10-branch `switch` is gone: each action is a 3–6 line arrow returning
+  `{ counter, lock, effect?, note? }`, so the decision table carries no IO and the writes happen at
+  one site. Behaviour is otherwise unchanged — every pre-existing test passes untouched.
+
+### Fixed
+
+- **`update` reported a vanished file as a local edit (#165).** `MISSING_ON_DISK` incremented the
+  `localOnly` counter — the opposite meaning. It now has its own `restored` counter, surfaced in the
+  closing summary line.
+- **Windsurf `AUTO_APPLY` leaked stale `-part-N.md` chunk files (#165).** `applyArtifact` destructured
+  three fields while its call sites passed five, silently dropping `installedEntry` — the value
+  `updateWindsurf` needs to delete the previous render's chunks. An artifact that shrank below the
+  6 000-character limit left its old `-part-2.md` on disk, which Windsurf then loaded as an
+  independent rule. The signature now matches the call.
+
 ## [1.18.0] — 2026-07-29
 
 ### Added

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { runInstall } from '../bin/install.js';
-import { runUpdate } from '../bin/update.js';
+import { runUpdate, formatSummary } from '../bin/update.js';
 import { LOCKFILE_NAME, readLockfile, writeLockfile } from '../lib/lockfile.js';
 import { stripMarker } from '../lib/marker.js';
 
@@ -355,4 +355,114 @@ test('DISOWNED: locked id occupied by an unowned drifted file is dropped, file u
 
   const lock = readLockfile(join(consumer, LOCKFILE_NAME));
   assert.ok(!lock.artifacts.some((e) => e.id === 'universal-skill'), 'disowned id dropped from lockfile');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MISSING_ON_DISK: locked id whose file is gone — restored, same as install
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('MISSING_ON_DISK: deleted file is restored from upstream and re-locked', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  rmSync(UNI_SKILL(consumer), { force: true }); // lock entry stays, file goes
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  assert.equal(summary.restored, 1, 'missing file → restored');
+  assert.equal(summary.localOnly, 0, 'a missing file is not a local edit');
+  assert.ok(readFileSync(UNI_SKILL(consumer), 'utf8').includes('v2'), 'restored from the upstream body');
+
+  const lock = readLockfile(join(consumer, LOCKFILE_NAME));
+  assert.equal(lock.artifacts.find((e) => e.id === 'universal-skill').version, '2.0.0');
+});
+
+test('MISSING_ON_DISK: --dry-run restores nothing', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'claude', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  rmSync(UNI_SKILL(consumer), { force: true });
+  const lockBefore = readFileSync(join(consumer, LOCKFILE_NAME), 'utf8');
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, dryRun: true, out: NOOP_OUT });
+
+  assert.equal(summary.restored, 1, 'dry-run still reports what it would do');
+  assert.equal(existsSync(UNI_SKILL(consumer)), false, 'dry-run writes nothing');
+  assert.equal(readFileSync(join(consumer, LOCKFILE_NAME), 'utf8'), lockBefore, 'lockfile untouched');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// windsurf: AUTO_APPLY must clear the chunk files of the previous render
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Copies a fixture package into a tmp dir, optionally replacing skill bodies. */
+function makeUpstreamCopy(source, bodyById = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'upstream-'));
+  cpSync(source, dir, { recursive: true });
+  for (const [id, body] of Object.entries(bodyById)) {
+    writeFileSync(join(dir, 'skills', id, 'SKILL.md'), body, 'utf8');
+  }
+  return dir;
+}
+
+test('windsurf AUTO_APPLY deletes stale -part-N chunks of the previous render', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  // v1 body is long enough to be split by writeChunked; the v2 fixture body is short.
+  const longBody = '# universal-skill\n\n' + 'long line of filler text. '.repeat(400);
+  const upstreamV1 = makeUpstreamCopy(SOURCE_V1, { 'universal-skill': longBody });
+
+  await runInstall({ target: 'windsurf', cwd: consumer, pkgRoot: upstreamV1, out: NOOP_OUT });
+
+  const rulesDir = join(consumer, '.windsurf', 'rules');
+  assert.ok(existsSync(join(rulesDir, 'universal-skill-part-1.md')), 'v1 body should be chunked');
+  assert.ok(existsSync(join(rulesDir, 'universal-skill-part-2.md')), 'v1 body should span 2 chunks');
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  assert.equal(summary.autoApplied, 1);
+  assert.ok(existsSync(join(rulesDir, 'universal-skill.md')), 'short v2 body written as a single file');
+  assert.equal(
+    existsSync(join(rulesDir, 'universal-skill-part-1.md')), false,
+    'stale chunk must be deleted — Windsurf would load it as an independent rule'
+  );
+  assert.equal(existsSync(join(rulesDir, 'universal-skill-part-2.md')), false, 'stale chunk must be deleted');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// formatSummary: pure, no filesystem
+// ─────────────────────────────────────────────────────────────────────────────
+
+const summaryOf = (overrides) => ({
+  autoApplied: 0, conflicts: 0, newArtifacts: 0, removed: 0, restored: 0,
+  localOnly: 0, unchanged: 0, rulesSkipped: 0, collisions: 0, adopted: 0, disowned: 0,
+  ...overrides,
+});
+
+test('formatSummary: always reports the four base counters', () => {
+  const line = formatSummary(summaryOf({ autoApplied: 2, conflicts: 1 }));
+  assert.equal(line, '\nDone (auto-applied: 2, conflicts: 1, new: 0, removed: 0)\n');
+});
+
+test('formatSummary: dry-run is flagged', () => {
+  assert.ok(formatSummary(summaryOf({}), { dryRun: true }).includes('Done (dry-run, auto-applied: 0'));
+});
+
+test('formatSummary: optional counters appear only when non-zero', () => {
+  const quiet = formatSummary(summaryOf({}));
+  for (const word of ['restored', 'collisions', 'adopted', 'disowned', 'rules skipped']) {
+    assert.equal(quiet.includes(word), false, `${word} must be omitted at 0`);
+  }
+
+  const loud = formatSummary(
+    summaryOf({ restored: 1, collisions: 2, adopted: 3, disowned: 4, rulesSkipped: 5 })
+  );
+  assert.ok(loud.includes('restored: 1'));
+  assert.ok(loud.includes('collisions: 2'));
+  assert.ok(loud.includes('adopted: 3'));
+  assert.ok(loud.includes('disowned: 4'));
+  assert.ok(loud.includes('rules skipped: 5 (rules update via install/sync only)'));
 });

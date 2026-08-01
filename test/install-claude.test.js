@@ -160,6 +160,15 @@ test('hook scripts are copied to .claude/hooks/', async () => {
   assert.ok(existsSync(join(hooksDir, 'capture-learning.js')), 'capture-learning.js should be installed');
   assert.ok(existsSync(join(hooksDir, 'precompact-backup.js')), 'precompact-backup.js should be installed');
   assert.ok(existsSync(join(hooksDir, 'notion-task-inject.js')), 'notion-task-inject.js should be installed');
+  // The shared config reader lives in hooks/ precisely because hooks/ is
+  // installed unconditionally — this consumer has stack.notion: false, so
+  // .claude/scripts/notion/ is absent and the hook would break without it.
+  assert.ok(existsSync(join(hooksDir, 'config-reader.js')), 'config-reader.js should be installed');
+  assert.equal(
+    existsSync(join(consumer, '.claude', 'scripts', 'notion')),
+    false,
+    'stack.notion: false must not deliver the notion scripts'
+  );
 });
 
 test('hooks.json events are merged into settings.json', async () => {

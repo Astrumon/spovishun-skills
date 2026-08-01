@@ -5,13 +5,16 @@
 //   1. PROJECT_PREFIX env var
 //   2. spovishun-skills.config.yaml project.name (slugified)
 //   3. 'project' (last-resort placeholder so regexes still compile)
+//
+// Reaching step 3 while a config file exists means the config is broken, and a
+// wrong prefix is invisible — it just makes every task lookup miss. Step 2 is
+// therefore routed through readConfigValueOrWarn, which says so on stderr.
 
-const { readConfigValue, projectSlug } = require('./config-reader');
+const { readConfigValueOrWarn, slugify } = require('./config-reader');
 
 function projectPrefix() {
   return process.env.PROJECT_PREFIX
-    || projectSlug()
-    || readConfigValue('project', 'name')
+    || slugify(readConfigValueOrWarn('project', 'name', { fallback: 'project', label: 'notion-scripts' }))
     || 'project';
 }
 

@@ -122,3 +122,71 @@ test('fail: non-existent file → MISSING_REQUIRED with init hint', () => {
     }
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Every missing key in one throw.
+//
+// validateConfig used to throw on the first Ajv `required` error even though
+// Ajv had already collected them all, so a config with three absent git.* keys
+// cost three sequential `install` runs to diagnose.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const baseStack = { kotlin: true, postgres: false, telegram: false, notion: false };
+
+test('all missing keys in one section are reported together', () => {
+  assert.throws(
+    () => validateConfig({ project: { name: 'X', language: 'uk' }, stack: baseStack, git: {} }),
+    (err) => {
+      assert.equal(err.code, 'MISSING_REQUIRED');
+      for (const key of ['git.branch_prefix', 'git.main_branch', 'git.dev_branch']) {
+        assert.ok(err.message.includes(key), `expected ${key} in: ${err.message}`);
+      }
+      return true;
+    }
+  );
+});
+
+test('missing keys across sections are grouped into one YAML block per section', () => {
+  assert.throws(
+    () => validateConfig({ project: {}, stack: baseStack, git: {} }),
+    (err) => {
+      assert.ok(err.message.includes('project.name'), err.message);
+      assert.ok(err.message.includes('git.dev_branch'), err.message);
+      // One header and one init line per report, not one per key.
+      assert.equal((err.actionable.match(/Add under/g) ?? []).length, 2);
+      assert.equal((err.actionable.match(/spovishun-skills init/g) ?? []).length, 1);
+      return true;
+    }
+  );
+});
+
+test('a single missing key keeps the original one-line wording', () => {
+  assert.throws(
+    () => validateConfig({
+      project: { name: 'X', language: 'uk' },
+      stack: baseStack,
+      git: { branch_prefix: 'f', main_branch: 'main' },
+    }),
+    (err) => {
+      assert.equal(
+        err.message,
+        'Missing required key `git.dev_branch` in spovishun-skills.config.yaml.'
+      );
+      return true;
+    }
+  );
+});
+
+test('the reported path reads like the config file, without a leading slash', () => {
+  // Ajv reports instancePath "/git" + missingProperty "main_branch"; naively
+  // joining them produced `/git.main_branch`, which matches nothing a user can
+  // search their config for.
+  assert.throws(
+    () => validateConfig({ project: { name: 'X', language: 'uk' }, stack: baseStack, git: { branch_prefix: 'f', dev_branch: 'd' } }),
+    (err) => {
+      assert.ok(err.message.includes('`git.main_branch`'), err.message);
+      assert.ok(!err.message.includes('/git'), `path should not carry a slash: ${err.message}`);
+      return true;
+    }
+  );
+});

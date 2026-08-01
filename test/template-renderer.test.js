@@ -55,3 +55,60 @@ test('multiple placeholders all rendered', () => {
   );
   assert.equal(result, 'Branch: feature/test for TestProject');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Regression: syntaxes the Mustache renderer silently destroyed.
+//
+// renderTemplate used Mustache with a custom `escapedValue` hook, which only
+// intercepts interpolation. Sections, partials, comments and triple-stache
+// routed around it and rendered as `$` or as nothing at all. No shipped artifact
+// contained one, so the damage was latent — these cases pin it shut.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const preserved = [
+  ['${{{ runner.os }}}', 'a GitHub Actions expression in triple braces (was: "$")'],
+  ['{{#SECTION}}body{{/SECTION}}', 'a Mustache section (was: "")'],
+  ['{{^SECTION}}body{{/SECTION}}', 'a Mustache inverted section'],
+  ['{{>partial}}', 'a Mustache partial (was: "")'],
+  ['{{! a comment }}', 'a Mustache comment (was: "")'],
+  ['{{lower.case}}', 'a non-UPPER_SNAKE_CASE token'],
+];
+
+for (const [source, what] of preserved) {
+  test(`preserved verbatim: ${what}`, () => {
+    assert.equal(renderTemplate(source, { configMap: baseMap }), source);
+  });
+}
+
+test('a preserved token surrounded by real placeholders still renders the rest', () => {
+  const result = renderTemplate('${{ runner.os }} builds {{PROJECT_NAME}}', { configMap: baseMap });
+  assert.equal(result, '${{ runner.os }} builds TestProject');
+});
+
+test('whitespace inside the braces is tolerated', () => {
+  assert.equal(renderTemplate('{{ PROJECT_NAME }}', { configMap: baseMap }), 'TestProject');
+  assert.equal(renderTemplate('{{{ PROJECT_NAME }}}', { configMap: baseMap }), 'TestProject');
+});
+
+// Manifest-declared keys are optional by contract: a consumer that does not set
+// one gets an empty string, not a failed install.
+test('a manifest-declared placeholder missing from the config renders empty', () => {
+  const result = renderTemplate('[{{OPTIONAL_KEY}}]', {
+    configMap: baseMap,
+    manifestPlaceholders: ['OPTIONAL_KEY'],
+  });
+  assert.equal(result, '[]');
+});
+
+test('nothing is written when a later token is unknown', () => {
+  // Validation runs over the whole template first, so a half-rendered body can
+  // never reach disk.
+  assert.throws(
+    () => renderTemplate('{{PROJECT_NAME}} and {{UNDEFINED_KEY}}', { configMap: baseMap }),
+    /UNDEFINED_KEY/
+  );
+});
+
+test('an unknown key in triple-stache is reported too', () => {
+  assert.throws(() => renderTemplate('{{{UNDEFINED_KEY}}}', { configMap: baseMap }), /UNDEFINED_KEY/);
+});

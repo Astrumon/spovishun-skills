@@ -15,7 +15,7 @@ const CODEX_KINDS = new Set(['skill', 'agent', 'template']);
 /**
  * Generates AGENTS.md for Codex at the consumer project root.
  *
- * Skips hooks and other Claude-only artifacts. Renders Mustache placeholders
+ * Skips hooks and other Claude-only artifacts. Renders {{KEY}} placeholders
  * the same way the Claude adapter does. If the resulting file exceeds the
  * 32 KiB AGENTS.md soft limit, emits a stderr warning but still writes the file.
  *

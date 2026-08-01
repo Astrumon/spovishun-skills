@@ -321,7 +321,7 @@ function installHooks(pkgRoot, claudeDir, warn) {
 
 /**
  * Renders all .md rule files from rules/ into .claude/rules/, preserving subdirectory
- * structure. Rule bodies support Mustache placeholders (resolved from the consumer config),
+ * structure. Rule bodies support {{KEY}} placeholders (resolved from the consumer config),
  * mirroring the codex and windsurf adapters — never copied verbatim.
  *
  * Groups named after a stack flag (`kotlin/`, `kmp/`) are gated on that flag;

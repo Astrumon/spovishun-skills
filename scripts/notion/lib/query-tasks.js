@@ -2,8 +2,10 @@
 
 const constants = require('./constants');
 
-const PRIORITY_TIERS = ['High', 'Medium', 'Low'];
-const PICKER_TIER_LIMIT = 5;
+// Single source: hooks/notion-constants.js. The tier list and page size used to
+// be declared here AND in the hook, under a "MUST stay in sync" comment and a
+// guard test — which earned its keep when the hook grew a phantom 'Normal' tier.
+const { PRIORITY_TIERS, PICKER_TIER_LIMIT } = require('../../../hooks/notion-constants.js');
 
 // extraFilter (optional) is a single Notion filter object (e.g. a Board v2
 // Stage filter) AND-combined with every tier query and the fallback query.

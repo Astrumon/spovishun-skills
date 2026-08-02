@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { loadConfig } from '../lib/config-loader.js';
 import { loadArtifacts } from '../lib/artifact-loader.js';
 import { installClaude } from '../adapters/claude/index.js';
@@ -12,6 +13,7 @@ import { writeLockfile, readLockfile, LOCKFILE_NAME } from '../lib/lockfile.js';
 import { sha256 } from '../lib/checksum.js';
 import { stripMarker, hasMarker } from '../lib/marker.js';
 
+const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_SOURCE = join(here, 'fixtures', 'source');
 const PKG_ROOT = join(here, '..');
@@ -160,15 +162,40 @@ test('hook scripts are copied to .claude/hooks/', async () => {
   assert.ok(existsSync(join(hooksDir, 'capture-learning.js')), 'capture-learning.js should be installed');
   assert.ok(existsSync(join(hooksDir, 'precompact-backup.js')), 'precompact-backup.js should be installed');
   assert.ok(existsSync(join(hooksDir, 'notion-task-inject.js')), 'notion-task-inject.js should be installed');
-  // The shared config reader lives in hooks/ precisely because hooks/ is
-  // installed unconditionally — this consumer has stack.notion: false, so
-  // .claude/scripts/notion/ is absent and the hook would break without it.
-  assert.ok(existsSync(join(hooksDir, 'config-reader.js')), 'config-reader.js should be installed');
+  // notion-task-inject.js is dispatch only — it require()s a dozen siblings, and
+  // every one of them has to land next to it. This consumer has
+  // stack.notion: false, so .claude/scripts/notion/ is absent: anything the hook
+  // needs that did NOT ship here is a MODULE_NOT_FOUND on their first prompt.
+  // (installHooks() copies hooks/*.js flat, which is exactly why the hook's
+  // modules live flat in hooks/ rather than in a hooks/lib/ subdirectory.)
+  for (const name of readdirSync(join(PKG_ROOT, 'hooks')).filter((f) => f.endsWith('.js'))) {
+    assert.ok(existsSync(join(hooksDir, name)), `hooks/${name} should be installed`);
+  }
   assert.equal(
     existsSync(join(consumer, '.claude', 'scripts', 'notion')),
     false,
     'stack.notion: false must not deliver the notion scripts'
   );
+});
+
+// The proof that the flat layout actually works: load the installed entry hook
+// out of a tree that has no scripts/ and no node_modules at all.
+test('the installed hook resolves every one of its requires with no scripts/ present', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const artifacts = loadArtifacts(FIXTURES_SOURCE);
+  await installClaude({ consumerCwd: consumer, pkgRoot: PKG_ROOT, config, artifacts });
+
+  const oldCwd = process.cwd();
+  process.chdir(consumer);
+  try {
+    const installed = require(join(consumer, '.claude', 'hooks', 'notion-task-inject.js'));
+    assert.ok(Array.isArray(installed.FINISH_TASK_TRIGGERS));
+    assert.equal(installed.classifyPrompt('start new task').isStartTask, true);
+  } finally {
+    process.chdir(oldCwd);
+  }
 });
 
 test('hooks.json events are merged into settings.json', async () => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +17,11 @@ const require = createRequire(import.meta.url);
 // depending on who asked. These tests pin the collapse: exactly one scanner
 // implementation, reachable under both module ids, agreeing with js-yaml.
 
-const HOOKS_READER = join(PKG_ROOT, 'hooks', 'config-reader.js');
+const HOOKS_DIR = join(PKG_ROOT, 'hooks');
+const HOOKS_READER = join(HOOKS_DIR, 'config-reader.js');
 const SCRIPTS_READER = join(PKG_ROOT, 'scripts', 'notion', 'lib', 'config-reader.js');
+
+const hookFiles = () => readdirSync(HOOKS_DIR).filter((f) => f.endsWith('.js'));
 
 const BOM = '﻿';
 const CONFIG_BODY = `project:
@@ -89,16 +92,62 @@ test('a BOM-prefixed config yields the same PROJECT_PREFIX slug as a clean one',
   assert.equal(prefix(BOM + CONFIG_BODY), prefix(CONFIG_BODY));
 });
 
-test('the hook carries no scanner of its own', () => {
-  const src = readFileSync(join(PKG_ROOT, 'hooks', 'notion-task-inject.js'), 'utf8');
-  // `inSubsection` is the scanner's private state variable — its presence means
-  // a second copy of the parser has come back.
-  assert.equal(
-    src.includes('inSubsection'),
-    false,
-    'hooks/notion-task-inject.js must require hooks/config-reader.js, not re-implement the scanner'
+test('no module under hooks/ carries a scanner of its own', () => {
+  // `inSubsection` is the scanner's private state variable — its presence
+  // anywhere but config-reader.js means a second copy of the parser has come
+  // back. The whole directory is scanned, not just the entry hook: that hook was
+  // decomposed into a dozen modules and a copy could reappear in any of them.
+  for (const file of hookFiles()) {
+    if (file === 'config-reader.js') continue;
+    assert.equal(
+      readFileSync(join(HOOKS_DIR, file), 'utf8').includes('inSubsection'),
+      false,
+      `hooks/${file} must require hooks/config-reader.js, not re-implement the scanner`
+    );
+  }
+  assert.match(
+    readFileSync(join(HOOKS_DIR, 'hook-config.js'), 'utf8'),
+    /require\('\.\/config-reader\.js'\)/,
+    "hook-config.js is the hook tree's only reader of the consumer config"
   );
-  assert.match(src, /require\('\.\/config-reader\.js'\)/);
+});
+
+// The invariant the spovishun-166 umbrella got wrong, now enforced.
+// installHooks() copies hooks/ unconditionally while installScripts() skips
+// scripts/notion/ when stack.notion=false — so a hook requiring out of scripts/
+// is a guaranteed MODULE_NOT_FOUND for every consumer without Notion.
+test('nothing under hooks/ requires out of scripts/', () => {
+  for (const file of hookFiles()) {
+    assert.equal(
+      /require\(\s*['"][^'"]*\/scripts\//.test(readFileSync(join(HOOKS_DIR, file), 'utf8')),
+      false,
+      `hooks/${file} requires into scripts/ — scripts may depend on hooks, never the reverse`
+    );
+  }
+});
+
+// The reverse direction is the supported one, and these are the pairs that went
+// through the collapse. Module identity is what proves a re-export, not a copy.
+test('scripts/notion/lib re-exports resolve to the very modules under hooks/', () => {
+  for (const name of ['config-reader.js', 'page-id.js']) {
+    assert.equal(
+      require(join(PKG_ROOT, 'scripts', 'notion', 'lib', name)),
+      require(join(HOOKS_DIR, name)),
+      `scripts/notion/lib/${name} must re-export hooks/${name}, not re-implement it`
+    );
+  }
+});
+
+test('shared Notion constants have exactly one declaration', () => {
+  const shared = require(join(HOOKS_DIR, 'notion-constants.js'));
+  const queryTasks = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'query-tasks.js'));
+  const constants = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'constants.js'));
+
+  // Same array INSTANCE, not a deep-equal copy — that is the difference between
+  // a re-export and the "MUST stay in sync" comment this replaced.
+  assert.equal(queryTasks.PRIORITY_TIERS, shared.PRIORITY_TIERS);
+  assert.equal(queryTasks.PICKER_TIER_LIMIT, shared.PICKER_TIER_LIMIT);
+  assert.equal(constants.NOTION_VERSION, shared.NOTION_VERSION);
 });
 
 test('configExists() distinguishes "no config" from "unreadable key"', () => {

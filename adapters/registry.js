@@ -30,12 +30,11 @@ import { updateWindsurf } from './windsurf/update.js';
  *   readInstalled  — (consumerCwd) → Map<"<kind>:<id>", entry> of what is on disk.
  *   hint           — what `install` prints as the destination.
  *   ownership      — how a file on disk is recognised as plugin-generated:
- *                      'marker'       — x-spovishun frontmatter marker, else checksum equality
- *                      'assume-owned' — treat every file as ours (windsurf: the marker model
- *                                       for chunked -part-N files is still undecided, see
- *                                       spovishun-162)
- *                      'none'         — no per-artifact files to own (codex inlines everything
- *                                       into a single AGENTS.md)
+ *                      'marker'   — x-spovishun frontmatter marker, else checksum equality
+ *                      'checksum' — content equality alone, for bodies written without a
+ *                                   marker (windsurf writes plain markdown; so do rules)
+ *                      'none'     — no per-artifact files to own (codex inlines everything
+ *                                   into a single AGENTS.md)
  *   supportsUpdate — mirrors `update !== null`; asserted in test/registry.test.js so the two
  *                    can never drift.
  */
@@ -61,7 +60,7 @@ export const TARGETS = Object.freeze({
     update: updateWindsurf,
     readInstalled: loadWindsurfFiles,
     hint: '.windsurf/rules/',
-    ownership: 'assume-owned',
+    ownership: 'checksum',
     supportsUpdate: true,
   }),
 });

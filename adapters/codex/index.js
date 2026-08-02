@@ -5,6 +5,9 @@ import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
 import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.js';
 import { renderArtifact } from '../../lib/render-artifact.js';
+// Imported straight from lib/, never via adapters/registry.js — the registry
+// imports this adapter, so reaching back for it would close a cycle.
+import { loadCodexFiles } from '../../lib/installed-files-loader.js';
 import { buildAgentsMd } from './build-agents-md.js';
 
 export const AGENTS_MD_FILENAME = 'AGENTS.md';
@@ -19,10 +22,11 @@ const CODEX_KINDS = new Set(['skill', 'agent', 'template']);
  * the same way the Claude adapter does. If the resulting file exceeds the
  * 32 KiB AGENTS.md soft limit, emits a stderr warning but still writes the file.
  *
- * Takes the uniform installer argument object (see adapters/registry.js) and
- * destructures the fields it uses; `force` is not among them — AGENTS.md is
- * regenerated wholesale on every install, so there is no per-artifact edit to
- * preserve or overwrite.
+ * Codex is the one target with `ownership: 'none'` — AGENTS.md inlines every
+ * body, so there is no per-artifact file to own, classify or merge, and no
+ * meaning for `--force` (which is why it is not destructured). That is a real
+ * limitation rather than an oversight, so it is stated out loud: a regeneration
+ * that would discard local content warns instead of overwriting silently.
  *
  * @param {object} opts
  * @param {string}   opts.consumerCwd    — absolute path to consumer project root
@@ -56,6 +60,7 @@ export async function installCodex({
   });
 
   const outPath = join(consumerCwd, AGENTS_MD_FILENAME);
+  warnOnOverwrite(consumerCwd, content, warn);
   writeFileSync(outPath, content, 'utf8');
 
   const byteSize = Buffer.byteLength(content, 'utf8');
@@ -87,5 +92,25 @@ export async function installCodex({
   const ruleEntries = rules.map((rule) => ruleLockEntry(rule, renderRule(rule, configMap)));
 
   return [...artifactEntries, ...ruleEntries];
+}
+
+/**
+ * Says out loud that this install is about to discard content.
+ *
+ * Deliberately conditional on the content actually DIFFERING, not merely on the
+ * file existing: an idempotent re-install is the common case, and a warning that
+ * fires every time is a warning nobody reads. So this only speaks when there is
+ * genuinely something to lose — which is also the only time it can be acted on.
+ */
+function warnOnOverwrite(consumerCwd, content, warn) {
+  const existing = loadCodexFiles(consumerCwd).get(`file:${AGENTS_MD_FILENAME}`);
+  if (!existing || existing.content === content) return;
+
+  warn.write(
+    `Warning: ${AGENTS_MD_FILENAME} already exists and differs — regenerated wholesale. ` +
+      `Codex has no per-artifact ownership model (every body is inlined into this one file), ` +
+      `so local edits to it cannot be preserved or merged. ` +
+      `Edit the canonical bodies under skills/ or rules/ instead.\n`
+  );
 }
 

@@ -140,24 +140,28 @@ test('checksum ownership: a locked rule missing on disk is restored', () => {
   assert.equal(a, ACTIONS.MISSING_ON_DISK);
 });
 
-// ── ownership model: assume-owned (windsurf) ─────────────────────────────────
+// ── ownership model: windsurf moved from assume-owned to checksum (#162) ─────
 
-test('assume-owned: an unmarked drifted file is LOCAL_ONLY, not DISOWNED', () => {
+test('windsurf: an unlocked file occupying an id is a COLLISION, no longer ADOPTed', () => {
+  // Under the retired 'assume-owned' model every file was ours, so a foreign
+  // file at one of our ids was adopted and then overwritten on the next run.
   const a = classifyArtifact({
     upstream: UP_SAME,
-    lockEntry: LOCK,
-    onDiskChecksum: 'sha256:edited',
-    ownership: 'assume-owned',
+    lockEntry: null,
+    onDiskChecksum: 'sha256:foreign',
+    ownership: 'checksum',
   });
-  assert.equal(a, ACTIONS.LOCAL_ONLY);
+  assert.equal(a, ACTIONS.COLLISION);
 });
 
-test('assume-owned: an unlocked file occupying an id is ADOPTed, never a COLLISION', () => {
+test('an unknown ownership model falls through to the strictest predicate, not to "ours"', () => {
+  // 'assume-owned' is gone; a stale caller must not silently keep its old
+  // behaviour of treating every file as plugin-generated.
   const a = classifyArtifact({
     upstream: UP_SAME,
     lockEntry: null,
     onDiskChecksum: 'sha256:foreign',
     ownership: 'assume-owned',
   });
-  assert.equal(a, ACTIONS.ADOPT);
+  assert.equal(a, ACTIONS.COLLISION);
 });

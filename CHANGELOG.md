@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The ownership model now covers all three adapters** (#162, thermo-nuclear finding C-1). It was
+  presented in `CLAUDE.md` as a cross-cutting guarantee of the plugin and implemented in exactly one
+  adapter: `adapters/claude/index.js` had 22 references to it, windsurf and codex had zero. Every
+  `install --target=windsurf` overwrote `.windsurf/rules/*.md` unconditionally and deleted files by
+  filename pattern without asking whether their content was ours — a windsurf consumer lost local
+  edits silently, on every run.
+
+  `planInstall` + `INSTALL_HANDLERS` moved out of the claude adapter into **`lib/install-planner.js`**,
+  unchanged (`test/install-claude.test.js` passes unedited, which is the proof). Windsurf now
+  classifies every artifact and rule through it with `ownership: 'checksum'` — its bodies carry no
+  `x-spovishun` marker, so content alone decides ownership, exactly as for rules. A locally edited
+  file is skipped with a warning, `install --force` resets ours, and a file at an id we never locked
+  is untouched even under `--force`. The stale-file pass follows the same rule: proof of ownership
+  before deletion, a warning otherwise.
+
+  **Behaviour change for windsurf `update`:** the target moved from `ownership: 'assume-owned'`
+  (every file is ours) to `'checksum'`, so an unlocked id occupied by an existing file is now a
+  `COLLISION` rather than an `ADOPT`. `assume-owned` is retired; an unknown model no longer degrades
+  to "everything is ours".
+
+- **Codex declares the overwrite it has always performed.** It keeps `ownership: 'none'` — `AGENTS.md`
+  inlines every body, so there is no per-artifact file to own or merge — but a regeneration that
+  would discard local content now warns instead of doing it silently. Conditional on the content
+  actually differing, so an idempotent re-install stays quiet.
+
 ### Fixed
+
+- **`update --target=windsurf` re-points the provenance manifest** at the chunking it just wrote.
+  A stale manifest would leave the id looking `MISSING_ON_DISK` to the next `install`, which would
+  overwrite it — silently discarding a conflict resolution in progress.
+
+- **`update --target=windsurf` writes templates to the right filename.** It derived the flattened
+  stem itself and skipped the `templates--` prefix, writing `epic-page.md` alongside the
+  `templates--epic-page.md` that `install` had written. Both now go through `windsurfBaseId`.
 
 - **The windsurf adapter now records what it wrote instead of making the reader guess** (#163,
   thermo-nuclear finding C-2). `.windsurf/rules/` is a flat directory, so the adapter flattens three

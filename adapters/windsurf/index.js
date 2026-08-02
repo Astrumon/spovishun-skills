@@ -6,6 +6,7 @@ import { collectRules, renderRule, ruleLockEntry } from '../../lib/rules-loader.
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
+import { writeWindsurfManifest } from '../../lib/windsurf-manifest.js';
 
 export const RULES_DIR = '.windsurf/rules';
 export const CHAR_LIMIT = 6000;
@@ -22,6 +23,10 @@ const WINDSURF_KINDS = new Set(['skill', 'template']);
  * CHAR_LIMIT characters it is split into `<id>-part-1.md`, `<id>-part-2.md`, ...
  * Agent and hook artifacts are skipped (Windsurf has no agent concept). Binary
  * supporting files are skipped with a stderr warning.
+ *
+ * Every filename written is attributed in `.windsurf/rules/.spovishun-manifest.json`
+ * so the reader never has to guess kind and id back out of a flattened name —
+ * see lib/windsurf-manifest.js for why that guessing was unfixable.
  *
  * Takes the uniform installer argument object (see adapters/registry.js) and
  * destructures the fields it uses. `pluginVersion` and `force` are not among
@@ -46,16 +51,21 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
   mkdirSync(rulesDir, { recursive: true });
 
   const lockEntries = [];
-  const written = new Set();
+  const manifest = {};
+  const attribute = attributor(manifest, warn);
 
   for (const artifact of included) {
-    // No marker: the ownership model for chunked -part-N files is still open
-    // (spovishun-162). stripMarker is a no-op on an unmarked body, so this
-    // checksum is identical to the pre-registry one.
+    // No marker: windsurf bodies carry no x-spovishun frontmatter, so ownership
+    // is decided by checksum alone. stripMarker is a no-op on an unmarked body,
+    // which keeps this checksum equal to the claude one for the same content.
     const { rendered, checksum } = renderArtifact(artifact, configMap);
 
     const ruleBaseId = artifact.kind === 'template' ? `templates--${artifact.id}` : artifact.id;
-    writeChunked(rulesDir, ruleBaseId, rendered, written);
+    attribute(writeChunked(rulesDir, ruleBaseId, rendered), {
+      kind: artifact.kind,
+      id: artifact.id,
+      role: 'body',
+    });
 
     for (const file of artifact.files ?? []) {
       if (file.encoding !== 'utf8') {
@@ -70,7 +80,12 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
         manifestPlaceholders: manifestPlaceholderKeys(artifact.manifest),
       });
       const fileRuleId = `${ruleBaseId}--${file.relPath.replace(/\//g, '--').replace(/\.md$/, '')}`;
-      writeChunked(rulesDir, fileRuleId, fileRendered, written);
+      attribute(writeChunked(rulesDir, fileRuleId, fileRendered), {
+        kind: artifact.kind,
+        id: artifact.id,
+        role: 'support',
+        path: file.relPath,
+      });
     }
 
     lockEntries.push({ kind: artifact.kind, id: artifact.id, version: artifact.version, checksum });
@@ -79,13 +94,46 @@ export async function installWindsurf({ consumerCwd, pkgRoot, config, artifacts,
   for (const rule of rules) {
     const ruleId = rule.id.replace(/\//g, '--');
     const rendered = renderRule(rule, configMap);
-    writeChunked(rulesDir, ruleId, rendered, written);
+    attribute(writeChunked(rulesDir, ruleId, rendered), { kind: 'rule', id: rule.id, role: 'body' });
     lockEntries.push(ruleLockEntry(rule, rendered));
   }
 
-  reconcileStaleFiles(consumerCwd, rulesDir, written, warn);
+  writeWindsurfManifest(rulesDir, manifest);
+  reconcileStaleFiles(consumerCwd, rulesDir, new Set(Object.keys(manifest)), warn);
 
   return lockEntries;
+}
+
+/**
+ * Records which artifact produced which filename, building the manifest as a
+ * side effect of writing. `part` is stamped only on genuinely chunked output so
+ * a single-file artifact stays trivially readable.
+ *
+ * Flattening `/` to `--` is not injective: the rule `common/git-workflow` and a
+ * skill `common` carrying `references/git-workflow.md` both land on
+ * `common--git-workflow.md`. Whichever writes second wins on disk — silently,
+ * before this warning existed. Last write also wins in the manifest, so the
+ * manifest keeps describing what is actually there.
+ *
+ * @param {object} manifest — accumulator, filename → {kind, id, role, part?, path?}
+ * @param {object} warn — writable stream
+ * @returns {(names: string[], owner: object) => void}
+ */
+function attributor(manifest, warn) {
+  return (names, owner) => {
+    const chunked = names.length > 1;
+    names.forEach((name, index) => {
+      const prev = manifest[name];
+      if (prev) {
+        warn.write(
+          `Warning: ${owner.kind}:${owner.id} and ${prev.kind}:${prev.id} both write ${name} — ` +
+            `the '--' filename encoding cannot tell them apart and the first is lost. ` +
+            `Rename one of the two.\n`
+        );
+      }
+      manifest[name] = { ...owner, ...(chunked && { part: index + 1 }) };
+    });
+  };
 }
 
 /**
@@ -126,25 +174,21 @@ function reconcileStaleFiles(consumerCwd, rulesDir, written, warn) {
  * Writes content as one or more files under rulesDir.
  * If content.length <= CHAR_LIMIT → single file: <id>.md
  * Otherwise → <id>-part-1.md, <id>-part-2.md, ...
- * Filenames are recorded into `written` (when provided) so the caller can
- * reconcile stale files afterwards. Returns the number of files written.
+ *
+ * @returns {string[]} the filenames written, in part order — the caller needs
+ *   them to attribute each one in the manifest and to reconcile stale files.
  */
-export function writeChunked(rulesDir, id, content, written) {
-  const record = (name) => { if (written) written.add(name); };
-
+export function writeChunked(rulesDir, id, content) {
   if (content.length <= CHAR_LIMIT) {
     writeFileSync(join(rulesDir, `${id}.md`), content, 'utf8');
-    record(`${id}.md`);
-    return 1;
+    return [`${id}.md`];
   }
 
-  const chunks = splitIntoChunks(content, CHAR_LIMIT);
-  for (let i = 0; i < chunks.length; i++) {
+  return splitIntoChunks(content, CHAR_LIMIT).map((chunk, i) => {
     const name = `${id}-part-${i + 1}.md`;
-    writeFileSync(join(rulesDir, name), chunks[i], 'utf8');
-    record(name);
-  }
-  return chunks.length;
+    writeFileSync(join(rulesDir, name), chunk, 'utf8');
+    return name;
+  });
 }
 
 /**

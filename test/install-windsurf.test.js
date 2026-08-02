@@ -282,6 +282,147 @@ test('reinstall removes stale plugin files but preserves user files', async () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Ownership (#162) — windsurf runs the same model as claude, keyed on checksum
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SKILL_FILE = (consumer, id) => join(consumer, RULES_DIR, `${id}.md`);
+
+test('a locally edited file survives install and is reported', async () => {
+  const consumer = makeConsumerDir();
+  await installAndLock(consumer, makeRulesPkg());
+
+  const edited = '# universal-skill\nMY OWN NOTES\n';
+  writeFileSync(SKILL_FILE(consumer, 'universal-skill'), edited, 'utf8');
+
+  const { warn } = await installAndLock(consumer, makeRulesPkg());
+
+  assert.equal(readFileSync(SKILL_FILE(consumer, 'universal-skill'), 'utf8'), edited, 'edit preserved');
+  assert.match(warn.text(), /skill:universal-skill: local edits present/);
+  assert.match(warn.text(), /run `update` to merge, or `install --force` to overwrite/);
+});
+
+test('a skipped local edit stays attributed, so the next install does not treat it as missing', async () => {
+  const consumer = makeConsumerDir();
+  await installAndLock(consumer, makeRulesPkg());
+  writeFileSync(SKILL_FILE(consumer, 'universal-skill'), '# edited\n', 'utf8');
+
+  await installAndLock(consumer, makeRulesPkg());
+  const { warn } = await installAndLock(consumer, makeRulesPkg());
+
+  assert.equal(readFileSync(SKILL_FILE(consumer, 'universal-skill'), 'utf8'), '# edited\n',
+    'a second install must not resurrect the render over the edit');
+  assert.match(warn.text(), /skill:universal-skill: local edits present/);
+  assert.ok(
+    readWindsurfManifest(getRulesDir(consumer))['universal-skill.md'],
+    'the manifest must keep describing a file we still own'
+  );
+});
+
+test('install --force resets our own local edit', async () => {
+  const consumer = makeConsumerDir();
+  const pkg = makeRulesPkg();
+  await installAndLock(consumer, pkg);
+  writeFileSync(SKILL_FILE(consumer, 'universal-skill'), '# GARBAGE\n', 'utf8');
+
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  await installWindsurf({
+    consumerCwd: consumer,
+    pkgRoot: pkg,
+    config,
+    artifacts: loadArtifacts(FIXTURES_SOURCE),
+    force: true,
+    warn: captureWarn(),
+  });
+
+  assert.ok(!readFileSync(SKILL_FILE(consumer, 'universal-skill'), 'utf8').includes('GARBAGE'),
+    'edit reset by --force');
+});
+
+test('a locally edited rule survives install and points at --force, not at update', async () => {
+  const consumer = makeConsumerDir();
+  const pkg = makeRulesPkg();
+  await installAndLock(consumer, pkg);
+
+  const rulePath = join(getRulesDir(consumer), 'common--style.md');
+  writeFileSync(rulePath, '# Style\nMY OWN RULE\n', 'utf8');
+
+  const { warn } = await installAndLock(consumer, pkg);
+
+  assert.equal(readFileSync(rulePath, 'utf8'), '# Style\nMY OWN RULE\n', 'rule edit preserved');
+  assert.match(warn.text(), /rule:common\/style: local edits present — skipped \(run `install --force` to overwrite\)/);
+});
+
+test('an owner-authored file at one of our ids is never overwritten, even with --force', async () => {
+  const consumer = makeConsumerDir();
+  const pkg = makeRulesPkg();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+
+  // No lockfile yet: a file already occupies the id the plugin is about to use.
+  mkdirSync(getRulesDir(consumer), { recursive: true });
+  const ownerBody = '# my own universal-skill\n';
+  writeFileSync(SKILL_FILE(consumer, 'universal-skill'), ownerBody, 'utf8');
+
+  const warn = captureWarn();
+  const lockEntries = await installWindsurf({
+    consumerCwd: consumer,
+    pkgRoot: pkg,
+    config,
+    artifacts: loadArtifacts(FIXTURES_SOURCE),
+    force: true,
+    warn,
+  });
+
+  assert.equal(readFileSync(SKILL_FILE(consumer, 'universal-skill'), 'utf8'), ownerBody,
+    'owner file untouched even with --force');
+  assert.match(warn.text(), /skill:universal-skill: owner-authored file occupies this id/);
+  assert.ok(!lockEntries.some((e) => e.id === 'universal-skill'), 'and it is not claimed in the lockfile');
+  assert.ok(!readWindsurfManifest(getRulesDir(consumer))['universal-skill.md'],
+    'nor described in the manifest');
+});
+
+test('a de-selected rule is removed when untouched and kept when edited', async () => {
+  const pkg = makeRulesPkg();
+  mkdirSync(join(pkg, 'rules', 'kmp'), { recursive: true });
+  writeFileSync(join(pkg, 'rules', 'kmp', 'architecture.md'), '# KMP architecture\nLayers.\n', 'utf8');
+
+  const installWith = async (consumer, configName, extra = {}) => {
+    copyConfig(consumer, configName);
+    const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+    const warn = captureWarn();
+    const lockEntries = await installWindsurf({
+      consumerCwd: consumer,
+      pkgRoot: pkg,
+      config,
+      artifacts: loadArtifacts(FIXTURES_SOURCE),
+      warn,
+      ...extra,
+    });
+    writeLockfile(join(consumer, LOCKFILE_NAME), {
+      pluginVersion: '1.0.0', target: 'windsurf', artifacts: lockEntries, now: FIXED_NOW,
+    });
+    return warn;
+  };
+
+  const untouched = makeConsumerDir();
+  await installWith(untouched, 'install-config-kmp.yaml');
+  assert.ok(existsSync(join(getRulesDir(untouched), 'kmp--architecture.md')));
+  const warnUntouched = await installWith(untouched, 'install-config-no-notion.yaml');
+  assert.ok(!existsSync(join(getRulesDir(untouched), 'kmp--architecture.md')), 'de-selected rule removed');
+  assert.match(warnUntouched.text(), /Removed stale rule file/);
+
+  const edited = makeConsumerDir();
+  await installWith(edited, 'install-config-kmp.yaml');
+  const mine = '# KMP architecture\nMY OWN NOTES\n';
+  writeFileSync(join(getRulesDir(edited), 'kmp--architecture.md'), mine, 'utf8');
+  const warnEdited = await installWith(edited, 'install-config-no-notion.yaml');
+  assert.equal(readFileSync(join(getRulesDir(edited), 'kmp--architecture.md'), 'utf8'), mine,
+    'a de-selected rule the owner edited is theirs to keep');
+  assert.match(warnEdited.text(), /rule:kmp\/architecture: no longer generated but locally edited/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Provenance manifest — filename → {kind, id} attribution
 // ─────────────────────────────────────────────────────────────────────────────
 

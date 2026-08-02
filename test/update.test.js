@@ -432,6 +432,56 @@ test('windsurf AUTO_APPLY deletes stale -part-N chunks of the previous render', 
   assert.equal(existsSync(join(rulesDir, 'universal-skill-part-2.md')), false, 'stale chunk must be deleted');
 });
 
+test('windsurf update re-points the manifest at the new chunking', async () => {
+  const { readWindsurfManifest } = await import('../lib/windsurf-manifest.js');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  const longBody = '# universal-skill\n\n' + 'long line of filler text. '.repeat(400);
+  await runInstall({
+    target: 'windsurf',
+    cwd: consumer,
+    pkgRoot: makeUpstreamCopy(SOURCE_V1, { 'universal-skill': longBody }),
+    out: NOOP_OUT,
+  });
+
+  await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V2, out: NOOP_OUT });
+
+  // A stale manifest would leave the id looking MISSING_ON_DISK to the next
+  // install, which would overwrite whatever update had just produced.
+  const manifest = readWindsurfManifest(join(consumer, '.windsurf', 'rules'));
+  assert.deepEqual(manifest['universal-skill.md'], { kind: 'skill', id: 'universal-skill', role: 'body' });
+  assert.ok(!manifest['universal-skill-part-1.md'], 'the previous chunking must be dropped');
+});
+
+test('windsurf: an unlocked file occupying one of our ids is a COLLISION, not an ADOPT', async () => {
+  // Behaviour change from #162: windsurf moved from ownership 'assume-owned'
+  // (every file is ours) to 'checksum'.
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runInstall({ target: 'windsurf', cwd: consumer, pkgRoot: SOURCE_V1, out: NOOP_OUT });
+
+  const rulesDir = join(consumer, '.windsurf', 'rules');
+  const ownerBody = '# my own file\n';
+  writeFileSync(join(rulesDir, 'universal-skill.md'), ownerBody, 'utf8');
+
+  // Drop the id from the lockfile so it is on disk but unlocked.
+  const lockPath = join(consumer, LOCKFILE_NAME);
+  const lock = readLockfile(lockPath);
+  writeLockfile(lockPath, {
+    pluginVersion: lock.pluginVersion,
+    target: 'windsurf',
+    artifacts: lock.artifacts.filter((e) => e.id !== 'universal-skill'),
+    now: () => new Date(lock.generatedAt),
+  });
+
+  const summary = await runUpdate({ cwd: consumer, upstreamRoot: SOURCE_V1, out: NOOP_OUT });
+
+  assert.equal(summary.collisions, 1);
+  assert.equal(summary.adopted, 0, 'an unrecognised body must never be adopted as our baseline');
+  assert.equal(readFileSync(join(rulesDir, 'universal-skill.md'), 'utf8'), ownerBody, 'owner file untouched');
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // formatSummary: pure, no filesystem
 // ─────────────────────────────────────────────────────────────────────────────

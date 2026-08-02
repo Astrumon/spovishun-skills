@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.21.0] — 2026-08-02
+
+Closes both Critical findings of the thermo-nuclear review, in the only order they can land: C-2
+first, because C-1 depends on it. The ownership model was presented in `CLAUDE.md` as a cross-cutting
+guarantee of the plugin and implemented in exactly one adapter of three — and for windsurf it was not
+merely unimplemented but impossible by construction, since the loader and the lockfile keyed the same
+files in namespaces that could never meet.
+
+Minor rather than patch: a consumer's `.windsurf/rules/` gains a generated `.spovishun-manifest.json`,
+and `install` / `update` on windsurf and codex behave differently than before.
 
 ### Changed
 

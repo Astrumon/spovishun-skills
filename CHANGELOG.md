@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.20.0] — 2026-08-02
+
+Closes the thermo-nuclear review's last open Major finding. #166 landed eight of the nine in 1.19.0;
+M-8 was held back because it is the only L-sized one, it needed tests before it could be measured,
+and its premise in the umbrella turned out to be wrong (see below).
+
+Behaviour-preserving apart from one bug fix (`toDashed`). The mode-level tests were written against
+the pre-refactor 919-line hook and pass unchanged after the split.
 
 ### Changed
 

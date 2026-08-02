@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The windsurf adapter now records what it wrote instead of making the reader guess** (#163,
+  thermo-nuclear finding C-2). `.windsurf/rules/` is a flat directory, so the adapter flattens three
+  id namespaces into one filename space — `common/git-workflow` → `common--git-workflow.md`,
+  `<id>/references/x.md` → `<id>--references--x.md`, anything over 6 000 chars → `-part-N.md`. That
+  mapping is lossy, and `loadInstalledFiles(cwd, 'windsurf')` used to invert it by parsing filenames:
+  on a clean install it mislabelled 18 of 39 files, announcing every rule and every supporting file
+  as a `skill:`. The lockfile wrote `rule:common/git-workflow`, the loader claimed
+  `skill:common--git-workflow`, and those namespaces could never meet — which made an ownership
+  model for this target impossible **by construction**, not merely unimplemented.
+
+  `install --target=windsurf` now emits `.windsurf/rules/.spovishun-manifest.json`, a real
+  `filename → {kind, id, role, part}` map generated while writing. The loader reads it and returns
+  exactly the keys the lockfile contains. Supporting files carry no id of their own — they follow
+  their body, as on claude, where they have never had a lock entry either.
+
+  Installs made before this release have no manifest and fall back to filename parsing, now
+  disambiguated by the lockfile: `foo-part-1.md` is chunk 1 of `foo` unless `foo-part-1` is itself a
+  locked id, which is the case the greedy pattern always got wrong. The fallback can be dropped one
+  minor release from now.
+
+- **A filename collision between two artifacts warns.** `--` stands for both a path separator and
+  an id, so the rule `common/style` and a skill named `common--style` write the same file. The
+  second write used to win silently; it still wins, but says so.
+
 ## [1.20.0] — 2026-08-02
 
 Closes the thermo-nuclear review's last open Major finding. #166 landed eight of the nine in 1.19.0;

@@ -308,9 +308,11 @@ function installHooks(pkgRoot, claudeDir, warn) {
     return {};
   }
 
-  // Copy all .js scripts verbatim, plus package.json — it pins
-  // "type": "commonjs" so the CJS hooks keep working in consumers whose root
-  // package.json declares "type": "module".
+  // Copy all .js verbatim — the executable hooks AND the modules they compose,
+  // which is why those modules live flat in hooks/ rather than in a hooks/lib/
+  // subdirectory this non-recursive readdirSync would skip. Plus package.json:
+  // it pins "type": "commonjs" so the CJS hooks keep working in consumers whose
+  // root package.json declares "type": "module".
   const scripts = readdirSync(hooksDir).filter((f) => f.endsWith('.js') || f === 'package.json');
   for (const script of scripts) {
     copyFileSync(join(hooksDir, script), join(claudeDir, 'hooks', script));

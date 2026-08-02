@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`hooks/notion-task-inject.js` decomposed** (#167, the last open item of the #166 umbrella —
+  finding M-8). 919 lines carrying six responsibilities and three runtime modes are now ~150 lines
+  of dispatch plus twelve focused modules under `hooks/`: `hook-config` · `notion-api` ·
+  `notion-constants` · `notion-blocks` · `branch-name` · `page-id` · `git-ops` · `dev-context` ·
+  `hook-output` · `task-picker` · `apply-pick` · `context-inject`. No function in the tree exceeds
+  40 lines. Behaviour-preserving: the mode-level tests were written **first**, against the 919-line
+  file, and pass unchanged after the split.
+
+  The umbrella's premise for this finding was wrong and is corrected here. It assumed three of the
+  responsibilities "already exist separately in `scripts/notion/lib/`" and that the hook should
+  import them — it cannot. `installHooks()` copies `hooks/` unconditionally while `installScripts()`
+  skips `scripts/notion/` when `stack.notion: false`, so a hook requiring out of `scripts/` is a
+  guaranteed `MODULE_NOT_FOUND` for every consumer without Notion. The direction is the other way
+  round: the modules moved **into** `hooks/`, and `scripts/notion/` re-exports them. There is now a
+  test asserting no file under `hooks/` requires into `scripts/`.
+
+- **`scripts/notion/lib/page-id.js` is a re-export** of `hooks/page-id.js`, the same collapse
+  `config-reader.js` went through in #164. The two copies had drifted: the hook's `toDashed` sliced
+  *any* string into `8-4-4-4-12`, fabricating a plausible-looking page id out of a typo. The
+  guarded version (pass through anything that is not 32 chars) won, so a bad `--apply-pick` argument
+  now produces a clear "not found" from Notion instead of a confusing one.
+
+- **`NOTION_VERSION`, `PRIORITY_TIERS` and `PICKER_TIER_LIMIT` have a single declaration**
+  (`hooks/notion-constants.js`), re-exported by `scripts/notion/lib/constants.js` and
+  `query-tasks.js`. This removes the "MUST stay in sync" comment that guarded the duplicated tier
+  list — a guard that had already earned its keep once, when the hook grew a phantom `Normal` tier.
+  `test/notion-version-parity.test.js` now compares values instead of regexing the hook's source.
+
+### Added
+
+- ~90 tests for hook paths that had none: `main()`'s stdin dispatch, `--apply-pick` (including
+  parallel-branch conflict detection against a real git repo), `--post-exit-plan`, the task picker's
+  directive generation, and `notionRequest`'s transport contract. `test/helpers/` gains a harness
+  that drives the real hook as a subprocess with `https` scripted by a preload — which is what makes
+  exit codes and the stdout directive assertable, and what keeps those tests indifferent to how the
+  hook is split up internally.
+
 ## [1.19.0] — 2026-08-01
 
 A maintainability release: three tasks land together — #164 (one config reader), #165 (`runUpdate`

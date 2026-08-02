@@ -1,286 +1,75 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { loadHookModule } from './helpers/hook-harness.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = join(here, '..');
 const require = createRequire(import.meta.url);
 
-// hooks/notion-task-inject.js is a standalone CommonJS hook. It exports pure
-// helpers and only dispatches its CLI/stdin modes when run directly — see the
-// `require.main === module` guard. Module-level constants (PROJECT_PREFIX,
-// STAGE_FILTER, …) are read from env+config at require time, so each test
-// loads a FRESH copy with a controlled env + cwd.
+// hooks/notion-task-inject.js is dispatch only: the trigger vocabulary and the
+// classification of a prompt against it. Everything it dispatches TO is tested
+// in the module that owns it (hooks-task-picker, hooks-apply-pick,
+// hooks-context-inject via hooks-notion-task-inject-modes, …), and the modes
+// themselves end to end in test/hooks-notion-task-inject-modes.test.js.
 
-const HOOK_PATH = join(PKG_ROOT, 'hooks', 'notion-task-inject.js');
-
-function loadHook(envOverrides = {}, configBody = null) {
-  const cwd = mkdtempSync(join(tmpdir(), 'hook-test-'));
-  if (configBody !== null) {
-    writeFileSync(join(cwd, 'spovishun-skills.config.yaml'), configBody, 'utf8');
-  }
-  const oldCwd = process.cwd();
-  const oldEnv = {};
-  const allKeys = new Set([
-    'NOTION_PICKER_STAGE_FILTER', 'PROJECT_PREFIX', 'GIT_DEVELOP_BRANCH',
-    'NOTION_DATABASE_ID', 'NOTION_TOKEN', 'NOTION_SKILLS_TOKEN',
-    ...Object.keys(envOverrides),
-  ]);
-  for (const k of allKeys) {
-    oldEnv[k] = process.env[k];
-    if (envOverrides[k] === undefined) delete process.env[k];
-    else process.env[k] = envOverrides[k];
-  }
-  process.chdir(cwd);
-  delete require.cache[require.resolve(HOOK_PATH)];
-  // The config-sourced constants warn on stderr at require time when they have
-  // to fall back, so capture stderr across the require to assert on it.
-  const stderr = [];
-  const realWrite = process.stderr.write;
-  process.stderr.write = (chunk) => { stderr.push(String(chunk)); return true; };
-  try {
-    return { hook: require(HOOK_PATH), cwd, stderr };
-  } finally {
-    process.stderr.write = realWrite;
-    process.chdir(oldCwd);
-    for (const [k, v] of Object.entries(oldEnv)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
-
-test('PRIORITY_TIERS stays in sync with scripts/notion/lib/query-tasks.js', () => {
-  const { hook } = loadHook();
-  const lib = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'query-tasks.js'));
-  // The hook is standalone (scripts are not installed when stack.notion=false),
-  // so the tier list is duplicated. This guard catches divergence — it already
-  // happened once (the hook carried a phantom 'Normal' tier).
-  assert.deepEqual(hook.PRIORITY_TIERS, lib.PRIORITY_TIERS);
-});
-
-test('withStageFilter: unset filter returns base filter unchanged (Board v1)', () => {
-  const { hook } = loadHook({ NOTION_PICKER_STAGE_FILTER: undefined });
-  const base = { property: 'Status', status: { equals: 'To do' } };
-  assert.equal(hook.stageFilterClause(), null);
-  assert.deepEqual(hook.withStageFilter(base), base);
-});
-
-test('withStageFilter: appends to existing and-array, wraps lone filters', () => {
-  const { hook } = loadHook({ NOTION_PICKER_STAGE_FILTER: 'Sprint' });
-  const stage = { property: 'Stage', select: { equals: 'Sprint' } };
-
-  const lone = { property: 'Status', status: { equals: 'To do' } };
-  assert.deepEqual(hook.withStageFilter(lone), { and: [lone, stage] });
-
-  const anded = { and: [lone, { property: 'Priority', select: { equals: 'High' } }] };
-  assert.deepEqual(hook.withStageFilter(anded), { and: [...anded.and, stage] });
-});
-
-test('stage filter falls back to config picker.stage_filter when env unset', () => {
-  const { hook } = loadHook(
-    { NOTION_PICKER_STAGE_FILTER: undefined },
-    'notion:\n  database_id: "abc"\n  picker:\n    stage_filter: "Sprint"\n'
-  );
-  assert.deepEqual(hook.stageFilterClause(), { property: 'Stage', select: { equals: 'Sprint' } });
-});
-
-test('deriveBranchFromName builds a sanitized branch from the task title', () => {
-  const { hook } = loadHook({ PROJECT_PREFIX: 'myapp' });
-  assert.equal(
-    hook.deriveBranchFromName('feature/myapp-17: Add member ban command'),
-    'feature/myapp-17-add-member-ban-command'
-  );
-  assert.equal(hook.deriveBranchFromName('no number here'), null);
-});
-
-test('extractTaskNumber / toDashed behave like the scripts lib', () => {
-  const { hook } = loadHook();
-  assert.equal(hook.extractTaskNumber('feature/x-93: Foo'), '93');
-  assert.equal(
-    hook.toDashed('aaaaaaaa11112222333344445555bbbb'),
-    'aaaaaaaa-1111-2222-3333-44445555bbbb'
-  );
-});
-
-test('assertSafeBranch rejects shell metacharacters from external sources', () => {
-  const { hook } = loadHook();
-  assert.equal(hook.assertSafeBranch('feature/x-1-foo', 'branch'), 'feature/x-1-foo');
-  assert.throws(() => hook.assertSafeBranch('develop; rm -rf /', 'base branch'), /unsafe/);
-  assert.throws(() => hook.assertSafeBranch('$(curl evil)', 'branch'), /unsafe/);
-  assert.throws(() => hook.assertSafeBranch('a`b`', 'branch'), /unsafe/);
-});
-
-test('blockToMd renders the common Notion block types', () => {
-  const { hook } = loadHook();
-  const para = { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'hello' }] } };
-  const h2 = { type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Goal' }] } };
-  const todo = { type: 'to_do', to_do: { checked: true, rich_text: [{ plain_text: 'done it' }] } };
-  assert.equal(hook.blockToMd(para), 'hello');
-  assert.equal(hook.blockToMd(h2), '## Goal');
-  assert.equal(hook.blockToMd(todo), '- [x] done it');
-});
+const { mod: hook } = loadHookModule(require);
 
 test('FINISH_TASK_TRIGGERS stays the documented finish-task phrase list', () => {
-  // Guards the trigger list wired into main()'s hasTrigger — adding/removing a
-  // phrase here without intent will fail this test (mirrors PRIORITY_TIERS guard).
-  const { hook } = loadHook();
+  // Guards the trigger list wired into classifyPrompt — adding or removing a
+  // phrase here without intent will fail this test.
   assert.deepEqual(hook.FINISH_TASK_TRIGGERS, [
     'finish task', 'complete task', 'завершити задачу', 'закінчити задачу',
   ]);
 });
 
 test('GRILL_MODIFIER_TRIGGERS stays the documented grill modifier phrase list', () => {
-  // Guards the "start new task with grill" modifier list (spovishun-135) — mirrors
-  // the FINISH_TASK_TRIGGERS guard above.
-  const { hook } = loadHook();
+  // Guards the "start new task with grill" modifier list (spovishun-135).
   assert.deepEqual(hook.GRILL_MODIFIER_TRIGGERS, [
     'with grill', 'з грилем', 'з допитом', 'з прожаркою',
   ]);
 });
 
-test('buildSystemPrompt: grillFirst + no plan instructs grill-me before EnterPlanMode', () => {
-  const { hook } = loadHook();
-  const prompt = hook.buildSystemPrompt('## context', null, null, true, true);
-  assert.match(prompt, /Invoke the `grill-me` skill/);
-  assert.doesNotMatch(prompt, /You MUST call the EnterPlanMode tool immediately/);
+test('a prompt matching nothing carries no trigger', () => {
+  const intent = hook.classifyPrompt('what does this file do?');
+  assert.equal(intent.hasTrigger, false);
+  assert.equal(intent.isStartTask, false);
+  assert.equal(intent.isFinishTask, false);
 });
 
-test('buildSystemPrompt: isStartTask without grillFirst keeps the default EnterPlanMode instruction', () => {
-  const { hook } = loadHook();
-  const prompt = hook.buildSystemPrompt('## context', null, null, true, false);
-  assert.match(prompt, /You MUST call the EnterPlanMode tool immediately/);
-  assert.doesNotMatch(prompt, /grill-me/);
+test('trigger matching is case-insensitive and works mid-sentence', () => {
+  assert.equal(hook.classifyPrompt('Please IMPLEMENT the parser').hasTrigger, true);
+  assert.equal(hook.classifyPrompt('ok, Start New Task please').isStartTask, true);
 });
 
-test('buildSystemPrompt: an approved plan wins over grillFirst (nothing left to grill)', () => {
-  const { hook } = loadHook();
-  const prompt = hook.buildSystemPrompt('## context', '## Approved Plan', null, true, true);
-  assert.match(prompt, /Plan already approved\. Proceed directly with implementation/);
-  assert.doesNotMatch(prompt, /grill-me/);
-});
-
-test('loadEnv parses a CRLF .env (Windows) — token/db land in process.env', () => {
-  // Regression for spovishun-129: split('\n') + `$` anchor failed on trailing \r,
-  // so no vars were set and the picker/injection silently skipped.
-  const cwd = mkdtempSync(join(tmpdir(), 'hook-crlf-'));
-  writeFileSync(
-    join(cwd, '.env'),
-    'NOTION_TOKEN=secret-crlf\r\nNOTION_DATABASE_ID=db-crlf\r\n',
-    'utf8'
-  );
-  const oldCwd = process.cwd();
-  const keys = ['NOTION_TOKEN', 'NOTION_SKILLS_TOKEN', 'NOTION_DATABASE_ID'];
-  const saved = {};
-  for (const k of keys) { saved[k] = process.env[k]; delete process.env[k]; }
-  process.chdir(cwd);
-  delete require.cache[require.resolve(HOOK_PATH)];
-  try {
-    const hook = require(HOOK_PATH);
-    assert.equal(process.env.NOTION_TOKEN, 'secret-crlf');
-    assert.equal(process.env.NOTION_DATABASE_ID, 'db-crlf');
-    assert.equal(hook.NOTION_TOKEN, 'secret-crlf');
-    assert.equal(hook.TOKEN_SOURCE, 'NOTION_TOKEN');
-  } finally {
-    process.chdir(oldCwd);
-    delete require.cache[require.resolve(HOOK_PATH)];
-    for (const k of keys) {
-      if (saved[k] === undefined) delete process.env[k];
-      else process.env[k] = saved[k];
-    }
+test('every trigger list actually sets hasTrigger', () => {
+  const lists = [
+    hook.TRIGGER_WORDS, hook.START_TASK_TRIGGERS,
+    hook.FINISH_TASK_TRIGGERS, hook.REFRESH_TRIGGERS,
+  ];
+  for (const phrase of lists.flat()) {
+    assert.equal(hook.classifyPrompt(phrase).hasTrigger, true, `"${phrase}" must trigger the hook`);
   }
 });
 
-test('token precedence: NOTION_TOKEN wins over NOTION_SKILLS_TOKEN', () => {
-  const { hook } = loadHook({ NOTION_TOKEN: 'primary', NOTION_SKILLS_TOKEN: 'skills' });
-  assert.equal(hook.NOTION_TOKEN, 'primary');
-  assert.equal(hook.TOKEN_SOURCE, 'NOTION_TOKEN');
-});
-
-test('token precedence: NOTION_SKILLS_TOKEN used only when NOTION_TOKEN unset', () => {
-  const { hook } = loadHook({ NOTION_TOKEN: undefined, NOTION_SKILLS_TOKEN: 'skills' });
-  assert.equal(hook.NOTION_TOKEN, 'skills');
-  assert.equal(hook.TOKEN_SOURCE, 'NOTION_SKILLS_TOKEN');
-});
-
-test('HOOK_DIR emits a ${CLAUDE_PROJECT_DIR:-<abs>} fallback the agent shell can resolve', () => {
-  // Regression for spovishun-132: the picker printed
-  // `node "$CLAUDE_PROJECT_DIR/.claude/hooks/notion-task-inject.js" ...`, but the
-  // harness sets $CLAUDE_PROJECT_DIR only for hook subprocesses, not the agent's
-  // Bash shell — where it expands empty and Git Bash maps the leading "/" to the
-  // Git install root → MODULE_NOT_FOUND. HOOK_DIR must carry a concrete fallback.
-  const { hook, cwd } = loadHook({ CLAUDE_PROJECT_DIR: undefined });
-  const fwdCwd = cwd.replace(/\\/g, '/');
-  assert.equal(hook.HOOK_DIR, '${CLAUDE_PROJECT_DIR:-' + fwdCwd + '}/.claude/hooks');
-  // The bare unresolvable form must not survive.
-  assert.equal(hook.HOOK_DIR.includes('$CLAUDE_PROJECT_DIR/'), false);
-  // Forward slashes only — a backslash would break in Git Bash on Windows.
-  assert.equal(/\\/.test(hook.HOOK_DIR), false);
-});
-
-test('HOOK_DIR honors $CLAUDE_PROJECT_DIR when the harness did set it (hook subprocess)', () => {
-  const { hook } = loadHook({ CLAUDE_PROJECT_DIR: 'C:\\proj\\spovishun' });
-  // The env value is normalized to forward slashes and used as the fallback.
-  assert.equal(hook.HOOK_DIR, '${CLAUDE_PROJECT_DIR:-C:/proj/spovishun}/.claude/hooks');
-});
-
-test('readConfigValue resolves 2-level dotted keys (parity with scripts lib)', () => {
-  const config = 'notion:\n  database_id: "db-1"\n  picker:\n    stage_filter: "Sprint"\ngit:\n  dev_branch: "develop"\n';
-  const { hook } = loadHook({}, config);
-  // Module captured cwd at require time inside loadHook's chdir window — call
-  // readConfigValue through a fresh chdir to the same cwd is not possible here,
-  // so assert via the constants the module derived from the same config.
-  assert.deepEqual(hook.stageFilterClause(), { property: 'Stage', select: { equals: 'Sprint' } });
-});
-
-// A UTF-8 BOM (which Windows editors add unprompted) used to make the hook's
-// own scanner miss every top-level key, so PROJECT_PREFIX silently became the
-// literal "project" and the picker queried the board for tasks that cannot
-// exist. The shared reader strips it.
-test('PROJECT_PREFIX survives a UTF-8 BOM in the config', () => {
-  const config = 'project:\n  name: "Spovishun"\nstack:\n  notion: false\ngit:\n  dev_branch: "develop"\n';
-  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, '﻿' + config);
+test('the grill modifier only applies on top of a start-task prompt', () => {
+  assert.equal(hook.classifyPrompt('start new task with grill').hasGrillModifier, true);
   assert.equal(
-    hook.deriveBranchFromName('feature/spovishun-42: Add ban command'),
-    'feature/spovishun-42-add-ban-command'
+    hook.classifyPrompt('refactor this with grill').hasGrillModifier, false,
+    'the modifier is meaningless without a task to load'
   );
-  assert.deepEqual(stderr, [], 'a readable config must not warn');
 });
 
-test('a config that exists but cannot answer project.name warns loudly', () => {
-  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, 'project:\n  language: "uk"\n');
-  // Still falls back so the session keeps working …
-  assert.equal(hook.deriveBranchFromName('feature/x-7: Foo'), 'feature/project-7-foo');
-  // … but never silently.
-  const warning = stderr.find((line) => line.includes('project.name'));
-  assert.ok(warning, `expected a project.name warning, got ${JSON.stringify(stderr)}`);
-  assert.match(warning, /\[notion-task-inject\]/);
-  assert.match(warning, /spovishun-skills\.config\.yaml/);
+test('--force in the prompt is recognised as the conflict override', () => {
+  assert.equal(hook.classifyPrompt('start new task --force').isForce, true);
+  assert.equal(hook.classifyPrompt('start new task').isForce, false);
 });
 
-test('no config file at all resolves defaults silently', () => {
-  const { hook, stderr } = loadHook({ PROJECT_PREFIX: undefined }, null);
-  assert.equal(hook.deriveBranchFromName('feature/x-7: Foo'), 'feature/project-7-foo');
-  assert.deepEqual(stderr, [], 'env-only setups are supported, not broken');
+test('a refresh prompt is classified apart from a plain trigger word', () => {
+  const refresh = hook.classifyPrompt('перечитати задачу');
+  assert.equal(refresh.isRefresh, true);
+  assert.equal(hook.classifyPrompt('таск').isRefresh, false);
 });
 
-test('missing notion.database_id warns only when stack.notion is on', () => {
-  const off = loadHook(
-    { NOTION_DATABASE_ID: undefined },
-    'project:\n  name: "X"\nstack:\n  notion: false\ngit:\n  dev_branch: "develop"\n'
-  );
-  assert.deepEqual(off.stderr, [], 'stack.notion=false legitimately has no notion section');
-
-  const on = loadHook(
-    { NOTION_DATABASE_ID: undefined },
-    'project:\n  name: "X"\nstack:\n  notion: true\ngit:\n  dev_branch: "develop"\n'
-  );
-  assert.ok(
-    on.stderr.some((line) => line.includes('notion.database_id')),
-    `expected a database_id warning, got ${JSON.stringify(on.stderr)}`
-  );
+test('a missing prompt classifies cleanly instead of throwing', () => {
+  const intent = hook.classifyPrompt(undefined);
+  assert.equal(intent.hasTrigger, false);
 });

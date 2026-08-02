@@ -6,6 +6,9 @@
 // into every consumer project verbatim.
 
 const { readConfigValue } = require('./config-reader');
+// Single source: hooks/notion-constants.js — the API version is pinned once and
+// re-exported, the same collapse config-reader.js and page-id.js went through.
+const { NOTION_VERSION } = require('../../../hooks/notion-constants');
 
 function envOrConfig(envName, section, key) {
   return process.env[envName] || readConfigValue(section, key) || '';
@@ -30,5 +33,5 @@ module.exports = {
   get DOCS_ROOT_ID() {
     return envOrConfig('NOTION_DOCS_ROOT_ID', 'notion', 'docs_root_id');
   },
-  NOTION_VERSION: '2022-06-28',
+  NOTION_VERSION,
 };

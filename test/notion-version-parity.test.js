@@ -10,19 +10,26 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(here, '..');
 const require = createRequire(import.meta.url);
 
-// The Notion-Version header is pinned in three independent runtimes that
-// cannot share a module: the ESM lib (doctor/init), the CJS scripts tree
-// (installed into .claude/scripts/notion/), and the standalone hook. This
-// guard keeps the three copies from drifting when the API version is bumped.
-test('Notion-Version header is identical across lib, scripts, and hook', () => {
-  const scriptsVersion = require(
-    join(PKG_ROOT, 'scripts', 'notion', 'lib', 'constants.js')
-  ).NOTION_VERSION;
+// The Notion-Version header is pinned in two runtimes that cannot share a
+// module: the ESM lib (doctor/init) and the CommonJS hook tree, which ships
+// into .claude/ without a node_modules. The scripts tree re-exports the hook's
+// copy, so only the ESM↔CJS boundary is a genuine duplication now — and this
+// guard is what keeps the two sides together when the API version is bumped.
+test('Notion-Version is identical across lib, hooks, and scripts', () => {
+  const hookVersion = require(join(PKG_ROOT, 'hooks', 'notion-constants.js')).NOTION_VERSION;
+  const scriptsVersion = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'constants.js')).NOTION_VERSION;
 
-  const hookSource = readFileSync(join(PKG_ROOT, 'hooks', 'notion-task-inject.js'), 'utf8');
-  const m = hookSource.match(/'Notion-Version':\s*'([\d-]+)'/);
-  assert.ok(m, 'hook must pin a Notion-Version header');
+  assert.equal(hookVersion, libVersion, 'hooks/notion-constants.js diverged from lib/notion-client.js');
+  assert.equal(scriptsVersion, hookVersion, 'scripts/notion/lib/constants.js must re-export the hook constant');
+});
 
-  assert.equal(scriptsVersion, libVersion, 'scripts/notion/lib/constants.js diverged from lib/notion-client.js');
-  assert.equal(m[1], libVersion, 'hooks/notion-task-inject.js diverged from lib/notion-client.js');
+// The header the hook actually sends has to be the constant, not a literal that
+// happens to match today.
+test('the hook sends the pinned version rather than its own literal', () => {
+  const shared = require(join(PKG_ROOT, 'hooks', 'notion-constants.js'));
+  const api = require(join(PKG_ROOT, 'hooks', 'notion-api.js'));
+  assert.equal(api.NOTION_VERSION, shared.NOTION_VERSION);
+
+  const src = readFileSync(join(PKG_ROOT, 'hooks', 'notion-api.js'), 'utf8');
+  assert.match(src, /'Notion-Version': NOTION_VERSION/);
 });

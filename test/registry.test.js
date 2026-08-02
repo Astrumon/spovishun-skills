@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { TARGETS, TARGET_NAMES, getTarget, findTarget } from '../adapters/registry.js';
 
 const REQUIRED_FIELDS = ['install', 'update', 'readInstalled', 'hint', 'ownership', 'supportsUpdate'];
-const OWNERSHIP_MODELS = new Set(['marker', 'assume-owned', 'none']);
+const OWNERSHIP_MODELS = new Set(['marker', 'checksum', 'none']);
 
 test('every target defines the full column set', () => {
   for (const [name, def] of Object.entries(TARGETS)) {

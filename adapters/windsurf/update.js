@@ -1,7 +1,8 @@
 import { unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { threeWayMerge } from '../../lib/three-way-merge.js';
-import { writeChunked, RULES_DIR } from './index.js';
+import { readWindsurfManifest, writeWindsurfManifest } from '../../lib/windsurf-manifest.js';
+import { writeChunked, RULES_DIR, windsurfBaseId } from './index.js';
 
 /**
  * Writes or merges a single artifact for the windsurf target.
@@ -35,12 +36,45 @@ export async function updateWindsurf({
     }
   }
 
-  if (!conflict) {
-    writeChunked(rulesDir, artifact.id, rendered);
-    return;
+  let content = rendered;
+  if (conflict) {
+    const ours = installedEntry ? installedEntry.content : rendered;
+    ({ content } = threeWayMerge({ ours, theirs: rendered, oursLabel, theirsLabel }));
   }
 
-  const ours = installedEntry ? installedEntry.content : rendered;
-  const { content } = threeWayMerge({ ours, theirs: rendered, oursLabel, theirsLabel });
-  writeChunked(rulesDir, artifact.id, content);
+  const names = writeChunked(rulesDir, windsurfBaseId(artifact), content);
+  reattribute(rulesDir, artifact, names);
+}
+
+/**
+ * Points the manifest at the filenames this update just wrote.
+ *
+ * Without this the manifest would still name the PREVIOUS chunking, so the next
+ * `install` would find no files for the id, call it MISSING_ON_DISK and rewrite
+ * it — silently discarding a conflict resolution the consumer was in the middle
+ * of. Supporting-file entries are left alone: `update` never rewrites them.
+ *
+ * A tree with no manifest keeps having none; writing a partial one would claim
+ * ids this function knows nothing about.
+ */
+function reattribute(rulesDir, artifact, names) {
+  const manifest = readWindsurfManifest(rulesDir);
+  if (!manifest) return;
+
+  const key = `${artifact.kind}:${artifact.id}`;
+  for (const [name, entry] of Object.entries(manifest)) {
+    if (entry.role === 'body' && `${entry.kind}:${entry.id}` === key) delete manifest[name];
+  }
+
+  const chunked = names.length > 1;
+  names.forEach((name, index) => {
+    manifest[name] = {
+      kind: artifact.kind,
+      id: artifact.id,
+      role: 'body',
+      ...(chunked && { part: index + 1 }),
+    };
+  });
+
+  writeWindsurfManifest(rulesDir, manifest);
 }

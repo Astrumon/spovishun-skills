@@ -324,3 +324,58 @@ test('renders templates under ## Templates section with sub-headings for support
   assert.match(warn.text, /assets\/diagram\.png/);
   assert.doesNotMatch(out, /assets\/diagram\.png/);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership (#162) — codex has none, and now says so
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Runs one codex install and returns what it wrote to stderr. */
+async function runCodexInstall(consumer) {
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  const warn = new CapturingWriter();
+  await installCodex({
+    consumerCwd: consumer,
+    pkgRoot: FIXTURES_SOURCE,
+    config,
+    artifacts: loadArtifacts(FIXTURES_SOURCE),
+    pluginVersion: PLUGIN_VERSION,
+    warn,
+  });
+  return warn.text;
+}
+
+test('a first install writes AGENTS.md without an overwrite warning', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+
+  assert.doesNotMatch(await runCodexInstall(consumer), /regenerated wholesale/);
+});
+
+test('an idempotent re-install stays quiet', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runCodexInstall(consumer);
+
+  assert.doesNotMatch(
+    await runCodexInstall(consumer),
+    /regenerated wholesale/,
+    'a warning that fires on every run is a warning nobody reads'
+  );
+});
+
+test('an install that would discard local edits to AGENTS.md declares it', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-no-notion.yaml');
+  await runCodexInstall(consumer);
+
+  const outPath = join(consumer, AGENTS_MD_FILENAME);
+  writeFileSync(outPath, readFileSync(outPath, 'utf8') + '\n## My own section\n', 'utf8');
+
+  const text = await runCodexInstall(consumer);
+
+  assert.match(text, /AGENTS\.md already exists and differs — regenerated wholesale/);
+  assert.match(text, /no per-artifact ownership model/);
+  assert.match(text, /Edit the canonical bodies under skills\/ or rules\/ instead/);
+  assert.doesNotMatch(readFileSync(outPath, 'utf8'), /My own section/, 'the edit is in fact discarded');
+});

@@ -19,8 +19,8 @@
 
 ## Always-Active Rules
 
-- **Always use `safeDbQuery { }`** — never bare `transaction { }` or manual `ResultContainer.catching { dbQuery { } }`.
-- `safeDbQuery` and `safeDbTransaction` live in `data/db/DatabaseFactory.kt`.
+- **Always use `safeDbQuery { }`** — never bare `transaction { }` or a hand-rolled `ResultContainer.catching { transaction { } }`.
+- `safeDbQuery` lives in `data/db/DatabaseFactory.kt` and is the only DB entry point — it does `withContext(Dispatchers.IO)` + `transaction { }` + `ResultContainer.catching` itself.
 - **Only `DatabaseFactory.kt` may use `Dispatchers.IO`.**
 - DDL changes require a Flyway migration via `./gradlew generateMigration` — never hand-edit applied files.
 
@@ -35,7 +35,7 @@ When reviewing or designing DB code:
 ## Do NOT
 
 - Do NOT load all reference files at once — pick exactly one per the Decision Table.
-- Do NOT bypass `safeDbQuery` by wrapping `dbQuery {}` in `ResultContainer.catching {}` manually.
+- Do NOT bypass `safeDbQuery` by wrapping `transaction {}` in `ResultContainer.catching {}` manually.
 - Do NOT use bare `transaction {}` directly in repository `data/` layer code.
 - Do NOT edit a Flyway migration file that has already been applied to any database.
 - Do NOT use `Dispatchers.IO` outside of `DatabaseFactory.kt`.

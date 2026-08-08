@@ -59,7 +59,7 @@ try {
 ```
 Exception: No transaction in context
 Cause: DB call outside transaction {}
-Fix: wrap with transaction { } or dbQuery { }
+Fix: wrap the call in safeDbQuery { }
 ```
 
 ### NPE / NullPointerException

@@ -1,5 +1,5 @@
 id: solution-designer
-version: 1.0.0
+version: 1.0.1
 category: stack-specific
 description: Compares 2–3 implementation approaches for a feature and produces a Solution Decision document with a comparison matrix and recommendation. Operates between idea-brainstormer and task-decomposer.
 requires:

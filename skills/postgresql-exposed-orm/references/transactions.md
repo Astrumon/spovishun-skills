@@ -1,8 +1,10 @@
 # Transactions — Kotlin Exposed ORM
 
-## Spovishun convention: always use `safeDbQuery`
+## Convention: `safeDbQuery` is the only DB entry point
 
-`safeDbQuery` wraps `dbQuery {}` + `ResultContainer.catching` — use it for all DB access:
+`safeDbQuery` is defined in `data/db/DatabaseFactory.kt` and does the whole job itself —
+`withContext(Dispatchers.IO)` → `transaction { }` → `ResultContainer.catching`. There is no
+intermediate `dbQuery` helper to compose with, so use it for all DB access:
 
 ```kotlin
 // CORRECT
@@ -12,40 +14,59 @@ suspend fun findMember(chatId: Long, userId: Long): ResultContainer<Member?> =
                .singleOrNull()?.toMember()
     }
 
-// WRONG — bypassing safeDbQuery
-suspend fun findMember(...) = ResultContainer.catching { dbQuery { Members.select { ... } } }
+// WRONG — hand-rolling what safeDbQuery already does
+suspend fun findMember(...) = ResultContainer.catching { transaction { Members.select { ... } } }
 
-// WRONG — bare transaction
+// WRONG — bare transaction, blocks the caller's dispatcher
 suspend fun findMember(...) = transaction { Members.select { ... } }
 ```
 
-Both `safeDbQuery` and `safeDbTransaction` are defined in `data/db/DatabaseFactory.kt`.
+## Multi-step writes are already atomic
 
-## `safeDbQuery` vs `safeDbTransaction`
+One `safeDbQuery` block is one transaction, so several statements inside a single block commit
+or roll back together. There is no separate helper for atomic writes — putting the steps in one
+block is the mechanism:
 
-| | `safeDbQuery` | `safeDbTransaction` |
-|---|---|---|
-| Use for | Reads and single-entity writes | Multi-step writes that must be atomic |
-| Returns | `ResultContainer<T>` | `ResultContainer<T>` |
-| Wraps | `dbQuery {}` + catching | `newSuspendedTransaction` + catching |
+```kotlin
+// CORRECT — one transaction, both updates or neither
+suspend fun transferOwnership(chatId: Long, newOwnerId: Long): ResultContainer<Unit> =
+    safeDbQuery {
+        Members.update({ Members.chatId eq chatId }) { it[role] = Role.MEMBER }
+        Members.update({ (Members.chatId eq chatId) and (Members.userId eq newOwnerId) }) {
+            it[role] = Role.OWNER
+        }
+    }
+
+// WRONG — two transactions, the first one stays committed if the second throws
+suspend fun transferOwnership(chatId: Long, newOwnerId: Long) {
+    safeDbQuery { Members.update(...) }
+    safeDbQuery { Members.update(...) }
+}
+```
 
 ## Raw Exposed transactions (DatabaseFactory.kt only)
 
-```kotlin
-// Coroutine context — used internally by safeDbQuery/safeDbTransaction
-newSuspendedTransaction(Dispatchers.IO) {
-    // multi-step writes
-}
+The primitives below are Exposed APIs, not repository-layer patterns. Repository code never
+reaches for them — it calls `safeDbQuery`.
 
-// Blocking — for tests or standalone tool scripts only
+```kotlin
+// Blocking — this is what safeDbQuery opens, already inside its Dispatchers.IO hop.
+// Outside DatabaseFactory.kt it is legal only in tests or standalone tool scripts.
 transaction {
     // blocking DB access
+}
+
+// Suspending alternative. safeDbQuery does NOT use it — it runs the blocking `transaction {}`
+// on Dispatchers.IO instead. Do not introduce it in `data/` code.
+newSuspendedTransaction(Dispatchers.IO) {
+    // multi-step writes
 }
 ```
 
 ## Nested transactions
 
-PostgreSQL doesn't support true nested transactions. Use savepoints for partial rollback:
+PostgreSQL doesn't support true nested transactions. Use savepoints for partial rollback — inside a
+`safeDbQuery` block the savepoint is taken on the transaction that block already opened:
 
 ```kotlin
 transaction {
@@ -60,6 +81,9 @@ transaction {
 ```
 
 ## Retry on deadlock
+
+`safeDbQuery` takes no retry parameter, so this belongs in `DatabaseFactory.kt` (or a tool script) —
+not in repository code:
 
 ```kotlin
 transaction(repetitionAttempts = 3) {

@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] — 2026-08-08
+
+Navigation 3 becomes the standard for KMP projects, and the KMP navigation rule stops prescribing
+the defect it was written around.
+
+Minor rather than patch: `rules/kmp/navigation.md` changes normatively for consumers that already
+have it on disk. Under `ownership: 'checksum'` a locally edited copy is skipped with a warning on
+the next `install` — run `install --force` to take the new rule, and re-apply local edits on top.
+
+### Changed
+
+- **`rules/kmp/navigation.md` rewritten around Navigation 3.** The rule previously required a
+  navigation state holder that owns the selected top-level destination while the graph mirrors it
+  onto the back stack, and shipped the `LaunchedEffect(selected) { navController.navigate(…) }`
+  snippet that implements it. That is two sources of truth for one value, and it is the origin of
+  the navigation defects observed downstream: the guard that stops the feedback loop is the same
+  guard that makes a legitimate repeat navigation a no-op, and binding the holder per-resolution
+  silently resets the selection.
+
+  The back stack is now the only navigation state and the selected destination is **derived** from
+  it — the holder disappears, and the failure mode with it. Also new or restored: `@Keep` on every
+  key (dropped when the rule moved from `rules/common/` to `rules/kmp/`; without it R8 breaks
+  navigation in release builds only), the `SerializersModule` obligation that non-Android targets
+  need for back-stack restoration, the requirement that the display is created once above any
+  window-size-class branch, and the requirement that it carries both the saveable-state and
+  ViewModel-store entry decorators.
+
+  Features now own their entries (`EntryProviderScope` extension per feature) instead of every
+  screen being registered in `composeApp`, which also resolves the rule's own contradiction between
+  "add a `composable<Route>` entry in `composeApp`" and "DON'T centralise every route". Navigation 2
+  keeps every ownership rule and gets a short Legacy section for the wiring differences.
+
+- **`rules/kmp/architecture.md` gained a state-ownership boundary.** The MVI contract read as
+  "everything goes through Intent → UiState"; it now states what does not — ephemeral UI state stays
+  in the composition (`remember` / `rememberSaveable`), navigation state belongs to the back stack.
+  Also documents why an event modelled as a `UiState` field re-fires on back navigation, why the
+  effect channel is `BUFFERED` rather than a `SharedFlow`, and that a non-ViewModel collaborator
+  never gets its own effect channel.
+
+- **`skills/new-feature` (1.0.0 → 1.1.0)** scaffolds a `NavKey` plus its `SerializersModule`
+  contribution and a feature-owned entry builder, and detects a Navigation 2 project to fall back to
+  a `NavGraphBuilder` extension. It no longer instructs an edit to `composeApp` per screen.
+
+### Added
+
+- **`skills/kmp-multiplatform-specialist/references/navigation-3.md`** (skill 1.2.0 → 1.3.0) — the
+  Kotlin that moved out of the rule: artifacts, keys and `SavedStateConfiguration`, the navigator,
+  feature entry builders (plain and Koin, with the `entryProvider`-typed-as-`Any` caveat from
+  InsertKoinIO/koin#2336), `NavDisplay` with both decorators called once above the layout branch,
+  deriving the selection, per-tab back stacks, and the Navigation 2 equivalents.
+
 ## [1.21.0] — 2026-08-02
 
 Closes both Critical findings of the thermo-nuclear review, in the only order they can land: C-2

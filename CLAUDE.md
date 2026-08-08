@@ -190,7 +190,7 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 | KMP modularization (visibility ladder, `internal` impls behind `public` interfaces) | `rules/kmp/modularization.md` | `stack.kmp` | shipped |
 | KMP persistence (storage selection, schema history, migrations; code in `kmp-persistence`) | `rules/kmp/persistence.md` | `stack.kmp` | shipped |
 | KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
-| KMP navigation | `rules/kmp/navigation.md` | `stack.kmp` | shipped |
+| KMP navigation (Navigation 3 is the standard; back stack is the only navigation state; Nav 2 kept as legacy. Code in `kmp-multiplatform-specialist/references/navigation-3.md`) | `rules/kmp/navigation.md` | `stack.kmp` | shipped |
 | KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |
 | KMP localization | `rules/kmp/localization.md` | `stack.kmp` | shipped |
 | KMP testing (supersedes the common stack section) | `rules/kmp/testing.md` | `stack.kmp` | shipped |

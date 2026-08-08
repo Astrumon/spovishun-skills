@@ -88,6 +88,7 @@ test('stack.kmp ships the whole rules/kmp group', () => {
   const ids = collectRules(PKG_ROOT, KMP_ON).map((r) => r.id);
   assert.deepEqual(ids.filter((id) => id.startsWith('kmp/')).sort(), [
     'kmp/architecture',
+    'kmp/component-architecture',
     'kmp/feature-structure',
     'kmp/localization',
     'kmp/modularization',

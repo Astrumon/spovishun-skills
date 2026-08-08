@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] — 2026-08-08
+
+The KMP rules gain the escalation step they were missing. Ladders existed for the UseCase ("two or
+more repositories or two or more screens") and for a `core/` module ("on the second consumer"); for
+the screen itself there was none. `architecture.md` defined `UiState` as one class per screen holding
+everything rendered, `feature-structure.md` and `uikit.md` required every view to be stateless with
+"no DI, no ViewModel", and `architecture.md` forbade a composable taking a `ViewModel` — so every
+piece of a screen was forced to be inert and all logic funnelled into a single ViewModel. That is the
+1000+ line failure mode, prescribed rather than prevented.
+
+Minor rather than patch: `rules/kmp/feature-structure.md` and `rules/kmp/uikit.md` change normatively
+for consumers that already have them on disk. Under `ownership: 'checksum'` a locally edited copy is
+skipped with a warning on the next `install` — run `install --force` to take the new rules, and
+re-apply local edits on top.
+
+### Added
+
+- **`rules/kmp/component-architecture.md`** — a screen may be split into components, but only past an
+  explicit threshold: **two or more independent state regions**, regions that load separately, fail
+  separately and change for different reasons. A ViewModel's line count is named as a symptom, not a
+  trigger, because splitting coupled regions produces components that call each other. The rule fixes
+  ownership (the ViewModel is the root owner, `attach`/`detach` are manual, clearing is recursive),
+  keeps effects on the existing `Channel(Channel.BUFFERED)` — a component receives an emit lambda and
+  never owns a channel, extending the "the ViewModel remains the only emitter" rule already in
+  `architecture.md` — and states the approach's costs as normative text: manual lifetime, harder
+  whole-screen `@Preview`, overkill below the threshold.
+
+  Deliberately **not** Decompose or Essenty: `ChildStack` is a second navigation model competing with
+  Navigation 3, standardised in 1.22.0. The infrastructure is ~95 lines with no third-party
+  dependency.
+
+- **`skills/kmp-multiplatform-specialist/references/component-architecture.md`** (skill 1.3.0 →
+  1.4.0) — the Kotlin the rule stays free of: `Component`, `ComponentStoreOwner`, `ComponentStore`,
+  `BaseComponent`, `StateComponent<S>`, `MviViewModel` gaining `ComponentStoreOwner` and
+  `clearComponents()` in `onCleared()`, a two-region screen, the Koin wiring, and the preview and
+  test shapes. Adapted from [`Nerushok/ComArch`](https://github.com/Nerushok/ComArch) (MIT) with
+  three changes it needs to be usable here: the store key stops going through
+  `this::class.java.canonicalName` (absent in `commonMain`, and `qualifiedName` throws on JS/Wasm) in
+  favour of a declared key defaulting to `simpleName`; the component scope takes an injected
+  dispatcher and `CoroutineExceptionHandler` instead of a hardcoded `Dispatchers.Main.immediate`; and
+  Hilt `@AssistedFactory` becomes a Koin factory-function binding injected into the owner's
+  constructor, so nothing reaches into the container at runtime. Attributed in `NOTICE.md` and pinned
+  in the skill's `source:` block, so `npm run check:drift` covers it.
+
+### Changed
+
+- **`rules/kmp/feature-structure.md`** gains `ui/components/` beside `ui/viewcomponents/` and
+  qualifies "Views are `internal`, stateless and hoisted … No DI, no ViewModel": that sentence
+  governs `viewcomponents/`, and a composable that collects a component's state is a separate
+  category with its own folder. The contradiction is removed in text rather than left to be
+  discovered.
+
+- **`rules/kmp/uikit.md`** states that "component" in that file means a visual building block and
+  never the state holder, and that a design system component never takes one nor collects a `Flow`.
+
+`rules/kmp/architecture.md` is untouched: it has 26 characters of headroom before the 6 000-char
+windsurf split threshold, and nothing in it contradicts the new rule — a component is not a
+ViewModel.
+
 ## [1.22.0] — 2026-08-08
 
 Navigation 3 becomes the standard for KMP projects, and the KMP navigation rule stops prescribing

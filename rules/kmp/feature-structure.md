@@ -35,6 +35,9 @@ feature/
     <Name>Intent.kt
     <Name>Effect.kt
     <Name>Format.kt        # optional: internal non-composable formatting helpers
+    components/            # only past the component-architecture.md threshold
+      <Region>Component.kt
+      <Region>Ui.kt        # takes the component, collects its state
     viewcomponents/        # ONE composable per file
       <ViewA>.kt
       <ViewB>.kt
@@ -64,7 +67,8 @@ feature/
 - `<Name>Screen` is stateless — it `when`-dispatches state to a view in `viewcomponents/` and emits
   lambdas upward. No layout logic beyond the dispatch.
 - Views are `internal`, stateless and hoisted: value in, events out. No DI, no ViewModel, no theme
-  wrapper inside.
+  wrapper inside. That is `viewcomponents/`; a composable that collects a component's state is a
+  separate category and lives in `components/` — see `component-architecture.md`.
 - `@Preview`s live next to the view they preview.
 
 ```kotlin
@@ -122,4 +126,5 @@ bound to `Dispatchers.Main.immediate` — add `kotlinx-coroutines-swing` or the 
 
 ## Related rules
 
-`architecture.md` · `navigation.md` · `uikit.md` · `localization.md` · `testing.md`
+`architecture.md` · `component-architecture.md` · `navigation.md` · `uikit.md` · `localization.md` ·
+`testing.md`

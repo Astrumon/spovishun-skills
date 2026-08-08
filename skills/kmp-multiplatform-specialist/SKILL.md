@@ -12,8 +12,10 @@ the code it describes is here:
 | The `MviViewModel` base class, a screen written against it, the typed-error `load()` helper, the `composeCompiler { }` and `stability.txt` wiring | `references/mvi-and-stability.md` |
 | The AGP 9 `androidLibrary { }` DSL — what it has, what it dropped (`BuildConfig`, variants, kapt, NDK), and the `androidResources` trap | `references/agp9-kmp-library.md` |
 | Navigation 3 wiring — keys and their `SerializersModule`, the navigator, feature entry builders, `NavDisplay` and its decorators, deriving the selected destination | `references/navigation-3.md` |
+| Component architecture — the five infrastructure types, `MviViewModel` as the root owner, the Koin factory-function wiring, previewing and testing a component | `references/component-architecture.md` |
 | The normative architecture, MVI and Compose-stability rules | `.claude/rules/kmp/architecture.md` |
 | The normative navigation rules | `.claude/rules/kmp/navigation.md` |
+| The normative rules for when a screen escalates to components | `.claude/rules/kmp/component-architecture.md` |
 
 ## Scope
 

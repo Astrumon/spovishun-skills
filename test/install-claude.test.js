@@ -301,6 +301,7 @@ test('flag-named rule groups install when their stack flag is active', async () 
   // when this test was written — a rule added without an install path is invisible.
   const kmpRules = [
     'architecture.md',
+    'component-architecture.md',
     'feature-structure.md',
     'localization.md',
     'modularization.md',

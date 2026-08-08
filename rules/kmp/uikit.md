@@ -3,6 +3,9 @@
 Reusable visual building blocks live in `core/designsystem`. Screen-specific composition lives in
 that screen's `viewcomponents/` folder (see `feature-structure.md`).
 
+"Component" in this file means a visual building block, never the state holder of
+`component-architecture.md`. The two never meet: see below.
+
 ## What belongs in `core/designsystem`
 
 - The theme: color scheme, typography, shapes, spacing tokens.
@@ -15,6 +18,8 @@ that screen's `viewcomponents/` folder (see `feature-structure.md`).
 - A composable used by exactly one screen — that is `viewcomponents/`.
 - Anything that reads a `UiState`, resolves DI, or knows a route. The design system is
   domain-agnostic: it renders what it is given.
+- Anything that takes a screen component or collects a `Flow`. That composable is feature-owned and
+  belongs in `components/` — see `component-architecture.md`.
 
 ## Extraction rule
 
@@ -28,7 +33,8 @@ Extract on the **second** usage, not the first and not the third.
 
 ## Component contract
 
-- Stateless and hoisted: value in, events out. No `remember`ed business state, no DI, no ViewModel.
+- Stateless and hoisted: value in, events out. No `remember`ed business state, no DI, no ViewModel,
+  no screen component.
 - Every component takes `modifier: Modifier = Modifier` as its first optional parameter and applies
   it to its outermost node.
 - Colors, sizes and typography come from the theme — never a hardcoded `Color(0xFF…)` or a magic
@@ -108,7 +114,8 @@ Unstable by default. Keep parameters primitive or `@Immutable`, and prefer `() -
 
 ## Related rules
 
-`feature-structure.md` · `localization.md` · `architecture.md` · `modularization.md`
+`feature-structure.md` · `localization.md` · `architecture.md` · `modularization.md` ·
+`component-architecture.md`
 
 Compose mechanics — the modifier contract, stability classes, phase deferral — live in the
 `compose-multiplatform` skill.

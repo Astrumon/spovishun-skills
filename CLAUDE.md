@@ -194,6 +194,7 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 | KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |
 | KMP localization | `rules/kmp/localization.md` | `stack.kmp` | shipped |
 | KMP testing (supersedes the common stack section) | `rules/kmp/testing.md` | `stack.kmp` | shipped |
+| KMP component architecture (screen-level escalation: two or more independent state regions become components; effects stay on the ViewModel's channel. Code in `kmp-multiplatform-specialist/references/component-architecture.md`) | `rules/kmp/component-architecture.md` | `stack.kmp` | shipped |
 
 ## When to use scripts vs CLI
 

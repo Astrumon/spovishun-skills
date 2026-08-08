@@ -62,6 +62,53 @@ SOFTWARE.
 
 ---
 
+## Nerushok/ComArch
+
+- **Repository:** https://github.com/Nerushok/ComArch
+- **License:** MIT
+- **Adapted at ref:** `7a3e3d5cbde460ccc3ed41a08f2a0450b0d7d0b0`
+
+Accompanies the article [Компонентна архітектура для Android](https://dou.ua/forums/topic/52382/) by
+Sergii Nerush. `references/component-architecture.md` reworks the four library files below for
+`commonMain` — the store key stops going through `java.canonicalName`, the coroutine scope takes an
+injected dispatcher and `CoroutineExceptionHandler`, and Hilt `@AssistedFactory` is replaced by Koin
+factory-function bindings.
+
+| Artifact | Upstream path | Blob SHA |
+|---|---|---|
+| `skills/kmp-multiplatform-specialist` | `library/src/main/kotlin/lib/nerush/components/library/Component.kt` | `dfd7fc595c0879ca9e2444709ad35dfdd702c33e` |
+| `skills/kmp-multiplatform-specialist` | `library/src/main/kotlin/lib/nerush/components/library/ComponentStore.kt` | `85c04c7f1a81b08d3191e617dfcc8951c9ac1cd5` |
+| `skills/kmp-multiplatform-specialist` | `library/src/main/kotlin/lib/nerush/components/library/ComponentStoreOwner.kt` | `40df2fbb4bdbfc8211378bb9832b20e135253348` |
+| `skills/kmp-multiplatform-specialist` | `library/src/main/kotlin/lib/nerush/components/library/BaseComponent.kt` | `8e3bdd2bc3dc0a93df45894a2b05f22d0d5774e3` |
+
+### Upstream license (verbatim)
+
+```
+MIT License
+
+Copyright (c) 2024 Serhii
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## Vendored dependencies
 
 | File | Upstream | License |

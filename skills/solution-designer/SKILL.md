@@ -114,7 +114,7 @@ common       → [зміни? так/ні, що саме]
 - Check if a similar pattern already exists and prefer consistency over novelty
 - Include affected file paths where identifiable (scan the source tree)
 - Note explicitly if an option requires a database migration
-- Use `safeDbQuery {}` / `safeDbTransaction {}` patterns — never raw `transaction {}`
+- Use the `safeDbQuery {}` pattern — never raw `transaction {}`
 
 **MUST NOT DO:**
 - Write implementation code (describe the approach only)

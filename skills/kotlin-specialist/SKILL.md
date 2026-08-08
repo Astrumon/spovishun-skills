@@ -46,7 +46,7 @@
 ## Related Skills
 
 - `telegram-bot-development` — coroutine scope wiring for bot handlers
-- `postgresql-exposed-orm` — `safeDbQuery` / `safeDbTransaction` patterns built on coroutines
+- `postgresql-exposed-orm` — the `safeDbQuery` pattern built on coroutines (`withContext(Dispatchers.IO)` + `transaction {}`)
 - `unit-testing-kotlin` — `runTest`, `StandardTestDispatcher`, Turbine for Flow assertions
 - `gradle-build-auditor` — whole-build audit: version catalog, repositories, wrapper, caches, CI
 

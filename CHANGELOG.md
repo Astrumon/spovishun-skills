@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.1] — 2026-08-08
+
+The Kotlin/Postgres skills stop recommending a function that no longer exists. Downstream
+(`spovishun-173`) deleted `safeDbTransaction` from `data/db/DatabaseFactory.kt` and folded `dbQuery`
+into `safeDbQuery`, which now is the single public DB entry point and does
+`withContext(Dispatchers.IO)` + `transaction { }` + `ResultContainer.catching` on its own. Four
+skills still described the old two-helper world, and a skill that names a removed API is worse than
+one that says nothing: the reader trusts it and writes code that will not compile.
+
+Patch rather than minor: no artifact is added and no rule changes normatively — the guidance already
+said "always `safeDbQuery`", and this only removes the alternatives that stopped existing.
+
+### Fixed
+
+- **`skills/postgresql-exposed-orm/references/transactions.md`** (skill 1.0.0 → 1.0.1) — the
+  `safeDbQuery` vs `safeDbTransaction` section and its comparison table are deleted outright rather
+  than trimmed; a comparison with one side removed is not a comparison. The column it carried
+  ("multi-step writes that must be atomic") is replaced by a **Multi-step writes are already atomic**
+  section stating the mechanism that took its place: one `safeDbQuery` block is one transaction, so
+  the steps commit or roll back together, and the failure mode is splitting them across two calls.
+
+  The raw-Exposed section was also factually wrong on two counts — it presented
+  `newSuspendedTransaction(Dispatchers.IO)` as what `safeDbQuery` "uses internally", when
+  `safeDbQuery` runs the *blocking* `transaction { }` inside its own IO hop. Both primitives are now
+  framed as Exposed APIs that repository code never reaches for, with `newSuspendedTransaction`
+  explicitly marked as not what `safeDbQuery` does.
+
+  The heading lost its hardcoded project name (`## Spovishun convention:` → `## Convention:`). This
+  package ships to any consumer and has `{{PROJECT_NAME}}` for that purpose; dropping the name is
+  cheaper than declaring a placeholder for one heading.
+
+- **`skills/postgresql-exposed-orm/SKILL.md`** — the Always-Active Rule no longer claims
+  `safeDbTransaction` lives in `DatabaseFactory.kt`, and states what `safeDbQuery` actually does. The
+  "Do NOT" entry about wrapping `dbQuery {}` in `ResultContainer.catching {}` now names
+  `transaction {}`, which is the bypass that is still reachable.
+
+- **`skills/kotlin-specialist/SKILL.md`** (2.3.0 → 2.3.1) and
+  **`skills/solution-designer/SKILL.md`** (1.0.0 → 1.0.1) — cross-references to
+  "`safeDbQuery` / `safeDbTransaction` patterns" reduced to the one pattern that exists.
+
+- **`skills/debugging-wizard/SKILL.md`** (1.1.0 → 1.1.1) — the "No transaction in context" fix said
+  "wrap with `transaction { }` or `dbQuery { }`", offering a deleted function and a bare
+  `transaction {}` that the Postgres skill forbids. It now points at `safeDbQuery { }`.
+
 ## [1.23.0] — 2026-08-08
 
 The KMP rules gain the escalation step they were missing. Ladders existed for the UseCase ("two or

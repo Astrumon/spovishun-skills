@@ -1,11 +1,11 @@
 id: new-feature
-version: 1.0.0
+version: 1.1.0
 category: stack-specific
 requires:
   - kotlin
   - kmp
 user_invocable: true
-description: Scaffolds a Compose Multiplatform feature as an api/impl Gradle module pair — route, MVI screen (UiState/Intent/Effect), ViewModel, Koin module, localized strings and a ViewModel test — then wires it into the composeApp nav graph and DI. User-invocable via /new-feature <Name>.
+description: Scaffolds a Compose Multiplatform feature as an api/impl Gradle module pair — NavKey, MVI screen (UiState/Intent/Effect), ViewModel, feature-owned Navigation 3 entry builder, Koin module, strings and a test. Falls back to NavGraphBuilder on Nav 2. User-invocable via /new-feature <Name>.
 provides:
   - KMP feature module scaffolding
 triggers:

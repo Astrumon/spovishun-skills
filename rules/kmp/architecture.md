@@ -29,7 +29,15 @@ Every screen exposes exactly three types and one entry point.
 - **UiState** — one `@Immutable data class` per screen holding everything rendered. Loading and
   error are states, not separate flags scattered across the class.
 - **Effect** — a `sealed interface` of one-shot outcomes only: navigation and transient messages.
-  Anything the screen still shows after a rotation is state, not an effect.
+  Anything the screen still shows after a rotation is state, not an effect. Modelling an event as a
+  field instead (`taskToOpen: TaskId?`) re-fires it: the field survives the transition, the screen
+  re-reads it on the way back, and the user is thrown forward again.
+
+**Not everything is UiState.** State no other layer can act on stays in the composition: text being
+typed, whether a dialog is open, which row is expanded — `remember` / `rememberSaveable`.
+Navigation state belongs to the back stack (`navigation.md`). A value enters `UiState` only when
+the ViewModel must read it to decide something; routing the rest through Intent → UiState buys
+nothing and recomposes the screen on every keystroke.
 
 The shared `MviViewModel<S, I, E>` base is written **once per project** in `commonMain`, not once
 per screen: `StateFlow` for state, `Channel(Channel.BUFFERED)` for effects, and a `launch` helper
@@ -39,6 +47,11 @@ over an injected `CoroutineDispatcher` + `CoroutineExceptionHandler`.
   `viewModelScope` cancellation on `onCleared`, destination-scoped lifetime through
   `koinViewModel()`, and access to `SavedStateHandle`.
 - The dispatcher is injected so tests can pass a test dispatcher instead of mutating global state.
+- Effects go through a `BUFFERED` channel because an effect produced while the screen is
+  off-composition (a background job, a push, a request completing) must wait for its collector
+  rather than be dropped. That is what lets the Route collect with `repeatOnLifecycle`.
+- A collaborator that is not a ViewModel never gets its own effect channel. The ViewModel delegates
+  that collaborator's interface and remains the only emitter — `emitEffect` stays `protected`.
 
 ## Error handling
 
@@ -54,9 +67,8 @@ over an injected `CoroutineDispatcher` + `CoroutineExceptionHandler`.
 
 ## Compose stability
 
-Non-skippable composables recompose on every parent recomposition. In a multi-module project this
-is the default failure mode, because **a class from another module is treated as Unstable** unless
-told otherwise.
+Non-skippable composables recompose on every parent recomposition. In a multi-module project that
+is the default, because **a class from another module is Unstable** unless told otherwise.
 
 - Mark every `UiState` and every model it holds `@Immutable` (or `@Stable` when it holds observable
   state internally).
@@ -69,8 +81,8 @@ told otherwise.
 
 ## Escalation
 
-- A UseCase is required only when logic spans two or more repositories, or when the same logic is
-  needed by two or more screens. Do not add a pass-through UseCase that only forwards one call.
+- A UseCase is required only when logic spans two or more repositories or two or more screens.
+  Never a pass-through that forwards one call.
 - A shared `core/` module is created on the second consumer, not in anticipation of one.
 
 ## Don't
@@ -83,11 +95,10 @@ told otherwise.
 
 ## Related rules
 
-`feature-structure.md` (module and package layout) · `modularization.md` (visibility and module
-boundaries) · `networking.md` (the error boundary in `data`) · `persistence.md` (local storage) ·
+`feature-structure.md` · `modularization.md` · `networking.md` · `persistence.md` ·
 `navigation.md` · `testing.md` · `uikit.md` · `localization.md`
 
 This rule stays normative and free of Kotlin. Its implementations live in the
-`kmp-multiplatform-specialist` skill: the `MviViewModel` base class, a screen written against it,
-the typed-error `load()` helper and the `composeCompiler { }` / `stability.txt` wiring are in
-`references/mvi-and-stability.md`; source sets, targets and `expect`/`actual` are in the skill body.
+`kmp-multiplatform-specialist` skill: `references/mvi-and-stability.md` holds the `MviViewModel`
+base, a screen written against it, the typed-error `load()` helper and the `stability.txt` wiring;
+`references/navigation-3.md` holds the back stack, entry builders and display wiring.

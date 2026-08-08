@@ -49,9 +49,18 @@ If it is ambiguous which mode applies, ask. Do not guess.
 
 3. **Create `feature/<name>/api`** (new-feature mode only):
    - `build.gradle.kts` — KMP + serialization only. No Compose, no Koin, no Ktor.
-   - `<Name>Route.kt` — `@Serializable data object <Name>Route` (or a `data class` when the screen
-     takes arguments), plus a `fun NavController.navigateTo<Name>(...)` extension.
+   - `<Name>Key.kt` — `@Serializable @Keep data object <Name>Key : NavKey` (or a `data class` when
+     the screen takes arguments). Both annotations are required: R8 reaches keys reflectively and
+     drops an unmarked one in release builds only.
+   - The feature's `SerializersModule` contribution —
+     `polymorphic(NavKey::class) { subclass(<Name>Key::class, <Name>Key.serializer()) }`. Without it
+     the back stack does not restore on iOS, desktop or web; Android is the only target that can
+     fall back to reflection, so omitting it passes every Android test.
    - Nothing else goes in `api`.
+   - **Navigation 2 project** (the repo uses `NavHost` / `navigation-compose` 2.x): name the file
+     `<Name>Route.kt`, write `@Serializable @Keep data object <Name>Route` with no `NavKey`
+     supertype and no `SerializersModule`, and add a `fun NavController.navigateTo<Name>(...)`
+     extension. Match what step 2 found — never introduce Nav 3 into a Nav 2 project.
 
 4. **Create `feature/<name>/impl`** (new-feature mode only):
    - `build.gradle.kts` — depends on `feature/<name>/api`, `core/designsystem` and whatever `core/*`
@@ -99,14 +108,26 @@ If it is ambiguous which mode applies, ask. Do not guess.
        // constructor DSL: bind<T>() inside the lambda, from org.koin.core.module.dsl
        singleOf(::<Name>RepositoryImpl) { bind<<Name>Repository>() }
        viewModelOf(::<Name>ViewModel)
+       // Nav 3: the feature contributes its entry builder here, so composeApp never names it.
+       single<EntryProviderInstaller>(named("<name>")) { { <name>Entries(get()) } }
    }
    ```
    Then add `<name>Module` to the aggregated module list in `composeApp`. Plain Koin DSL — do not
    introduce Koin Annotations or KSP.
 
-9. **Wire navigation** — in `composeApp`: add `composable<<Name>Route> { <Name>Route(...) }` to the
-   existing `NavHost`, passing navigation lambdas down. If it is a top-level destination, register it
-   in the destination list and add its label to every locale file. Never create a second `NavHost`.
+9. **Wire navigation** — the feature owns its entries; `composeApp` composes features, not screens.
+   Write `fun EntryProviderScope<NavKey>.<name>Entries(navigator: Navigator)` in
+   `impl/.../ui/<Name>Navigation.kt` with one `entry<<Name>Key> { }` per screen of this feature,
+   passing navigation lambdas down. Adding a screen must not require an edit to `composeApp` — if it
+   does, the graph has become a switchboard (see `navigation.md`). If it is a top-level destination,
+   register it in the destination list and add its label to every locale file.
+
+   **Navigation 2 project:** the same shape one level down — write
+   `fun NavGraphBuilder.<name>Graph(...)` with `composable<<Name>Route> { }` entries and call it from
+   the existing `NavHost`. Never create a second `NavHost` or a second `NavDisplay`.
+
+   Either way: do not add a `selectedDestination` field, a navigation state holder, or an effect that
+   mirrors a stored selection onto the back stack. Selection is derived from the back stack.
 
 10. **Register the modules** (new-feature mode only) — add
     `include(":feature:<name>:api")` and `include(":feature:<name>:impl")` to `settings.gradle.kts`,
@@ -122,7 +143,9 @@ If it is ambiguous which mode applies, ask. Do not guess.
 
 ## Do NOT
 
-- Do NOT put anything except the route and its navigation extension in `feature/<name>/api`.
+- Do NOT put anything except the destination key and its `SerializersModule` contribution (Nav 2:
+  the route and its navigation extension) in `feature/<name>/api`.
+- Do NOT store the selected destination anywhere. It is derived from the back stack.
 - Do NOT make one feature's `impl` depend on another feature's `impl`.
 - Do NOT expose `MutableStateFlow`, the raw effect `Channel`, or any public method besides
   `onIntent` from the ViewModel.
@@ -148,10 +171,11 @@ If it is ambiguous which mode applies, ask. Do not guess.
 ```
 settings.gradle.kts                       + include(":feature:logs:api"), (":feature:logs:impl")
 feature/logs/api/build.gradle.kts
-feature/logs/api/src/commonMain/kotlin/com/example/app/feature/logs/api/LogsRoute.kt
+feature/logs/api/src/commonMain/kotlin/com/example/app/feature/logs/api/LogsKey.kt
 feature/logs/impl/build.gradle.kts
 feature/logs/impl/src/commonMain/kotlin/com/example/app/feature/logs/
   ui/LogsScreen.kt  ui/LogsViewModel.kt  ui/LogsUiState.kt  ui/LogsIntent.kt  ui/LogsEffect.kt
+  ui/LogsNavigation.kt
   ui/viewcomponents/LogsLoading.kt  LogsErrorState.kt  LogsContent.kt
   domain/model/LogEntry.kt  domain/repository/LogsRepository.kt
   data/LogsRepositoryImpl.kt

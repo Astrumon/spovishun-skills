@@ -1,5 +1,5 @@
 id: kmp-multiplatform-specialist
-version: 1.2.0
+version: 1.3.0
 category: stack-specific
 requires:
   - kotlin
@@ -9,6 +9,7 @@ provides:
   - KMP source set and target configuration
   - expect/actual guidance
   - AGP 9 KMP-library plugin constraints
+  - Navigation 3 wiring reference
 triggers:
   en:
     - "expect/actual"
@@ -19,9 +20,16 @@ triggers:
     - "KMP target"
     - "Compose Resources"
     - "add iOS target"
+    - "NavKey"
+    - "NavDisplay"
+    - "entryProvider"
+    - "Navigation 3"
+    - "back stack"
   uk:
     - "експект актуал"
     - "сорс сет"
     - "спільний код"
     - "додати iOS таргет"
     - "мультиплатформа"
+    - "навігація"
+    - "бекстек"

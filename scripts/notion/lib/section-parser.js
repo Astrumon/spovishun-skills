@@ -1,12 +1,26 @@
 'use strict';
 
+// Indexes the markdown produced by format-task.js by its ATX headings, so
+// get-claude-md.js can slice out one section.
+//
+// Fence tracking is not cosmetic: format-task.js renders `code` blocks as
+// fenced markdown, and a shell snippet whose first line is `# install deps`
+// would otherwise register as a heading and cut the real section short.
+
+const FENCE_RE = /^\s*(```|~~~)/;
+const HEADING_RE = /^(#{1,3})\s+(.+)$/;
+
 function buildSectionIndex(content) {
   const lines = content.split('\n');
-  return lines.reduce((acc, line, i) => {
-    const m = line.match(/^(#{1,3})\s+(.+)$/);
-    if (m) acc.push({ level: m[1].length, text: m[2].trim(), line: i });
-    return acc;
-  }, []);
+  const index = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (FENCE_RE.test(lines[i])) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    const m = lines[i].match(HEADING_RE);
+    if (m) index.push({ level: m[1].length, text: m[2].trim(), line: i });
+  }
+  return index;
 }
 
 function extractSection(content, query) {
@@ -26,11 +40,11 @@ function extractSection(content, query) {
   }
 
   const sections = matches.map(h => {
-    let end = lines.length;
-    for (let i = h.line + 1; i < lines.length; i++) {
-      const m = lines[i].match(/^(#{1,3})\s+/);
-      if (m && m[1].length <= h.level) { end = i; break; }
-    }
+    // The section runs to the next heading of the same or shallower level.
+    // Headings are already fence-filtered in the index, so reuse it instead of
+    // re-scanning the raw lines.
+    const next = index.find(other => other.line > h.line && other.level <= h.level);
+    const end = next ? next.line : lines.length;
     return lines.slice(h.line, end).join('\n').trim();
   });
 

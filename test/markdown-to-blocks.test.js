@@ -261,3 +261,88 @@ test('unknown raw HTML survives as a paragraph (never silently dropped)', () => 
   const reassembled = JSON.stringify(blocks);
   assert.ok(reassembled.includes('hi'), 'inner text "hi" must reach the output');
 });
+
+// ─── spovishun-185: nested content defects observed in production ─────────────
+
+// `first.text` on a blockquote paragraph is RAW markdown. Wrapping it in a
+// synthetic text token sent it to Notion verbatim, which is how a callout ended
+// up showing literal backslashes and unrendered ** markers.
+test('callout body keeps inline annotations instead of literal markers', () => {
+  const [callout] = markdownToBlocks('> [!NOTE]\n> **Bold bit.** Run `get-task.js` first.');
+  const rt = callout.callout.rich_text;
+  const byContent = Object.fromEntries(rt.map(s => [s.plain_text, s.annotations]));
+
+  assert.equal(byContent['Bold bit.'].bold, true);
+  assert.equal(byContent['get-task.js'].code, true);
+  const joined = rt.map(s => s.plain_text).join('');
+  assert.ok(!joined.includes('**'), 'bold markers must be consumed, not shipped');
+  assert.ok(!joined.includes('`'), 'backtick markers must be consumed, not shipped');
+});
+
+test('a backslash-escaped backtick in a callout does not survive as a backslash', () => {
+  const BACKSLASH = String.fromCharCode(92);
+  const source = `> [!WARNING]\n> literal ${BACKSLASH}\`tick${BACKSLASH}\` here`;
+  const [callout] = markdownToBlocks(source);
+  const joined = callout.callout.rich_text.map(s => s.plain_text).join('');
+  assert.ok(!joined.includes(BACKSLASH), `no literal backslash expected, got: ${joined}`);
+  assert.ok(joined.includes('tick'));
+});
+
+// marked reads a leading tab as an indented code block, so the whole toggle body
+// arrived in Notion as one grey `plain text` block — and the first body line,
+// glued to the opening tag with no blank line, was dropped entirely.
+test('a tab-indented toggle body becomes real blocks, not a plain-text code block', () => {
+  const md = [
+    '<details>',
+    '<summary>🤖 prompt</summary>',
+    '\t**Context.** The package is `spovishun-skills`.',
+    '',
+    '\t1. Extend the reader.',
+    '\t2. Fix the writer.',
+    '</details>',
+  ].join('\n');
+
+  const [toggle] = markdownToBlocks(md);
+
+  assert.equal(toggle.type, 'toggle');
+  const kids = toggle.toggle.children;
+  assert.deepEqual(kids.map(k => k.type), ['paragraph', 'numbered_list_item', 'numbered_list_item']);
+  assert.ok(
+    kids.every(k => k.type !== 'code'),
+    'a tab must not be read as an indented code fence inside <details>'
+  );
+  // The line directly under </summary> used to be swallowed by the HTML block.
+  assert.ok(kids[0].paragraph.rich_text.some(s => s.plain_text.includes('Context.')));
+  assert.ok(kids[0].paragraph.rich_text.some(s => s.annotations.code));
+});
+
+test('a space-indented toggle body is de-indented the same way', () => {
+  const md = '<details>\n<summary>T</summary>\n\n    body line\n</details>';
+  const [toggle] = markdownToBlocks(md);
+  assert.deepEqual(toggle.toggle.children.map(k => k.type), ['paragraph']);
+});
+
+test('a <details> inside a code fence stays literal content, not a toggle', () => {
+  const blocks = markdownToBlocks('```html\n<details>\n<summary>x</summary>\n</details>\n```');
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, 'code');
+  assert.ok(blocks[0].code.rich_text[0].plain_text.includes('<details>'));
+});
+
+test('an indented fenced block inside a toggle keeps its own indentation intact', () => {
+  const md = [
+    '<details>',
+    '<summary>T</summary>',
+    '',
+    '\t```kotlin',
+    '\tval x = 1',
+    '\t```',
+    '</details>',
+  ].join('\n');
+
+  const [toggle] = markdownToBlocks(md);
+  const code = toggle.toggle.children.find(c => c.type === 'code');
+
+  assert.equal(code.code.language, 'kotlin');
+  assert.equal(code.code.rich_text[0].plain_text.trim(), 'val x = 1');
+});

@@ -84,4 +84,16 @@ function notionRequest(token, method, urlPath, body, opts = {}) {
   });
 }
 
-module.exports = { notionRequest, parseNotionBody, NOTION_VERSION, REQUEST_TIMEOUT_MS };
+/**
+ * Adapts this transport to the callback block-tree.js expects. The walker is
+ * transport-agnostic so hooks/ and scripts/notion/ can share one copy of the
+ * pagination + recursion without sharing an HTTP layer.
+ */
+function childrenPageFetcher(token, opts) {
+  return (blockId, cursor) => {
+    const cursorParam = cursor ? `&start_cursor=${cursor}` : '';
+    return notionRequest(token, 'GET', `/v1/blocks/${blockId}/children?page_size=100${cursorParam}`, null, opts);
+  };
+}
+
+module.exports = { notionRequest, childrenPageFetcher, parseNotionBody, NOTION_VERSION, REQUEST_TIMEOUT_MS };

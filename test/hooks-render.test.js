@@ -41,10 +41,61 @@ test('blockToMd covers every type the task template uses', () => {
   assert.equal(blockToMd(block('to_do', { checked: false })), '- [ ] text');
   assert.equal(blockToMd(block('code')), '```\ntext\n```');
   assert.equal(blockToMd({ type: 'divider', divider: {} }), '---');
+  assert.equal(blockToMd(block('quote')), '> text');
   // An unknown type degrades to its text rather than disappearing.
-  assert.equal(blockToMd(block('callout')), 'text');
+  assert.equal(blockToMd(block('bookmark')), 'text');
   // A block whose payload is missing renders empty rather than throwing.
   assert.equal(blockToMd({ type: 'unsupported' }), '');
+});
+
+test('callout renders its emoji icon and nested children inside the quote', () => {
+  const callout = {
+    type: 'callout',
+    callout: { rich_text: [{ plain_text: 'Heads up' }], icon: { type: 'emoji', emoji: '🔍' } },
+    children: [{ type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'detail' }] } }],
+  };
+  assert.equal(blockToMd(callout), '> 🔍 Heads up\n> detail');
+  // No children → no dangling quote marker.
+  assert.equal(blockToMd({ type: 'callout', callout: callout.callout }), '> 🔍 Heads up');
+});
+
+// The whole point of spovishun-185: newtask puts the agent prompt inside a
+// toggle, notion-task-to-code reads it out of the cached task.json, and before
+// this the body was never rendered at all.
+test('toggle renders its children as a <details> body', () => {
+  const toggle = {
+    type: 'toggle',
+    toggle: { rich_text: [{ plain_text: '🤖 prompt' }] },
+    children: [
+      { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'Context.' }] } },
+      { type: 'numbered_list_item', numbered_list_item: { rich_text: [{ plain_text: 'Extend it.' }] } },
+    ],
+  };
+  assert.equal(
+    blockToMd(toggle),
+    '<details>\n<summary>🤖 prompt</summary>\n\nContext.\n1. Extend it.\n\n</details>'
+  );
+});
+
+test('nested list children are indented under their parent item', () => {
+  const item = {
+    type: 'bulleted_list_item',
+    bulleted_list_item: { rich_text: [{ plain_text: 'parent' }] },
+    children: [{ type: 'bulleted_list_item', bulleted_list_item: { rich_text: [{ plain_text: 'child' }] } }],
+  };
+  assert.equal(blockToMd(item), '- parent\n  - child');
+});
+
+test('table renders its table_row children as markdown pipe rows', () => {
+  const table = {
+    type: 'table',
+    table: { table_width: 2, has_column_header: true },
+    children: [
+      { type: 'table_row', table_row: { cells: [[{ plain_text: 'A' }], [{ plain_text: 'B' }]] } },
+      { type: 'table_row', table_row: { cells: [[{ plain_text: '1' }], [{ plain_text: '2' }]] } },
+    ],
+  };
+  assert.equal(blockToMd(table), '| A | B |\n| 1 | 2 |');
 });
 
 test('extractBlocks joins rendered blocks and drops the empty ones', () => {

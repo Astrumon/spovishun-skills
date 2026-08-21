@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] — 2026-08-21
+
+Two files inside this package disagreed with each other, and the disagreement reached the agent as
+a task with no prompt in it. `scripts/notion/lib/markdown-to-blocks.js` writes headings,
+paragraphs, lists, to_do, code, quote, callout, divider, table and toggle;
+`scripts/notion/lib/format-task.js` read back five of those. Everything else was dropped without a
+word, and block children were never fetched at all — `get-task.js` asked for one level of
+`/v1/blocks/{id}/children` and stopped there.
+
+That mattered because of a rule the package sets for itself. The `newtask` skill mandates that the
+AI agent prompt live inside a toggle titled 🤖 prompt; `notion-task-to-code` builds its prompt from
+what the reader returns. The reader returned the word "🤖 prompt" and nothing under it. Callouts
+carrying context were lost the same way, and numbered steps came back as dashes, so the Steps
+section lost its order in exactly the place order matters.
+
+The same hole existed on the second, more travelled path: `notion-task-to-code` reads the cached
+`.dev-context/<branch>/task.json` before it touches Notion, and that cache is written by
+`hooks/notion-blocks.js`, which also rendered only the top level. Fixing the CLI alone would have
+changed nothing for the ordinary "start new task" flow, so both renderers are fixed here.
+
+Minor rather than patch: `get-task.js` output gains block types it never emitted, and hooks/ gains
+a module.
+
+### Added
+
+- **`hooks/block-tree.js`** (re-exported by `scripts/notion/lib/block-tree.js`) — one
+  transport-agnostic walk that paginates a block level and recurses into `has_children`, attaching
+  results as `block.children`. It takes the caller's page-fetch as a callback rather than importing
+  an HTTP layer, which is what lets hooks/ and scripts/notion/ share it: the two transports differ
+  on purpose (different headers, different 401 handling) and a hook may never require out of
+  `scripts/`. Depth is a hard budget (`MAX_BLOCK_DEPTH = 3`) — at 0 a block's children are left
+  unfetched rather than half-attached. Siblings are fetched in parallel; a page with four toggles
+  should not cost four sequential round-trips.
+
+  The pagination is also a fix in its own right. Neither call site followed `has_more`, so a page
+  past 100 top-level blocks was silently truncated.
+
+### Fixed
+
+- **`scripts/notion/lib/format-task.js`** — now renders `toggle`, `callout`, `code`, `table`,
+  `divider` and `to_do`, and recurses into `block.children`. `numbered_list_item` is split from
+  `bulleted_list_item` and carries a real ordinal that restarts on the first non-numbered sibling,
+  the way Notion scopes a run.
+
+  A toggle renders as `<details>` / `<summary>`, which is the shape `markdown-to-blocks.js` already
+  parses back into a toggle block. That choice is the point: reader output can be fed to the writer
+  and produce the same page, and `test/scripts-notion-format-task.test.js` asserts the round trip
+  so the two halves cannot drift apart again. Fences, HTML blocks, tables and thematic breaks are
+  emitted with blank lines around them, without which a re-parse would swallow the following block
+  (or read the preceding paragraph as a setext heading).
+
+  The renderer stays pure and synchronous — it walks a tree someone else hydrated. That is what
+  keeps it unit-testable on plain fixtures, and what lets `get-claude-md.js` keep calling it with a
+  flat one-level list.
+
+- **`scripts/notion/lib/section-parser.js`** — heading detection now tracks code fences. Once the
+  reader started emitting fenced blocks, a shell snippet whose first line is `# install deps` would
+  have registered as a heading and cut `get-claude-md.js --section` short. `extractSection` reuses
+  the (already fence-filtered) index to find a section's end instead of re-scanning raw lines.
+
+- **`scripts/notion/lib/markdown-to-blocks.js`** — two nested-content defects observed in
+  production, both on pages this package created itself.
+
+  `extractAlert` took a blockquote paragraph's `.text`, which is **raw markdown**, and wrapped it in
+  a synthetic text token that went to `textSegment()` verbatim. Inline code, bold and backslash
+  escapes therefore reached Notion as literal characters — a callout rendered with visible
+  backslashes. The remainder is re-lexed now, so the callout body gets a real inline tree.
+
+  Separately, a tab-indented `<details>` body was read by marked as an indented code block before
+  the `<details>` state machine ever ran, so an entire agent prompt arrived as one grey
+  `plain text` block — and the body line glued directly under `</summary>` was swallowed into the
+  opening HTML token and lost outright. A new pre-lexer pass, `normalizeDetailsBlocks`, removes one
+  level of indentation from toggle bodies and inserts the blank lines marked needs, while tracking
+  fences so a literal `<details>` in a code sample is not mistaken for a toggle.
+
+- **`hooks/notion-blocks.js`**, **`hooks/apply-pick.js`**, **`hooks/context-inject.js`** — the
+  cache path gets the same treatment: both call sites hydrate through `fetchBlockTree`, and
+  `blockToMd` renders toggle, callout, quote and table plus nested children. `visibleBlocks` is
+  unchanged and still strips toggles from the *injected* context — that filter is deliberate
+  (collapsed template scaffolding is noise in a prompt) and applies to the injection only, not to
+  the `task.json` copy that `notion-task-to-code` reads.
+
+### Known issue
+
+The two renderers now differ only in the blank line before a heading and the separators around
+standalone blocks. Keeping them apart is still the documented decision — merging them changes CLI
+output — but the duplication is real and larger than it was. Collapsing them behind one renderer
+with options is worth its own task rather than a silent ride-along here.
+
 ## [1.23.1] — 2026-08-08
 
 The Kotlin/Postgres skills stop recommending a function that no longer exists. Downstream

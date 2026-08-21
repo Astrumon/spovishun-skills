@@ -12,6 +12,8 @@ const { PROJECT_PREFIX, DEVELOP_BRANCH } = require('./hook-config.js');
 const { extractBranchFromBlocks, deriveBranchFromName, extractTaskNumber } = require('./branch-name.js');
 const { toDashed, toCompact } = require('./page-id.js');
 const { extractBlocks, visibleBlocks } = require('./notion-blocks.js');
+const { fetchBlockTree } = require('./block-tree.js');
+const { childrenPageFetcher } = require('./notion-api.js');
 const { gitSetupBranch, gitCreateBranchOnly, conflictCheck } = require('./git-ops.js');
 const { writeTaskContext, loadSelectedTasks, saveSelectedTasks } = require('./dev-context.js');
 
@@ -85,8 +87,9 @@ async function applyPickMain(token, pageId, { force, fromNotStarted, noSwitch })
   const cleanPageId = toCompact(page.id);
   await ensureActionable(token, page, status, fromNotStarted);
 
-  const blocksResult = await notionRequest(token, 'GET', `/v1/blocks/${cleanPageId}/children?page_size=100`, null);
-  const allBlocks = blocksResult?.results || [];
+  // Hydrated, not flat: the agent prompt lives inside a toggle, and
+  // notion-task-to-code reads the task.json this writes.
+  const allBlocks = await fetchBlockTree(childrenPageFetcher(token), cleanPageId);
   const taskBranch = resolveTaskBranch(allBlocks, name);
 
   const disclaimer = guardAgainstConflicts(taskBranch, cleanPageId, force);

@@ -49,7 +49,7 @@ const ALERT_RE = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i;
  */
 function markdownToBlocks(markdown) {
   if (typeof markdown !== 'string' || markdown.trim() === '') return [];
-  const tokens = marked.lexer(markdown);
+  const tokens = marked.lexer(normalizeDetailsBlocks(markdown));
   const blocks = walkTopLevel(tokens);
   if (blocks.length > MAX_CHILDREN_PER_BLOCK) {
     process.stderr.write(
@@ -59,6 +59,85 @@ function markdownToBlocks(markdown) {
     );
   }
   return blocks;
+}
+
+// ─── <details> normalization (pre-lexer) ─────────────────────────────────────
+
+const DETAILS_OPEN_RE  = /^\s*<details\b/i;
+const DETAILS_CLOSE_RE = /^\s*<\/details\s*>/i;
+const SUMMARY_CLOSE_RE = /<\/summary\s*>/i;
+const FENCE_RE         = /^\s*(```|~~~)/;
+const ONE_INDENT_RE    = /^(\t| {1,4})/;
+
+/**
+ * Repairs the two ways a hand-written (or skill-generated) toggle loses its
+ * body before `walkTopLevel` ever sees it. Both defects happen inside
+ * `marked.lexer`, so they can only be fixed on the source string.
+ *
+ *   1. An indented body. Writers naturally indent what sits between <details>
+ *      and </details>; marked reads a leading tab (or four spaces) as an
+ *      indented code block, so the prompt arrived in Notion as a grey
+ *      `plain text` block. One level of indentation is removed from every body
+ *      line — fenced content included, since the author indented that too.
+ *   2. A body glued to the opening tag. An HTML block runs until a blank line,
+ *      so a body line directly under `</summary>` is swallowed into the opening
+ *      token's raw text and dropped entirely. A blank line is inserted after
+ *      the summary, and before `</details>`, when one is missing.
+ *
+ * Fence tracking exists so a literal `<details>` inside a code sample is not
+ * mistaken for a real toggle.
+ */
+function normalizeDetailsBlocks(markdown) {
+  if (!/<details\b/i.test(markdown)) return markdown;
+
+  const out = [];
+  let depth = 0;
+  let inFence = false;
+  let awaitingSummary = false;
+  let needBlank = false;
+
+  const push = line => {
+    if (needBlank && line.trim() !== '') out.push('');
+    needBlank = false;
+    out.push(line);
+  };
+
+  for (const raw of markdown.split('\n')) {
+    const isFence = FENCE_RE.test(raw);
+    const line = depth > 0 && !awaitingSummary ? raw.replace(ONE_INDENT_RE, '') : raw;
+
+    if (awaitingSummary) {
+      out.push(line);
+      // A blank line closes the opening HTML block whether or not a <summary>
+      // ever appeared, so the wait must end there too.
+      if (SUMMARY_CLOSE_RE.test(line) || line.trim() === '') {
+        awaitingSummary = false;
+        needBlank = true;
+      }
+      continue;
+    }
+
+    if (!inFence && DETAILS_CLOSE_RE.test(raw)) {
+      if (out.length > 0 && out[out.length - 1].trim() !== '') out.push('');
+      needBlank = false;
+      depth = Math.max(0, depth - 1);
+      out.push(raw.trimStart());
+      continue;
+    }
+
+    if (!inFence && DETAILS_OPEN_RE.test(raw)) {
+      depth += 1;
+      push(raw.trimStart());
+      if (SUMMARY_CLOSE_RE.test(raw)) needBlank = true;
+      else awaitingSummary = true;
+      continue;
+    }
+
+    if (isFence) inFence = !inFence;
+    push(line);
+  }
+
+  return out.join('\n');
 }
 
 // ─── Top-level walker with <details>/</details> state machine ──────────────────
@@ -215,16 +294,16 @@ function extractAlert(blockquoteToken) {
   const variant = m[1].toUpperCase();
   const remainderText = [m[2], ...lines.slice(1)].join('\n').trim();
 
-  // Build a synthetic token list for the body: drop the label line, keep the
-  // rest of the first paragraph (if any) plus all subsequent blockquote
-  // children.
+  // Build a token list for the body: drop the label line, keep the rest of the
+  // first paragraph (if any) plus all subsequent blockquote children.
+  //
+  // `first.text` is RAW markdown — marked does not resolve inline syntax in a
+  // blockquote paragraph's `.text`. Wrapping it in a synthetic `text` token
+  // would send it straight to textSegment() verbatim, which is how `code`
+  // spans, **bold** and backslash escapes ended up as literal characters inside
+  // production callouts. Re-lexing gives a real inline tree instead.
   const bodyTokens = [];
-  if (remainderText) {
-    bodyTokens.push({
-      type: 'paragraph',
-      tokens: [{ type: 'text', text: remainderText, raw: remainderText }],
-    });
-  }
+  if (remainderText) bodyTokens.push(...marked.lexer(remainderText));
   for (const sib of blockquoteToken.tokens.slice(1)) bodyTokens.push(sib);
   return { variant, bodyTokens };
 }

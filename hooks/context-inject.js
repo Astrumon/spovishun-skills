@@ -16,6 +16,8 @@ const { DATABASE_ID, PROJECT_PREFIX, withStageFilter, isBaseBranch } = require('
 const { extractBranchFromBlocks, deriveBranchFromName } = require('./branch-name.js');
 const { toCompact } = require('./page-id.js');
 const { extractBlocks, visibleBlocks } = require('./notion-blocks.js');
+const { fetchBlockTree } = require('./block-tree.js');
+const { childrenPageFetcher } = require('./notion-api.js');
 const {
   branchToFolderName, contextFilePath, formatContext, hasTaskContext, isCurrentSession,
   readCachedContext, readPlan, savePlan, writeSessionLock, writeTaskContext,
@@ -86,8 +88,8 @@ async function fetchActiveTask(token) {
   if (!page) return null;
 
   const name = (page.properties?.Name?.title || []).map(t => t.plain_text).join('') || 'Unknown';
-  const blocksResult = await notionRequest(token, 'GET', `/v1/blocks/${toCompact(page.id)}/children?page_size=100`, null);
-  const allBlocks = blocksResult?.results || [];
+  // Hydrated, not flat — see apply-pick.js for why the toggle body matters.
+  const allBlocks = await fetchBlockTree(childrenPageFetcher(token), toCompact(page.id));
 
   return {
     page,

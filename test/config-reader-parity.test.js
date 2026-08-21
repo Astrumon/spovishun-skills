@@ -129,7 +129,7 @@ test('nothing under hooks/ requires out of scripts/', () => {
 // The reverse direction is the supported one, and these are the pairs that went
 // through the collapse. Module identity is what proves a re-export, not a copy.
 test('scripts/notion/lib re-exports resolve to the very modules under hooks/', () => {
-  for (const name of ['config-reader.js', 'page-id.js']) {
+  for (const name of ['config-reader.js', 'page-id.js', 'block-tree.js']) {
     assert.equal(
       require(join(PKG_ROOT, 'scripts', 'notion', 'lib', name)),
       require(join(HOOKS_DIR, name)),

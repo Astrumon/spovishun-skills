@@ -16,8 +16,15 @@ const PKG_ROOT = join(here, '..');
 // collapse, over the output both renderers produced at the time.
 //
 // The `cli` column is a hard regression contract — get-task.js --format=md and
-// get-claude-md.js print it, and section-parser.js indexes it. It must not move
-// by a single character.
+// get-claude-md.js print it, and section-parser.js indexes it. It moved on
+// exactly one fixture, the pipe escape, and that line says why.
+//
+// The `hook` column did move. It feeds .dev-context/<branch>/task.json, a
+// regenerated cache, and seven of its behaviours were simply behind the CLI
+// renderer rather than deliberately compact. Every one of those is marked
+// CHANGED on the fixture it belongs to, with what was wrong with the old
+// output. What stayed different is the two real options — no blank line before
+// a heading, no separators around standalone blocks.
 
 const cli = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'format-task.js'));
 const hook = require(join(PKG_ROOT, 'hooks', 'notion-blocks.js'));
@@ -107,23 +114,34 @@ const FIXTURES = {
 const BASELINE = {
   headings: {
     cli: '# One\n\n## Two\n\n### Three',
-    hook: '# One\n## Two\n### Three\n## ',
+    // CHANGED by 188: an empty heading used to render as a bare `## `. It now
+    // drops out, as it always did on the CLI side.
+    hook: '# One\n## Two\n### Three',
+    // The two surviving options are visible here and in `divider` below: the
+    // CLI puts a blank line before every heading, the hook does not.
   },
   'paragraph-multiline-and-children': {
     cli: 'first line\nsecond line\n  nested',
-    hook: 'first line\nsecond line',
+    // CHANGED by 188: the hook dropped a paragraph's children entirely.
+    hook: 'first line\nsecond line\n  nested',
   },
   'bulleted-multiline-nested': {
     cli: '- parent line one\n  parent line two\n  - child',
-    hook: '- parent line one\nparent line two\n  - child',
+    // CHANGED by 188: `- ${text}` put the second line at column 0, which reads
+    // as a new paragraph and breaks the list.
+    hook: '- parent line one\n  parent line two\n  - child',
   },
   'numbered-run-restarts': {
     cli: '1. alpha\n2. beta\n   continued\n3. gamma\n  note\ninterruption\n1. delta',
-    hook: '1. alpha\n1. beta\ncontinued\n1. gamma\n  note\ninterruption\n1. delta',
+    // CHANGED by 188: every item used to be `1.`, and a run's ordinals now
+    // restart after a non-numbered sibling the way Notion scopes them.
+    hook: '1. alpha\n2. beta\n   continued\n3. gamma\n  note\ninterruption\n1. delta',
   },
   'to-do': {
     cli: '- [x] done it\n- [ ] not yet\n      with a second line\n  why',
-    hook: '- [x] done it\n- [ ] not yet\nwith a second line',
+    // CHANGED by 188: same column-0 continuation as the bulleted case, plus the
+    // hook rendered no children at all under a to_do.
+    hook: '- [x] done it\n- [ ] not yet\n      with a second line\n  why',
   },
   quote: {
     cli: '> quoted\n> over two lines\n> inside',
@@ -135,7 +153,8 @@ const BASELINE = {
   },
   code: {
     cli: '```kotlin\nval x = 1\n```\n\n```\necho hi\n```\n\n```\nbare\n```',
-    hook: '```\nval x = 1\n```\n```\necho hi\n```\n```\nbare\n```',
+    // CHANGED by 188: the hook emitted a bare fence, losing the language.
+    hook: '```kotlin\nval x = 1\n```\n```\necho hi\n```\n```\nbare\n```',
   },
   divider: {
     cli: 'before\n\n---\n\nafter',
@@ -147,17 +166,29 @@ const BASELINE = {
   },
   'table-with-header': {
     cli: '| A | B |\n| --- | --- |\n| 1 | 2 |',
-    hook: '| A | B |\n| 1 | 2 |',
+    // CHANGED by 188: without the separator row this is not a markdown table at
+    // all — every row read as one paragraph.
+    hook: '| A | B |\n| --- | --- |\n| 1 | 2 |',
   },
   'table-headerless-and-escapes': {
-    cli: '|  |  |\n| --- | --- |\n| a|b | multi line |',
-    hook: '| a\\|b | multi line |',
+    // CHANGED by 188 — the one deliberate CLI change in this task. The escape
+    // was `.replace(/\|/g, '\|')`, and '\|' in JS is just '|': a cell holding a
+    // literal pipe split into two columns. marked's GFM table parser (which
+    // markdown-to-blocks.js drives) expects `\|`, so this is the round trip
+    // being fixed, not broken.
+    cli: '|  |  |\n| --- | --- |\n| a\\|b | multi line |',
+    // CHANGED by 188: a headerless Notion table lost its empty header row and
+    // its separator.
+    hook: '|  |  |\n| --- | --- |\n| a\\|b | multi line |',
   },
   'table-empty': { cli: '', hook: '' },
   'empty-and-unknown': { cli: 'a bookmark caption', hook: 'a bookmark caption' },
   'adjacent-standalone-blocks': {
     cli: '---\n\n```kotlin\nx\n```\n\n| T |\n| --- |\n\n## After',
-    hook: '---\n```\nx\n```\n| T |\n## After',
+    // CHANGED by 188 (fence language + table separator). The `standalone`
+    // option is what still separates the two columns: the hook packs these four
+    // blocks with no blank lines between them.
+    hook: '---\n```kotlin\nx\n```\n| T |\n| --- |\n## After',
   },
   'deep-nesting': {
     cli: '<details>\n<summary>outer</summary>\n\n- level one\n  > level two\n  > level three\n\n</details>',
@@ -177,6 +208,23 @@ for (const [name, blocks] of Object.entries(FIXTURES)) {
     assert.equal(hook.extractBlocks(blocks), BASELINE[name].hook);
   });
 }
+
+// The claim the two columns above encode: they are one engine under two option
+// sets, not two renderers that happen to agree. Bind the hook's own
+// createRenderer with the CLI's options and the CLI column comes back.
+test('the two columns are one engine — options are the whole difference', () => {
+  const asCli = hook.createRenderer({ headingLead: '\n', standalone: true });
+  const asHook = cli.createRenderer({ headingLead: '', standalone: false });
+  for (const [name, blocks] of Object.entries(FIXTURES)) {
+    assert.equal(asCli.extractBlocks(blocks), BASELINE[name].cli, name);
+    assert.equal(asHook.extractBlocks(blocks), BASELINE[name].hook, name);
+  }
+});
+
+test('createRenderer defaults to the CLI binding', () => {
+  const { extractBlocks } = cli.createRenderer();
+  assert.equal(extractBlocks(FIXTURES.divider), BASELINE.divider.cli);
+});
 
 // The two richText helpers stay separate on purpose and are NOT part of the
 // renderer: the CLI one trims (it reads page titles and property values), the

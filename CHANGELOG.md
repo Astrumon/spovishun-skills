@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0] — 2026-08-22
+
+The 1.24.0 **Known issue** is closed. Two renderers turned Notion blocks into markdown —
+`scripts/notion/lib/format-task.js` for the CLI, `hooks/notion-blocks.js` for the session hooks and
+`.dev-context/<branch>/task.json` — and the entry claimed they differed only in a blank line before a
+heading and the separators around standalone blocks. They did not. Seven further differences were
+the hook renderer being **behind**: every numbered item rendered as `1.`, a multi-line list item put
+its second line at column 0 (which reads as a new paragraph and breaks the list), `to_do` and
+`paragraph` dropped their children outright, a code fence lost its language, and a table came out
+with no separator row — three paragraphs where a table was meant. That is the same reader-lags-writer
+drift spovishun-185 existed to fix, arriving a second time through the copy nobody was looking at.
+
+So the collapse is not a byte-for-byte merge: the CLI semantics won, and the hook renderer inherits
+them. Only the two genuine differences survive as options, both of them compactness — the injected
+context is read by a model, not fed back through `markdown-to-blocks.js`, so it does not need to
+round-trip.
+
+The order mattered. A characterisation test over one fixture set, covering every block type, nested
+children, ordinal restarts, headerless tables and empty payloads, was written and made green
+**before** either file was touched. Without that baseline "nothing changed" is an assertion, not a
+result — and it is what shows the CLI column moved on exactly one fixture, deliberately.
+
+### Changed
+
+- **`hooks/notion-render.js`** (new) — the single blocks → markdown walk.
+  `createRenderer({ headingLead, standalone })` returns `{ extractBlocks, renderBlock }`. Two
+  options, no third: `headingLead` is load-bearing for the CLI (`section-parser.js` indexes on it,
+  `get-claude-md.js --section` slices by it) and `standalone` is what keeps CLI output
+  round-tripping through `markdown-to-blocks.js`. Everything else is one behaviour, on purpose —
+  a knob per caller is how the two copies diverged in the first place. It lives under `hooks/`
+  because `installHooks()` runs unconditionally while `installScripts()` skips `scripts/notion/`
+  unless `stack.notion` is set: scripts may depend on hooks, never the reverse.
+
+- **`scripts/notion/lib/format-task.js`**, **`hooks/notion-blocks.js`** — thin bindings now. Neither
+  could become a bare re-export the way `block-tree.js` and `page-id.js` did: the options differ,
+  `richText` differs (the CLI one trims, for titles and property values; the hook one must not,
+  `branch-name.js` regex-matches raw paragraph text), and `visibleBlocks` belongs to the hook side
+  alone — the toggle filter applies to the *injected* context only and stays out of the renderer.
+  Both re-export `createRenderer`, and `test/config-reader-parity.test.js` asserts the two resolve
+  to the same function.
+
+- **`.dev-context/<branch>/task.json`** — the `content` field changes wherever the hook renderer was
+  emitting broken markdown (the seven cases above). It is a regenerated per-branch cache, not a
+  published artifact; the next session rewrites it.
+
+### Fixed
+
+- **`scripts/notion/lib/format-task.js`** — a table cell containing a literal `|` no longer splits
+  into two columns. The escape read `.replace(/\|/g, '\|')`, and `'\|'` in JavaScript is just `'|'`,
+  so nothing was ever escaped. marked's GFM table parser — which `markdown-to-blocks.js` drives —
+  expects `\|`. This is the only CLI output change in the release.
+
 ## [1.26.0] — 2026-08-22
 
 `finish-task` ran the same review on every diff. A Compose screen, a Flyway migration and a
@@ -243,6 +295,9 @@ a module.
   the `task.json` copy that `notion-task-to-code` reads.
 
 ### Known issue
+
+*Resolved in 1.27.0 — and the diagnosis here was wrong. The two renderers differed in ten places,
+not two; seven of them were the hook renderer lagging behind rather than a deliberate difference.*
 
 The two renderers now differ only in the blank line before a heading and the separators around
 standalone blocks. Keeping them apart is still the documented decision — merging them changes CLI

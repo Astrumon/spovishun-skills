@@ -138,6 +138,22 @@ test('scripts/notion/lib re-exports resolve to the very modules under hooks/', (
   }
 });
 
+// notion-render.js could not follow that pattern: the two call sites bind the
+// engine with different options, keep differently-shaped `richText` helpers, and
+// only the hook side has `visibleBlocks` — so neither module can be a bare
+// re-export. The shared factory is what has to be one object.
+test('both block renderers are bound from the very same createRenderer', () => {
+  assert.equal(
+    require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'format-task.js')).createRenderer,
+    require(join(HOOKS_DIR, 'notion-blocks.js')).createRenderer,
+    'format-task.js and notion-blocks.js must bind hooks/notion-render.js, not re-implement it'
+  );
+  assert.equal(
+    require(join(HOOKS_DIR, 'notion-blocks.js')).createRenderer,
+    require(join(HOOKS_DIR, 'notion-render.js')).createRenderer
+  );
+});
+
 test('shared Notion constants have exactly one declaration', () => {
   const shared = require(join(HOOKS_DIR, 'notion-constants.js'));
   const queryTasks = require(join(PKG_ROOT, 'scripts', 'notion', 'lib', 'query-tasks.js'));

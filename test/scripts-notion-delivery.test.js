@@ -138,6 +138,23 @@ test('installed config-reader resolves through .claude/hooks/ and reads the conf
   }
 });
 
+// Same hop, second consumer: format-task.js binds hooks/notion-render.js. A
+// wrong relative path is invisible in the repo and a MODULE_NOT_FOUND on every
+// install, so render a block out of a real one.
+test('installed format-task resolves the renderer through .claude/hooks/', async () => {
+  const consumer = await install(NOTION_CONFIG);
+  const installed = join(consumer, '.claude', 'scripts', 'notion', 'lib', 'format-task.js');
+  assert.ok(existsSync(installed), 'lib/format-task.js must be installed');
+  assert.ok(
+    existsSync(join(consumer, '.claude', 'hooks', 'notion-render.js')),
+    'the canonical renderer must be installed alongside the hooks'
+  );
+
+  const { extractBlocks } = require(installed);
+  const blocks = [{ type: 'heading_2', heading_2: { rich_text: [{ plain_text: 'Goal' }] } }];
+  assert.equal(extractBlocks(blocks), '## Goal');
+});
+
 // markdown-to-blocks.js requires marked at runtime. Since consumer projects do
 // not install the plugin's deps, marked is vendored under lib/vendor/ and must
 // be delivered with the rest of the script tree.

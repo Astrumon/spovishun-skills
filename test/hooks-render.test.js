@@ -86,7 +86,10 @@ test('nested list children are indented under their parent item', () => {
   assert.equal(blockToMd(item), '- parent\n  - child');
 });
 
-test('table renders its table_row children as markdown pipe rows', () => {
+// Since spovishun-188 both renderers share hooks/notion-render.js, so the hook
+// emits the separator row too — without it these are three paragraphs, not a
+// table. The full option-by-option contract lives in notion-render.test.js.
+test('table renders its table_row children as a markdown table', () => {
   const table = {
     type: 'table',
     table: { table_width: 2, has_column_header: true },
@@ -95,7 +98,7 @@ test('table renders its table_row children as markdown pipe rows', () => {
       { type: 'table_row', table_row: { cells: [[{ plain_text: '1' }], [{ plain_text: '2' }]] } },
     ],
   };
-  assert.equal(blockToMd(table), '| A | B |\n| 1 | 2 |');
+  assert.equal(blockToMd(table), '| A | B |\n| --- | --- |\n| 1 | 2 |');
 });
 
 test('extractBlocks joins rendered blocks and drops the empty ones', () => {

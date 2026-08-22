@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] — 2026-08-22
+
+`finish-task` ran the same review on every diff. A Compose screen, a Flyway migration and a
+`libs.versions.toml` bump all got one generic `code-reviewer` pass, while nine domain skills already
+installed next to it — `compose-multiplatform`, `kotlin-specialist`, `postgresql-exposed-orm`,
+`gradle-build-auditor` and the rest — were never reached. The gate also spoke only English: raw tool
+output plus a Critical/Major/Minor report, with nothing that told the user in their own language what
+had actually happened.
+
+The obvious fix is the wrong one. `finish-task` is `category: universal` with no `requires:`, and every
+routing target is `stack-specific`. A hardcoded Kotlin table inside a universal artifact points into
+empty space on a non-Kotlin consumer, and narrowing the category to make the table safe would delete
+the skill from those projects entirely. So the table is resolved **by presence**: classify the diff,
+walk the row's candidates, invoke the first one available in this session, and skip the row silently
+when none is. That is also the only shape that can reach a target this package does not ship —
+`kotlin-coroutines-expert` and `kotlin-code-review` live in the user's `~/.claude/skills/`, and
+`thermo-nuclear-code-quality-review` lives in `astrum-skills`; all three are rows in the table now.
+
+Language is not hardcoded either. `PROJECT_LANGUAGE` already existed in `lib/placeholder-map.js` and
+was already used by `write-a-skill`; `finish-task` now declares it too.
+
+Minor rather than patch: new behaviour in a shipped skill, no breaking change. `finish-task` is
+`ownership: 'marker'` on the claude target, so a locally edited copy is skipped with a warning on the
+next `install` — run `install --force` to take the new body and re-apply local edits on top.
+
+### Added
+
+- **Step 5a/5b/5c in `skills/finish-task/SKILL.md`** (skill 1.0.0 → 1.1.0) — the review is now three
+  sub-steps. **5a** classifies the diff into ten domains (`ui-compose`, `concurrency`, `persistence`,
+  `sql-schema`, `di`, `bot`, `networking`, `tests`, `build`, `containers`) from paths, extensions and
+  content signals, under an explicit threshold: only *substantive* changed lines count — never an
+  `import`, a blank line, a comment or a reformat — and a domain is touched at ten such lines or two
+  files. A migration, a `Dockerfile` and a version-catalog entry are substantive at one line, because a
+  schema, an image and a dependency version are. **5b** ranks touched domains by share of the diff,
+  caps the run at three specialists (one per row), and resolves each row by presence. **5c** runs the
+  specialists scoped to their own files, feeds their findings into a single `code-reviewer` pass, and
+  names the ones that ran in one line above the report.
+
+- **A `## Review boundaries` section** — `code-reviewer` is the sole author of the Critical / Major /
+  Minor + Verdict report; specialists add depth and never emit a second verdict; `two-axis-code-review`
+  is a different review that `finish-task` never invokes, because two verdicts on one diff is the
+  duplication the section exists to prevent; the `kotlin-reviewer` / `code-architecture-reviewer` /
+  `database-reviewer` agents are reachable only through the last-resort row and are folded in, not
+  printed separately.
+
+- **Step 7, a plain-language summary in `{{PROJECT_LANGUAGE}}`** — four sections (what changed, what
+  the blocking gate reported, what the review found, what is left for the human), under 250 words. The
+  brief is deliberately not ELI5: short sentences, one idea per sentence, no metaphors, and technical
+  terms left in their original form — `coroutine`, `Flow`, `CancellationException`, `detekt` are never
+  translated. What gets simplified is sentence structure, not vocabulary. It sits alongside the
+  technical report and never replaces it.
+
+- **An `## Example run` section** — a 180-line diff walked through all seven steps, naming which
+  domains fire, which specialists resolve, and which one falls outside the cap of three. Written
+  against a project where the specialists exist *and* against one where none does, because the
+  second case is the one the universal contract is about.
+
+- **`test/finish-task-routing.test.js`** — asserts the category stays `universal`, that
+  `PROJECT_LANGUAGE` is both declared and interpolated, and that every in-package id in the routing
+  table exists under `skills/` or `agents/`. Ids that ship elsewhere live in an explicit
+  `EXTERNAL_TARGETS` allowlist, checked in both directions so a target that later moves into this
+  package fails the test rather than silently staying on the allowlist.
+
+### Changed
+
+- **Step 3 of `finish-task`** — a blocking-gate failure no longer just hands control back. It skips
+  Steps 4–6 as before, then jumps to Step 7 and emits the summary with the review marked as not run.
+  A summary that only appears on green cannot report what the blocking gate found, which is the one
+  moment the user most needs it.
+
+- **Steps 1c and 2 now say what to do when the input is missing.** No `task.json` means the summary
+  must not claim the Definition of Done was verified. A `CLAUDE.md` that documents no commands stops
+  the flow and asks, rather than inferring a build tool from the file tree — a guessed command that
+  silently does nothing reports a green gate on unverified code.
+
+- **`skills/finish-task/manifest.yaml`** — declares `PROJECT_LANGUAGE`; the description now mentions
+  the routing and the summary.
+
 ## [1.25.0] — 2026-08-22
 
 The coroutine skill banned an anti-pattern on line 68, banned it again on line 132, and demonstrated

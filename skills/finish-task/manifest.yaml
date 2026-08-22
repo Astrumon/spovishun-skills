@@ -1,12 +1,14 @@
 id: finish-task
-version: 1.0.0
+version: 1.1.0
 category: universal
-description: Runs the task-completion gate — tests → build → lint (blocking) — then a code-reviewer pass on the task diff (advisory), before offering push / PR / Notion Done. Never auto-merges or auto-completes.
+description: Runs the task-completion gate — tests → build → lint (blocking) — then an advisory review that adds domain specialist skills based on what the diff touched, and closes with a plain-language summary in the project language. Never auto-merges or auto-completes.
 placeholders:
   - key: PROJECT_PREFIX
     description: Project branch prefix used in task numbering (e.g. myproject)
   - key: GIT_DEVELOP_BRANCH
     description: Base branch the task diff is computed against (default develop)
+  - key: PROJECT_LANGUAGE
+    description: Language for the closing summary (e.g. "uk", "en"). Comes from project.language in the consumer config.
 triggers:
   en:
     - "finish task"

@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0] — 2026-08-22
+
+`create-task.js` lands a new task on `Status = "Not started"`; `get-board.js` filtered its default
+listing on the single option `"To do"`. Both values sit in the same Notion `to_do` status group, but
+nothing forced the two sides to agree — so a task created with defaults was invisible in the bare
+`get-board.js`. Found on a fresh project bootstrap: three `Stage = Sprint` tasks existed on the board
+and `get-board.js` returned `[]`.
+
+The creation default is the side that stays. It was made `"Not started"` deliberately (1.8.0, #107) to
+match the `newtask` contract and the Backlog grooming flow `Not started → To do → In progress → Done`,
+where `apply-pick.js` owns the promotion; flipping it back would make every new task immediately
+picker-actionable and delete the grooming step. `hooks/task-picker.js` was never broken — it already
+falls back from `"To do"` to `"Not started"` and flags `--from-not-started`. `get-board.js` was the one
+place treating the group as a single option.
+
+### Fixed
+
+- **`scripts/notion/get-board.js` default status filter** — with no `--status`, the board now matches
+  the whole `to_do` group (`{ or: [ "To do", "Not started" ] }`) instead of `"To do"` alone. Explicit
+  `--status` still narrows to one option, `--epic` still drops the status filter, and `--stage` still
+  composes (AND). Covers the `--priority-tier` path too.
+- **`skills/task-decomposer` next-number lookup** — Step 0 called the bare `get-board.js` to find the
+  highest existing task number, so the default status filter silently truncated the set and N came out
+  too low. It now calls `get-board.js --latest --format json`, which sorts by `created_time` and ignores
+  status. Same class of defect, different call site.
+
+### Added
+
+- **`TODO_GROUP_STATUSES` in `hooks/notion-constants.js`** — the `to_do` group's membership, in
+  preference order, shared by the CLI and the hook. `get-board.js` ORs the list; `task-picker.js`
+  destructures it into its primary and fallback phases (only the fallback carries the
+  `--from-not-started` promotion, so the two phases must stay distinguishable). One source is what stops
+  the two from drifting apart again.
+- **`test/notion-status-defaults.test.js`** — evaluates the default `buildListFilter` output against the
+  Status `create-task.js` actually writes, and fails on the old behaviour. Plus guards: `DEFAULT_STATUS`
+  is a member of the group, every member is a valid board status, and the group still has exactly the two
+  phases the picker destructures.
+
+### Changed
+
+- **`get-board.js` `parseArgs`** drops `statusExplicit`; `status` defaults to `null`, the sentinel for
+  "the whole `to_do` group". Two flags could desync, one value cannot. `buildListFilter` takes
+  `{ status, epicFilter, stageFilter }` accordingly.
+- **`queryByPriorityTier` (`scripts/notion/lib/query-tasks.js`)** accepts a status name **or** an array of
+  them, via the new exported `statusClause` helper — the single Status-clause builder the CLI uses.
+  Notion's status filter has no group condition, so a group is an OR of its options; nesting stays inside
+  the 2-level limit (`{ and: [ {or:[…]}, Priority, Stage ] }`).
+
 ## [1.28.0] — 2026-08-22
 
 `get-claude-md.js` was the one Notion reader still on a bare

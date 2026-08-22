@@ -13,9 +13,15 @@ const {
   contextFilePath, readCachedContext, writeSessionLock, loadSelectedTasks, saveSelectedTasks,
 } = require('./dev-context.js');
 const { buildSystemPrompt, outputPrompt } = require('./hook-output.js');
-const { PRIORITY_TIERS, PICKER_TIER_LIMIT } = require('./notion-constants.js');
+const { PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES } = require('./notion-constants.js');
 
-const ACTIONABLE_STATUSES = ['To do', 'In progress'];
+// get-board.js ORs the to_do group into one filter; the picker walks it in
+// preference order instead, because only the fallback phase gets the
+// --from-not-started promotion apply-pick.js performs. Same membership, one
+// source — that is what stops the hook and the CLI from drifting apart again.
+const [PRIMARY_STATUS, FALLBACK_STATUS] = TODO_GROUP_STATUSES;
+
+const ACTIONABLE_STATUSES = [PRIMARY_STATUS, 'In progress'];
 
 function boardQuery(token, filter, extra = {}) {
   return notionRequest(token, 'POST', `/v1/databases/${DATABASE_ID}/query`, {
@@ -100,19 +106,19 @@ function toOption(page) {
 }
 
 /**
- * The offerable set: "To do" first, "Not started" only if that is empty, plus
- * any "In progress" task nobody is tracking (an interrupted session's leftovers).
+ * The offerable set: PRIMARY_STATUS first, FALLBACK_STATUS only if that is
+ * empty, plus any "In progress" task nobody is tracking (an interrupted session's leftovers).
  */
 async function collectCandidates(token, selectedPageIds) {
   const unselected = pages => pages.filter(p => !selectedPageIds.has(toCompact(p.id)));
 
   let source = 'toDo';
-  let { candidates, tier } = await queryByPriorityTier(token, 'To do');
+  let { candidates, tier } = await queryByPriorityTier(token, PRIMARY_STATUS);
   candidates = unselected(candidates);
 
   if (candidates.length === 0) {
     source = 'notStarted';
-    ({ candidates, tier } = await queryByPriorityTier(token, 'Not started'));
+    ({ candidates, tier } = await queryByPriorityTier(token, FALLBACK_STATUS));
     candidates = unselected(candidates);
   }
 
@@ -134,7 +140,7 @@ function buildNotes(options, source, activeCount) {
       ? `\n${activeCount} task(s) currently active. Adding more = parallel execution across Claude Code instances.`
       : '',
     source === 'notStarted'
-      ? '\n> No "To do" tasks found — showing "Not started". Selected tasks will be moved to "To do" automatically.'
+      ? `\n> No "${PRIMARY_STATUS}" tasks found — showing "${FALLBACK_STATUS}". Selected tasks will be moved to "${PRIMARY_STATUS}" automatically.`
       : '',
     options.some(o => o.orphaned)
       ? '\n> Untracked "In progress" tasks found — listed first for recovery.'
@@ -185,7 +191,7 @@ async function runPicker(token, currentBranch, isForce, hasGrillModifier) {
 
   if (options.length === 0) {
     outputPrompt(buildSystemPrompt(
-      '## No Tasks Available\n\nNo "To do", "Not started", or untracked "In progress" tasks found.',
+      `## No Tasks Available\n\nNo "${PRIMARY_STATUS}", "${FALLBACK_STATUS}", or untracked "In progress" tasks found.`,
       null, null, false
     ));
     return;

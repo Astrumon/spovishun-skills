@@ -51,35 +51,43 @@ test('parseArgs: stage value is returned verbatim (validation happens in main)',
   assert.deepEqual(getBoard.VALID_STAGES, ['Backlog', 'Sprint', 'Archive']);
 });
 
-test('parseArgs: statusExplicit is false by default and with only --epic/--stage', () => {
-  assert.equal(getBoard.parseArgs([]).statusExplicit, false);
-  assert.equal(getBoard.parseArgs(['--epic', 'spovishun-admin']).statusExplicit, false);
-  assert.equal(getBoard.parseArgs(['--stage', 'Backlog']).statusExplicit, false);
+test('parseArgs: status is null (the whole to_do group) unless --status is given', () => {
+  assert.equal(getBoard.parseArgs([]).status, null);
+  assert.equal(getBoard.parseArgs(['--epic', 'spovishun-admin']).status, null);
+  assert.equal(getBoard.parseArgs(['--stage', 'Backlog']).status, null);
 });
 
-test('parseArgs: --status sets statusExplicit and the status value', () => {
-  const parsed = getBoard.parseArgs(['--status', 'Done']);
-  assert.equal(parsed.statusExplicit, true);
-  assert.equal(parsed.status, 'Done');
+test('parseArgs: --status sets the status value', () => {
+  assert.equal(getBoard.parseArgs(['--status', 'Done']).status, 'Done');
 });
 
-test('buildListFilter: no epic, default status → Status filter only', () => {
+test('buildListFilter: no epic, no --status → the whole to_do group (spovishun-193)', () => {
   assert.deepEqual(
-    getBoard.buildListFilter({ status: 'To do', statusExplicit: false, epicFilter: null, stageFilter: null }),
+    getBoard.buildListFilter({ status: null, epicFilter: null, stageFilter: null }),
+    { or: [
+      { property: 'Status', status: { equals: 'To do' } },
+      { property: 'Status', status: { equals: 'Not started' } },
+    ] }
+  );
+});
+
+test('buildListFilter: explicit --status narrows to that one option', () => {
+  assert.deepEqual(
+    getBoard.buildListFilter({ status: 'To do', epicFilter: null, stageFilter: null }),
     { property: 'Status', status: { equals: 'To do' } }
   );
 });
 
 test('buildListFilter: --epic without explicit --status drops the status filter', () => {
   assert.equal(
-    getBoard.buildListFilter({ status: 'To do', statusExplicit: false, epicFilter: 'spovishun-admin', stageFilter: null }),
+    getBoard.buildListFilter({ status: null, epicFilter: 'spovishun-admin', stageFilter: null }),
     null
   );
 });
 
 test('buildListFilter: --epic with explicit --status keeps the status filter', () => {
   assert.deepEqual(
-    getBoard.buildListFilter({ status: 'Done', statusExplicit: true, epicFilter: 'spovishun-admin', stageFilter: null }),
+    getBoard.buildListFilter({ status: 'Done', epicFilter: 'spovishun-admin', stageFilter: null }),
     { property: 'Status', status: { equals: 'Done' } }
   );
 });
@@ -87,7 +95,7 @@ test('buildListFilter: --epic with explicit --status keeps the status filter', (
 test('buildListFilter: --epic + default status + stage → stage filter only', () => {
   const stageFilter = { property: 'Stage', select: { equals: 'Backlog' } };
   assert.deepEqual(
-    getBoard.buildListFilter({ status: 'To do', statusExplicit: false, epicFilter: 'spovishun-admin', stageFilter }),
+    getBoard.buildListFilter({ status: null, epicFilter: 'spovishun-admin', stageFilter }),
     stageFilter
   );
 });
@@ -95,16 +103,22 @@ test('buildListFilter: --epic + default status + stage → stage filter only', (
 test('buildListFilter: --epic + explicit status + stage → AND of both', () => {
   const stageFilter = { property: 'Stage', select: { equals: 'Backlog' } };
   assert.deepEqual(
-    getBoard.buildListFilter({ status: 'Done', statusExplicit: true, epicFilter: 'spovishun-admin', stageFilter }),
+    getBoard.buildListFilter({ status: 'Done', epicFilter: 'spovishun-admin', stageFilter }),
     { and: [{ property: 'Status', status: { equals: 'Done' } }, stageFilter] }
   );
 });
 
-test('buildListFilter: no epic + stage → AND of status and stage (regression)', () => {
+test('buildListFilter: no epic + stage → AND of the status group and stage (regression)', () => {
   const stageFilter = { property: 'Stage', select: { equals: 'Sprint' } };
   assert.deepEqual(
-    getBoard.buildListFilter({ status: 'To do', statusExplicit: false, epicFilter: null, stageFilter }),
-    { and: [{ property: 'Status', status: { equals: 'To do' } }, stageFilter] }
+    getBoard.buildListFilter({ status: null, epicFilter: null, stageFilter }),
+    { and: [
+      { or: [
+        { property: 'Status', status: { equals: 'To do' } },
+        { property: 'Status', status: { equals: 'Not started' } },
+      ] },
+      stageFilter,
+    ] }
   );
 });
 
@@ -179,4 +193,27 @@ test('queryByPriorityTier: without extraFilter the query shapes are unchanged (b
     assert.equal(body.filter.and.length, 2, 'tier query must contain only Status + Priority');
   }
   assert.deepEqual(captured[3].filter, { property: 'Status', status: { equals: 'To do' } });
+});
+
+test('queryByPriorityTier: an array status becomes an OR clause in every query', async () => {
+  const captured = [];
+  const stubHttp = {
+    post: async (_token, _path, body) => {
+      captured.push(body);
+      return { results: [] };
+    },
+  };
+  await queryByPriorityTier(stubHttp, 'tok', ['To do', 'Not started'], new Set());
+
+  const orClause = {
+    or: [
+      { property: 'Status', status: { equals: 'To do' } },
+      { property: 'Status', status: { equals: 'Not started' } },
+    ],
+  };
+  assert.equal(captured.length, 4);
+  for (const body of captured.slice(0, 3)) {
+    assert.deepEqual(body.filter.and[0], orClause, 'tier query must OR the whole status group');
+  }
+  assert.deepEqual(captured[3].filter, orClause, 'fallback query must OR the whole status group');
 });

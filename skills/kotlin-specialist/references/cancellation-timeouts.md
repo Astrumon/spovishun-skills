@@ -75,9 +75,40 @@ suspend fun heavyCompute(data: List<Int>): Long {
 
 `yield()` suspends and checks for cancellation — use it every N iterations in CPU-bound loops.
 
+## Cleanup in `finally` needs `withContext(NonCancellable)`
+
+A cancelled coroutine still runs its `finally` block — but it is already cancelled, so **every
+suspending call inside that block throws `CancellationException` immediately**. The cleanup does not
+run, and nothing reports that it did not: the exception is swallowed as ordinary cancellation.
+
+```kotlin
+// WRONG — markStopped() suspends, so on cancellation it throws before doing anything
+try {
+    stream.collect { handle(it) }
+} finally {
+    repository.markStopped(id)
+}
+
+// RIGHT — NonCancellable gives the cleanup an uncancellable context to run in
+try {
+    stream.collect { handle(it) }
+} finally {
+    withContext(NonCancellable) { repository.markStopped(id) }
+}
+```
+
+Only suspending cleanup needs this. A `close()` or a log call is not suspending and runs fine.
+
+`NonCancellable` is a blunt instrument: the block cannot be cancelled at all, so anything slow or
+unbounded inside it hangs shutdown for exactly that long. Keep it to short, bounded work — release a
+lock, flush one record, mark a row — and put a `withTimeout` around it if the call talks to the
+network.
+
 ## Rules
 
 - `TimeoutCancellationException` is a subclass of `CancellationException` — the same rethrow rule applies.
 - Never catch `CancellationException` and swallow it.
 - Prefer `withTimeoutOrNull` over `withTimeout` when timeout is a normal (non-error) outcome.
 - Always verify that long-running loops have a cancellation check point.
+- Suspending cleanup in `finally` runs only inside `withContext(NonCancellable)` — and only
+  short, bounded cleanup belongs there.

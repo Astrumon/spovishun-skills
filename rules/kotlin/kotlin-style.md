@@ -38,16 +38,28 @@
 - NEVER swallow exceptions with empty `catch` blocks
 - Business errors: use `sealed class` or a `Result`-like type — not exceptions
 - `CoroutineExceptionHandler` must be set at scope level, not inside `launch {}`
-- NEVER use `runCatching` as a substitute for proper error modeling
+- NEVER use `runCatching` around suspending work — it catches `Throwable`, `CancellationException`
+  included, so a cancelled call is recorded as a failure and the caller carries on after its scope
+  is gone. It is also not a substitute for proper error modeling anywhere else
 
 ## Coroutines & DI
 - Inject `CoroutineDispatcher` and `CoroutineScope` via DI — never hardcode `Dispatchers.IO` inside a class
 - Tests replace dispatchers with `StandardTestDispatcher()` for deterministic control
 - Use an injected scope — never create raw `GlobalScope.launch`
+- A broad `catch (e: Exception)` in a suspend function MUST re-throw `CancellationException` as its
+  first `catch`, or be narrowed to named types — otherwise cancellation is swallowed and the loop
+  around it keeps draining work during shutdown
+- Suspending cleanup in `finally` runs only inside `withContext(NonCancellable)`, and only for
+  short, bounded work
+- Cap fan-out and match a dispatcher's parallelism to the pool behind it (`Semaphore`,
+  `limitedParallelism`) — see `references/concurrency-limits.md` in `kotlin-specialist`
+- Never `withContext` once per loop iteration — hoist the switch out of the loop
 
 ## Immutability & Shared State
 - `StateFlow` or `Channel` for observable mutable state
-- `Mutex` or `AtomicReference` for shared state across coroutines
+- Confine state to one owner first; an atomic for a single field; `Mutex.withLock` when the invariant
+  spans more than one field — see `references/concurrency-limits.md` in `kotlin-specialist`
+- Never hold a `Mutex` across a call whose duration you do not control
 - NEVER use `@Volatile` as a replacement for proper concurrency primitives
 
 ## Imports

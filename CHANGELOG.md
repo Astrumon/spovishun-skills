@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] — 2026-08-22
+
+The coroutine skill banned an anti-pattern on line 68, banned it again on line 132, and demonstrated
+it on line 87. `references/coroutines.md` said `runCatching` "catches `Throwable`, cancellation
+included" and "never `runCatching` around suspending work" — and its own `supervisorScope` example
+read `val a = async { runCatching { fetchA() } }`. An agent that loaded the reference to learn how to
+run two fetches concurrently copied the banned form, because that was the only code in the file.
+
+The rule the reviewer actually reads had the same hole from the other side. `rules/kotlin/kotlin-style.md`
+banned `runCatching` as "not a substitute for proper error modeling" and never mentioned cancellation
+at all — so the ban's most dangerous consequence, a cancelled call recorded as a failure while the
+enclosing loop drains the rest of the list during shutdown, was stated nowhere a reviewer would look.
+That defect is live in the Spovishun schedulers, which is what prompted this release; the fix there is
+tracked separately.
+
+Two topics were missing outright. Nothing in the package covered how *often* work switches dispatchers
+or how *much* of it runs at once — `withContext` per loop iteration, unbounded `map { async { } }`, and
+a `Dispatchers.IO` running 64 threads in front of a connection pool of 10. And `NonCancellable`
+appeared nowhere, although suspending cleanup in a `finally` block of an already-cancelled coroutine
+throws immediately and silently does not run.
+
+Minor rather than patch: a new reference file, two new reviewer checks, and `rules/kotlin/kotlin-style.md`
+changes normatively for consumers that already have it on disk. Under `ownership: 'checksum'` a locally
+edited copy is skipped with a warning on the next `install` — run `install --force` to take the new
+rule and re-apply local edits on top.
+
+### Added
+
+- **`skills/kotlin-specialist/references/concurrency-limits.md`** (skill 2.3.1 → 2.4.0) — the two
+  questions structured concurrency does not answer. A `withContext` inside a loop is N thread hops and
+  N transactions, so the switch is hoisted and the query batched. Fan-out is capped by a named constant
+  (`Semaphore`, `chunked`), never by the length of an input. A dispatcher view is sized to the resource
+  behind it — `Dispatchers.IO.limitedParallelism(poolSize)`, bound once in DI — because 64 IO threads
+  queueing for 10 connections shows up in no coroutine metric. Shared state is ranked rather than
+  listed: confine it first, an atomic for one field, `Mutex.withLock` only when the invariant spans
+  more than one, and never hold the lock across a call whose duration you do not control.
+
+- **`withContext(NonCancellable)` in `references/cancellation-timeouts.md`** — a cancelled coroutine
+  still runs `finally`, but every suspending call inside it throws at once, so the cleanup does not
+  happen and the failure is swallowed as ordinary cancellation. Stated with its guard rail:
+  `NonCancellable` cannot be cancelled, so only short, bounded cleanup belongs there.
+
+- **Two checks in the `kotlin-reviewer` agent** (1.0.0 → 1.1.0) — **10. Coroutine Exception Handling**
+  (`runCatching` or a non-rethrowing broad `catch` around suspending work, highest severity inside a
+  loop) and **11. Reactive State Exposure** (a public `MutableStateFlow` / `MutableSharedFlow` /
+  `Channel`). The source checklist had five rows, but three of them — parallel dispatch, dispatcher
+  usage, scope lifecycle — already existed as checks 2 and 3; those were extended in place with scope
+  lifecycle, `supervisorScope` fan-out, and bounded parallelism rather than duplicated into a second
+  list. A reviewer with two overlapping checklists is the same defect this release is fixing.
+
+### Changed
+
+- **`references/coroutines.md`** — the `supervisorScope` example isolates failures with a typed
+  `try/catch` that re-throws `CancellationException` instead of `runCatching`. The `async` trap is
+  sharpened past "the exception is thrown at `await()`": under a plain `coroutineScope` a child failure
+  cancels the parent **before** `await()` is reached, so a `try/catch` wrapping `await()` may never run
+  at all — catching there means something only under `supervisorScope`.
+
+- **`rules/kotlin/kotlin-style.md`** (3 659 → 4 640 chars, still under the 6 000 windsurf ceiling) —
+  the `runCatching` ban is restated through cancellation, with error modeling kept as the secondary
+  reason. Added: a broad `catch (e: Exception)` in a suspend function must re-throw
+  `CancellationException` first or be narrowed; suspending `finally` cleanup needs `NonCancellable`;
+  fan-out and dispatcher parallelism are capped; no `withContext` per loop iteration. The one-line
+  `Mutex`/`AtomicReference` bullet, which pointed at nothing, now ranks the three options and points
+  at the new reference.
+
+- **`references/coroutines.md` was tightened** while it was open, from 5 632 to 5 988 characters —
+  the new material would otherwise have pushed it past the 6 000-character windsurf ceiling, where the
+  adapter splits a file into `-part-N.md` fragments read as independent rules. Redundant prose was cut
+  and the cooperative-cancellation paragraph now points at `cancellation-timeouts.md`, which covers it
+  in full.
+
+- **`skills/kotlin-specialist/SKILL.md`** — Decision Table row for the new reference; Always-Active
+  Rules and Do NOT gain the `runCatching`/broad-catch ban stated via cancellation, plus bounded
+  parallelism for blocking work. Manifest gains `limitedParallelism`, `Semaphore`, `NonCancellable`
+  and `паралелізм` as triggers.
+
 ## [1.24.0] — 2026-08-21
 
 Two files inside this package disagreed with each other, and the disagreement reached the agent as

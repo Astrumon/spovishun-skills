@@ -55,16 +55,6 @@ async function resolvePageId(token, rawArg) {
   return toDashed(arg);
 }
 
-// Adapts the CLI transport to the shape lib/block-tree.js expects. The walker
-// stays transport-agnostic so hooks/ and scripts/ can share it without
-// sharing an HTTP layer.
-function childrenPageFetcher(token) {
-  return (blockId, cursor) => {
-    const cursorParam = cursor ? `&start_cursor=${cursor}` : '';
-    return http.get(token, `/v1/blocks/${blockId}/children?page_size=100${cursorParam}`);
-  };
-}
-
 function renderMd(task) {
   const meta = [task.status, task.stage, task.priority, task.branch].filter(Boolean).join(' | ');
   const parts = [`# ${task.title}`];
@@ -125,7 +115,7 @@ async function main() {
     http.get(token, `/v1/pages/${pageId}`),
     // Hydrates nested blocks (toggle bodies, callout children, table rows) and
     // follows pagination, both of which a single /children call misses.
-    fetchBlockTree(childrenPageFetcher(token), pageId),
+    fetchBlockTree(http.childrenPageFetcher(token), pageId),
   ]);
 
   if (page?.object === 'error') {

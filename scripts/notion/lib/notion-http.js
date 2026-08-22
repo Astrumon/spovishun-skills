@@ -52,8 +52,25 @@ function request(token, method, apiPath, body, opts = {}) {
   });
 }
 
+/**
+ * Adapts this transport to the callback lib/block-tree.js expects. The walker
+ * stays transport-agnostic so hooks/ and scripts/notion/ can share one copy of
+ * the pagination + recursion without sharing an HTTP layer — hooks/notion-api.js
+ * carries the mirror of this function for its own transport.
+ *
+ * It lives here rather than in a call site because get-task.js and
+ * get-claude-md.js both need it.
+ */
+function childrenPageFetcher(token, opts) {
+  return (blockId, cursor) => {
+    const cursorParam = cursor ? `&start_cursor=${cursor}` : '';
+    return request(token, 'GET', `/v1/blocks/${blockId}/children?page_size=100${cursorParam}`, null, opts);
+  };
+}
+
 module.exports = {
   request,
+  childrenPageFetcher,
   get:   (token, apiPath, opts)        => request(token, 'GET',   apiPath, null, opts),
   post:  (token, apiPath, body, opts)  => request(token, 'POST',  apiPath, body, opts),
   patch: (token, apiPath, body, opts)  => request(token, 'PATCH', apiPath, body, opts),

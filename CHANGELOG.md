@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] — 2026-08-22
+
+`get-claude-md.js` was the one Notion reader still on a bare
+`GET /v1/blocks/{id}/children?page_size=100`. spovishun-185 built `block-tree.js` and moved
+`get-task.js` onto it; this call site was left behind, and the renderer that learned to render
+toggle bodies, callout children and table rows was never handed any.
+
+The postings asked to measure before fixing, in case this was only a pagination safety net. It was
+not. The consumer `CLAUDE.md` page carries **five tables** — including the two that list the Notion
+anchor IDs Claude reads the page for — and `renderTable` returns `''` for a table with no rows, so
+every one of them was being dropped silently. That same page sits at roughly 100 top-level blocks,
+right on the limit where the missing `has_more` follow-up starts cutting the tail off. Both halves
+of the defect were live.
+
+### Fixed
+
+- **`scripts/notion/get-claude-md.js`** — fetches through
+  `fetchBlockTree(http.childrenPageFetcher(token), pageId)`. Nested blocks are hydrated and
+  pagination is followed, matching `get-task.js`. The explicit `{ object: 'error' }` check is gone
+  from the call site: `fetchAllChildren` already throws on one, and `main()`'s catch reports it.
+- **Cache key bumped** `claude-md` → `claude-md-v2`. The entry stores rendered `{ content, sections }`
+  under a one-hour TTL, so without the bump an existing cache would keep serving the truncated body
+  for up to an hour after upgrading. The old `claude-md.json` is left as an orphan in the cache
+  directory — a few KB that nothing reads again.
+
+### Changed
+
+- **`childrenPageFetcher` moved** from a private function in `get-task.js` to an export of
+  `scripts/notion/lib/notion-http.js`, now that two scripts need it. It sits in the transport module
+  because that is where `hooks/notion-api.js` keeps the mirror for its own transport; the two HTTP
+  layers stay deliberately separate (different headers), so one adapter each is not duplication.
+- **`get-claude-md.js` gained a `require.main === module` guard** and exports `parseArgs`,
+  `loadContent`, `CACHE_KEY` and `VALID_FORMATS`, the same shape `get-task.js` uses. `loadContent`
+  is fetch + render with no cache and no `process.exit`, which is what makes the path testable.
+
+### Tests
+
+- `test/scripts-notion-get-claude-md.test.js` (new) — plain-callback fetchers, no HTTP mock and no
+  token, following `test/scripts-notion-block-tree.test.js`. Covers a table coming back with its
+  rows, a toggle coming back with its body, pagination past the first page, a structured Notion
+  error rejecting rather than rendering an empty page, and the cache-key bump.
+- `--section` is exercised against the shape that actually ships: the real page's task-template
+  section holds a fence whose lines read `## 🎯 Мета`, `## 📋 Кроки` and `# install deps`.
+  `section-parser.js` became fence-aware in spovishun-185 but only against synthetic fixtures — the
+  test asserts those lines are not indexed as headings and do not cut the section short.
+
+### Known issue
+
+`column_list` / `column` blocks still render empty. Their payload is empty, so they fall to the
+renderer's unknown-type branch and emit nothing, and hydrating their children changes that not at
+all — the fix belongs in `hooks/notion-render.js`, not here. Neither measured `CLAUDE.md` page uses
+columns.
+
 ## [1.27.0] — 2026-08-22
 
 The 1.24.0 **Known issue** is closed. Two renderers turned Notion blocks into markdown —

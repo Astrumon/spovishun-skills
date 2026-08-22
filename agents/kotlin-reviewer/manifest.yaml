@@ -1,9 +1,9 @@
 id: kotlin-reviewer
-version: 1.0.0
+version: 1.1.0
 category: stack-specific
 requires:
   - kotlin
-description: Kotlin code reviewer. Runs 9 checks covering null-safety, structured concurrency, dispatcher injection, naming, layer compliance, magic numbers, function length, data access patterns, and security.
+description: Kotlin code reviewer. Runs 11 checks covering null-safety, structured concurrency, dispatcher injection, naming, layer compliance, magic numbers, function length, data access patterns, security, coroutine exception handling, and reactive state exposure.
 triggers:
   en:
     - "review kotlin code"

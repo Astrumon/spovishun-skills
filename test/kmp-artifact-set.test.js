@@ -73,13 +73,14 @@ test('the six adapted skills carry a source: block and exist on disk', () => {
   }
 });
 
-test('compose-multiplatform ships its four references as supporting files', () => {
+test('compose-multiplatform ships its five references as supporting files', () => {
   const artifact = ARTIFACTS.find((a) => a.id === 'compose-multiplatform');
   const refs = artifact.files.map((f) => f.relPath).filter((p) => p.startsWith('references/'));
   assert.deepEqual(refs.sort(), [
     'references/lists-and-scrolling.md',
     'references/modifiers-and-layout.md',
     'references/performance-and-stability.md',
+    'references/stability-baselines.md',
     'references/state-management.md',
   ]);
 });

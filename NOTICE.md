@@ -1,11 +1,15 @@
 # NOTICE
 
-`spovishun-skills` is MIT licensed (see `LICENSE`). Parts of it are **derived from other MIT-licensed
-projects**. This file records what was adapted, from where, and at which upstream revision.
+`spovishun-skills` is MIT licensed (see `LICENSE`). Parts of it are **derived from other open-source
+projects** — MIT and Apache-2.0, one section per upstream below. This file records what was adapted,
+from where, under which licence, and at which upstream revision.
 
 Nothing here is a verbatim copy: the upstream bodies were rewritten to this plugin's artifact model
 (`SKILL.md` + `manifest.yaml`, normative statements moved into `rules/`) and re-scoped from Android to
 Kotlin Multiplatform. The attribution is required all the same.
+
+One artifact may draw on more than one upstream — `skills/compose-multiplatform` appears under two
+sections — in which case its `manifest.yaml` carries a `source:` **list**, one entry per repository.
 
 Every artifact listed below carries a matching `source:` block in its `manifest.yaml`.
 `scripts/validate-all-manifests.js` enforces the correspondence in **both** directions — a manifest
@@ -106,6 +110,64 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+---
+
+## skydoves/compose-stability-analyzer
+
+- **Repository:** https://github.com/skydoves/compose-stability-analyzer
+- **License:** Apache-2.0
+- **Adapted at ref:** `aadca58d362f012d226684b27c976cbaf0905add`
+
+`skills/compose-multiplatform/references/stability-baselines.md` is written from the upstream
+documentation for the Gradle plugin: the `stabilityDump` / `stabilityCheck` baseline gate, the
+`stabilityValidation` options, `@TraceRecomposition`, the per-target support matrix, and the
+Kotlin ↔ analyzer version map. The prose, the framing and every "Do NOT" are this repo's own; the
+task names, DSL option names, log format and version table are upstream facts.
+
+| Artifact | Upstream path | Blob SHA |
+|---|---|---|
+| `skills/compose-multiplatform` | `docs/gradle-plugin/stability-validation.md` | `efc539f4ac602d8cecf05bd9913d1c073a98e2d0` |
+| `skills/compose-multiplatform` | `docs/gradle-plugin/trace-recomposition.md` | `67f389d278f1c8ca5646065745bbd3d5995d72f8` |
+| `skills/compose-multiplatform` | `docs/gradle-plugin/kotlin-multiplatform.md` | `e3d25c776a28aa1b4d8535dfe42ea6a0cf37a1c4` |
+| `skills/compose-multiplatform` | `docs/gradle-plugin/ci-cd.md` | `390c5f789def3fc15b0dcd014fe817b52066d91c` |
+| `skills/compose-multiplatform` | `docs/gradle-plugin/stability-configuration-files.md` | `93264ec2f25bf5948e5a8e48acf7441cffe945b2` |
+| `skills/compose-multiplatform` | `docs/gradle-plugin/getting-started.md` | `b73f1a210e2d30e13227970ec9c97f76692a2af1` |
+| `skills/compose-multiplatform` | `docs/version-map.md` | `d484c9dda8ff8dc278d1a1d7456ef925cf33dc25` |
+
+### Upstream NOTICE (verbatim)
+
+Reproduced as Section 4(d) of the Apache License 2.0 requires.
+
+```
+Compose Stability Analyzer
+Copyright 2026 skydoves (Jaewoong Eum)
+https://github.com/skydoves/compose-stability-analyzer
+
+This product includes software designed and developed by
+skydoves (Jaewoong Eum). Per Section 4(d) of the Apache License 2.0,
+redistributions and derivative works of this software must retain
+this NOTICE file and the attribution notices it contains.
+```
+
+### Upstream license
+
+```
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+The full license text is at https://www.apache.org/licenses/LICENSE-2.0 and in the upstream
+repository's `LICENSE` file.
 
 ---
 

@@ -80,10 +80,24 @@
       "uniqueItems": true
     },
     "source": {
+      "description": "Upstream provenance for an artifact derived from a third-party repository. One entry, or an array of entries when the artifact was adapted from more than one upstream repo. Every artifact carrying this field must also appear in NOTICE.md — scripts/validate-all-manifests.js enforces the correspondence in both directions.",
+      "oneOf": [
+        { "$ref": "#/$defs/sourceEntry" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sourceEntry" }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "sourceEntry": {
+      "description": "One upstream repository this artifact was adapted from.",
       "type": "object",
       "additionalProperties": false,
       "required": ["repo", "files"],
-      "description": "Upstream provenance for an artifact derived from a third-party repository. Every artifact carrying this field must also appear in NOTICE.md — scripts/validate-all-manifests.js enforces the correspondence in both directions.",
       "properties": {
         "repo": {
           "type": "string",

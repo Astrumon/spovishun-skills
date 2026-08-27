@@ -1,5 +1,5 @@
 id: kmp-multiplatform-specialist
-version: 1.4.0
+version: 1.4.1
 category: stack-specific
 requires:
   - kotlin

@@ -15,6 +15,7 @@ implements against those rules; it does not restate them.
 | The `modifier` parameter contract and chain ordering | `references/modifiers-and-layout.md` |
 | `LazyColumn` keys, `contentType`, prefetch, the O(n²) trap | `references/lists-and-scrolling.md` |
 | Stability classes, strong skipping, compiler reports, phase deferral | `references/performance-and-stability.md` |
+| Gating stability in CI against a committed baseline; runtime recomposition counts on non-Android targets | `references/stability-baselines.md` |
 | Where a component belongs and what its contract must be | `.claude/rules/kmp/uikit.md` |
 
 Do not load a reference during discovery — open it when writing or diagnosing that specific thing.
@@ -27,6 +28,7 @@ Do not load a reference during discovery — open it when writing or diagnosing 
 - Modifier API contract, chain order, custom layout.
 - Lazy list correctness and cost.
 - Recomposition diagnosis: stability, strong skipping, phase.
+- Gating stability against a committed baseline, and measuring recomposition at runtime.
 - Compose Multiplatform specifics — what is Android-only and what runs in `commonMain`.
 
 **Out of scope — hand off, do not answer here**
@@ -96,6 +98,10 @@ The stability and phase model itself is identical across platforms; only the too
   type; that annotation causes silent stale UI.
 - **The behaviour depends on Compose version** → read `libs.versions.toml` and say which version the
   answer assumes. Prefetch and cache-window APIs in particular moved recently.
+- **"Gate stability in CI", or a red `stabilityCheck`** → `references/stability-baselines.md`. Do not
+  hand this to `gradle-build-auditor` (it audits build structure, not Compose semantics) or to
+  `ci-cd-pipeline-builder` (it writes the pipeline; the compile-before-check ordering and the plugin's
+  Kotlin-version coupling are answered here).
 - **The question is really about layering or where the component lives** → point at
   `.claude/rules/kmp/uikit.md` or `feature-structure.md` and stop.
 

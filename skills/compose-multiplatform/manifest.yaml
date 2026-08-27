@@ -1,14 +1,15 @@
 id: compose-multiplatform
-version: 1.0.0
+version: 1.1.0
 category: stack-specific
 requires:
   - kotlin
   - kmp
-description: Compose Multiplatform UI mechanics — remember keying and the unified key rule, cross-phase back-writing, the modifier API contract and chain order, lazy-list keys and prefetch, and the stability/phase model behind unwanted recomposition. Design-system boundaries stay in rules/kmp/uikit.md.
+description: Compose Multiplatform UI mechanics — remember keying, cross-phase back-writing, the modifier API contract, lazy-list keys and prefetch, the stability/phase model behind unwanted recomposition, and gating stability in CI. Design-system boundaries stay in rules/kmp/uikit.md.
 provides:
   - Compose state and effect keying
   - Modifier API contract
   - Recomposition diagnosis
+  - Stability regression gating
 triggers:
   en:
     - "recomposition"
@@ -20,21 +21,43 @@ triggers:
     - "Immutable annotation"
     - "graphicsLayer"
     - "compose performance"
+    - "stabilityCheck"
+    - "stability baseline"
+    - "TraceRecomposition"
   uk:
     - "рекомпозиція"
     - "стан у Compose"
     - "модифікатор"
     - "лінива колонка"
     - "продуктивність Compose"
+    - "стабільність у CI"
+    - "базлайн стабільності"
 source:
-  repo: rcosteira79/android-skills
-  ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
-  files:
-    - path: plugins/android-skills/skills/compose/references/state-management.md
-      sha: "224843171c18b85ac98168946b9af488c55f2622"
-    - path: plugins/android-skills/skills/compose/references/performance.md
-      sha: cf6a2477519f54e72a8f36d4ef9577f8c9c4615e
-    - path: plugins/android-skills/skills/compose/references/lists-scrolling.md
-      sha: a723a3f8784c265ff35889938544fc1e73a0357f
-    - path: plugins/android-skills/skills/compose/references/modifiers.md
-      sha: d7cc8e779804d7460e5d7f1b57e639ba7148b2ab
+  - repo: rcosteira79/android-skills
+    ref: 6373e59c1dcdb28fe94649e7db59055a5052f4db
+    files:
+      - path: plugins/android-skills/skills/compose/references/state-management.md
+        sha: "224843171c18b85ac98168946b9af488c55f2622"
+      - path: plugins/android-skills/skills/compose/references/performance.md
+        sha: cf6a2477519f54e72a8f36d4ef9577f8c9c4615e
+      - path: plugins/android-skills/skills/compose/references/lists-scrolling.md
+        sha: a723a3f8784c265ff35889938544fc1e73a0357f
+      - path: plugins/android-skills/skills/compose/references/modifiers.md
+        sha: d7cc8e779804d7460e5d7f1b57e639ba7148b2ab
+  - repo: skydoves/compose-stability-analyzer
+    ref: aadca58d362f012d226684b27c976cbaf0905add
+    files:
+      - path: docs/gradle-plugin/stability-validation.md
+        sha: efc539f4ac602d8cecf05bd9913d1c073a98e2d0
+      - path: docs/gradle-plugin/trace-recomposition.md
+        sha: "67f389d278f1c8ca5646065745bbd3d5995d72f8"
+      - path: docs/gradle-plugin/kotlin-multiplatform.md
+        sha: e3d25c776a28aa1b4d8535dfe42ea6a0cf37a1c4
+      - path: docs/gradle-plugin/ci-cd.md
+        sha: "390c5f789def3fc15b0dcd014fe817b52066d91c"
+      - path: docs/gradle-plugin/stability-configuration-files.md
+        sha: "93264ec2f25bf5948e5a8e48acf7441cffe945b2"
+      - path: docs/gradle-plugin/getting-started.md
+        sha: b73f1a210e2d30e13227970ec9c97f76692a2af1
+      - path: docs/version-map.md
+        sha: d484c9dda8ff8dc278d1a1d7456ef925cf33dc25

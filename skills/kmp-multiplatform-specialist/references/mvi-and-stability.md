@@ -99,7 +99,12 @@ private suspend fun <T> load(fetch: suspend () -> T): SectionState<T> = try {
 composeCompiler {
     // Plural + add(): the singular `stabilityConfigurationFile` is deprecated since Kotlin 2.4
     // and is removed in 2.5.
-    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("stability.txt"))
+    // `isolated.rootProject`, not `rootProject.layout`: the latter reads another project's mutable
+    // state and fails under Gradle Isolated Projects with "Project ':app' cannot access
+    // 'Project.layout' functionality on another project ':'". On Gradle 8.13+
+    // `layout.settingsDirectory` works too; a file inside this module needs plain
+    // `layout.projectDirectory`.
+    stabilityConfigurationFiles.add(isolated.rootProject.projectDirectory.file("stability.txt"))
     // Both destinations are needed; set them to their own directories, not to build/reports.
     reportsDestination = layout.buildDirectory.dir("compose-reports")
     metricsDestination = layout.buildDirectory.dir("compose-metrics")

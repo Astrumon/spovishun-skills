@@ -107,15 +107,22 @@ The compiler cannot infer stability for types from other modules or libraries
 // build.gradle.kts
 composeCompiler {
     stabilityConfigurationFiles.add(
-        rootProject.layout.projectDirectory.file("compose_stability.conf")
+        isolated.rootProject.projectDirectory.file("compose_stability.conf")
     )
 }
 ```
 
+**`isolated.rootProject`, not `rootProject.layout`.** The latter reads another project's mutable state
+and fails under Gradle Isolated Projects (incubating since 9.7) with *"Project ':app' cannot access
+'Project.layout' functionality on another project ':'"*. `layout.settingsDirectory` also works on
+Gradle 8.13+. A file inside the module itself needs neither — plain `layout.projectDirectory`.
+
 ```
 # compose_stability.conf
+// lines starting with // are comments
 kotlinx.datetime.Instant
-kotlinx.datetime.LocalDate
+com.example.generated.*      // * matches one package segment
+com.example.models.**        // ** matches across package boundaries
 ```
 
 Safer than scattered `@Suppress`; more dangerous than an annotation, because nothing checks the claim.
@@ -141,6 +148,11 @@ Run with `-PcomposeReports=true`. What the files say:
 - **`*-composables.csv`** — programmatic. When computing a module-wide `skippable%`, **filter out rows
   where `isLambda == "1"`**: zero-argument lambdas cannot skip structurally, so they drag the number
   down even when every named composable is skippable.
+
+The reports are a snapshot on demand, not a gate — nothing fails when a type regresses between
+releases, and they say nothing about how often a composable actually ran. For a committed baseline, a
+build-failing check and runtime recomposition counts on targets that have no Layout Inspector, see
+`stability-baselines.md`.
 
 ## Deferring reads to a later phase
 

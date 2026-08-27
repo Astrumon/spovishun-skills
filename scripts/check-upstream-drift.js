@@ -76,30 +76,34 @@ let checked = 0;
 let drifted = 0;
 let unknown = 0;
 
-for (const [artifact, { repo, ref, pins }] of artifacts) {
-  for (const entry of pins) {
-    const [path, pinnedSha] = entry.split('\0');
-    checked++;
+// One artifact may be adapted from several upstream repos, so each source is
+// queried against its own repository.
+for (const [artifact, { sources }] of artifacts) {
+  for (const { repo, ref, pins } of sources) {
+    for (const entry of pins) {
+      const [path, pinnedSha] = entry.split('\0');
+      checked++;
 
-    // `ref` records where the SHAs were read; drift means "has the file moved
-    // on the default branch since", so the query deliberately omits it.
-    const result = await currentSha(repo, path, undefined);
+      // `ref` records where the SHAs were read; drift means "has the file moved
+      // on the default branch since", so the query deliberately omits it.
+      const result = await currentSha(repo, path, undefined);
 
-    if (!result.ok) {
-      unknown++;
-      process.stdout.write(`SKIP ${artifact}  ${repo}/${path}\n     ${result.reason}\n`);
-      continue;
+      if (!result.ok) {
+        unknown++;
+        process.stdout.write(`SKIP ${artifact}  ${repo}/${path}\n     ${result.reason}\n`);
+        continue;
+      }
+      if (result.sha === pinnedSha) {
+        process.stdout.write(`OK   ${artifact}  ${repo}/${path}\n`);
+        continue;
+      }
+      drifted++;
+      process.stdout.write(
+        `DRIFT ${artifact}  ${repo}/${path}\n` +
+          `      pinned:  ${pinnedSha}${ref ? ` (at ${ref})` : ''}\n` +
+          `      current: ${result.sha}\n`
+      );
     }
-    if (result.sha === pinnedSha) {
-      process.stdout.write(`OK   ${artifact}  ${repo}/${path}\n`);
-      continue;
-    }
-    drifted++;
-    process.stdout.write(
-      `DRIFT ${artifact}  ${repo}/${path}\n` +
-        `      pinned:  ${pinnedSha}${ref ? ` (at ${ref})` : ''}\n` +
-        `      current: ${result.sha}\n`
-    );
   }
 }
 

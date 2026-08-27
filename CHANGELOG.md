@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.0] — 2026-08-27
+
+The Compose stability guidance in `compose-multiplatform` taught how to *read* the compiler reports
+and stopped there. Two things it never had: a regression gate — nothing fails when a `val` becomes a
+`var` and quietly destabilises a screen between releases — and any runtime measurement outside
+Android, since the skill itself notes that Layout Inspector, Macrobenchmark and Baseline Profiles do
+not exist on iOS, Desktop or Wasm. That left the skill's own "do not optimise without a measurement
+that names the axis" unanswerable on three of four targets.
+
+[skydoves/compose-stability-analyzer](https://github.com/skydoves/compose-stability-analyzer)
+(Apache-2.0) covers both from `commonMain`, so its Gradle-plugin surface is now documented as one
+reference. Reading its docs also turned up a defect in two files this package already ships:
+`stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file(…))` reads another project's
+mutable state and fails under Gradle Isolated Projects.
+
+Deliberately not adopted: the IDE plugin's interactive surface (an agent cannot drive it), its
+four-state stability vocabulary (the existing five-class compiler-report table is richer, and a second
+vocabulary would only compete with it), and the Android Lint module.
+
+### Added
+
+- **`skills/compose-multiplatform/references/stability-baselines.md`** — the `stabilityDump` /
+  `stabilityCheck` baseline gate and its `~` / `+` / `-` change symbols, the `stabilityValidation`
+  options worth setting (`failOnStabilityChange` keyed off `CI`, `allowIncrementalDisabling`,
+  `@IgnoreStabilityReport`), `@TraceRecomposition` and how to read one of its log lines, the exact
+  Kotlin ↔ analyzer version coupling, and a per-target support matrix. Two KMP traps are called out:
+  `traceAll { variants }` does not protect a release build off Android (every non-Android compilation
+  is named `main`), and the baseline is generated from one compilation rather than merged across
+  targets. Framed as opt-in throughout — it must never become the answer to an unmeasured
+  "it recomposes too much".
+- **Multi-upstream `source:`** — `manifest.yaml` now accepts a *list* of source entries, each with its
+  own `repo`, `ref` and `files`. `skills/compose-multiplatform` is the first artifact adapted from two
+  upstreams. `check-upstream-drift.js` queries per entry; `NOTICE.md` keys its rows by artifact rather
+  than by repo, so `diffPins` unions the entries before comparing. The single-object form is unchanged
+  and every other manifest keeps it.
+
+### Fixed
+
+- **`isolated.rootProject`, not `rootProject.layout`**, in the two places this package wires
+  `stabilityConfigurationFiles` — `compose-multiplatform/references/performance-and-stability.md` and
+  `kmp-multiplatform-specialist/references/mvi-and-stability.md`. The old form fails under Isolated
+  Projects (incubating since Gradle 9.7) with *"Project ':app' cannot access 'Project.layout'
+  functionality on another project ':'"*. Both now name the alternatives: `layout.settingsDirectory`
+  on Gradle 8.13+, plain `layout.projectDirectory` for a file inside the module.
+- **Stability configuration file syntax** is now documented rather than implied: `//` comments, `*`
+  matching one package segment, `**` matching across package boundaries.
+
+### Changed
+
+- **`NOTICE.md`** no longer claims every derivation is MIT. It carries one section per upstream with
+  its own licence, and reproduces the upstream `NOTICE` verbatim where Apache-2.0 §4(d) requires it.
+
 ## [1.29.0] — 2026-08-22
 
 `create-task.js` lands a new task on `Status = "Not started"`; `get-board.js` filtered its default

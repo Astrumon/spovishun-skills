@@ -27,6 +27,17 @@ active task to finish — ask the user to switch to a task branch first.
 file is absent, say so once and continue, but do **not** claim in Step 7 that the Definition
 of Done was verified.
 
+**1d.** Check the tree is clean:
+```
+git status --porcelain
+```
+Non-empty output → **warn before continuing**: Step 3 runs the gate on the **working tree**,
+while Step 5 reviews only `git diff {{GIT_DEVELOP_BRANCH}}...HEAD` — the **committed** diff.
+Anything left uncommitted therefore passes the gate unreviewed and stays out of the PR. List
+the dirty paths and offer to land them first: `/commit-sections` for a large change that wants
+slicing, `/commit` for one coherent change. Continue only if the user says so, and in that case
+say in Step 7 that the review covered the committed diff only.
+
 ### Step 2: Resolve the project commands
 
 Read the build/test/lint commands from the consumer's `CLAUDE.md` **`## Commands`** and
@@ -199,7 +210,8 @@ English names given here for reference):
 2. **What the blocking gate reported** — tests / build / lint: passed, or the first failure
    and where it is.
 3. **What the review found** — counts by severity plus the worst finding. State `not run`
-   when Step 5 was skipped.
+   when Step 5 was skipped, and say that it covered the committed diff only when Step 1d
+   found a dirty tree and the user continued anyway.
 4. **What is left for you to do** — concrete next actions: fix X, push, open a PR,
    acknowledge a Critical finding, set Notion `Done` after the merge.
 
@@ -254,4 +266,6 @@ Expected outcome:
 
 - `code-reviewer` — the review pass invoked in Step 5c; owns the report format.
 - `commit` — committing the work before the gate runs.
+- `commit-sections` — slicing a large finished change into ordered commits before the gate
+  runs; the counterpart Step 1d points at.
 - `git-workflow-pr-writing` — PR body and branch conventions for Step 6.

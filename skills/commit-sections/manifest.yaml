@@ -1,0 +1,16 @@
+id: commit-sections
+version: 1.0.0
+category: configurable
+user_invocable: true
+disable-model-invocation: true
+description: >-
+  Splits an already-implemented change into logical, dependency-ordered review sections and
+  walks the user through them one at a time — stage a section, describe it in depth, hand over
+  the commit command, verify, move on. Never commits itself. Explicit /commit-sections only.
+placeholders:
+  - key: PROJECT_LANGUAGE
+    description: Language the skill talks to the user in (e.g. "uk", "en"). Comes from project.language in the consumer config.
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject) — used to resolve the task behind the branch.
+  - key: GIT_DEVELOP_BRANCH
+    description: Base branch used as the default base-ref when already-pushed work has to be re-sliced (default develop).

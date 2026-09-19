@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.31.0] — 2026-09-19
+
+A finished change of twenty files lands as one commit or not at all: `commit` takes the whole
+working tree, and nothing in the package slices a change into a reviewable sequence. The review
+that matters most — the user reading their own diff before it becomes history — had no support at
+all.
+
+`commit-sections` is that support, and it is deliberately the one skill here that **never commits**.
+It stages a section, explains it, hands over the commit command and waits; the user commits. The
+split is what makes it useful: the index is the review surface, and the person who owns the branch
+owns every `git commit` on it.
+
+Adding it exposed a mismatch in `finish-task` that predates it. Step 3 runs the blocking gate on the
+**working tree**, Step 5 reviews `develop...HEAD` — the **committed** diff. A dirty tree therefore
+produced a green gate on code the review never saw and the PR never carried, silently. Step 1d now
+names that before it happens.
+
+### Added
+
+- **`skills/commit-sections`** — splits an already-implemented change into dependency-ordered
+  sections and walks them one at a time: stage → describe → hand over the commit command → verify
+  the user's commit → next. `disable-model-invocation: true`; explicit `/commit-sections [base-ref]`
+  only, because auto-loading a skill that rewrites the index is not something a phrase should
+  trigger. Plan state lives at `.dev-context/{branch}_prd/commit-sections.md`, the folder the
+  dev-context hook already owns, and `.dev-context/` is excluded from the change pool on every run.
+  Section order follows the consumer's documented *Layer Rules* (ladders given for Kotlin backend,
+  KMP/Compose and a Node package); compilability per section is **reasoned from imports**, never
+  built in a throwaway worktree. Baseline commands are read from the consumer's `CLAUDE.md`
+  `## Commands` / `## Testing` — a guessed build tool reports a green baseline on unverified code.
+  Requirements per section come from the cached `task.json` when it exists and the block is dropped
+  entirely when it does not, so the skill stays git-only and installs without `requires: notion`.
+  Commit commands are Conventional Commits per `rules/common/git-workflow.md`; the task number lives
+  in the branch and the PR, not in the subject.
+
+### Fixed
+
+- **`skills/finish-task` 1.2.0 — Step 1d, clean-tree check.** `git status --porcelain` is now run
+  before the gate. A dirty tree is reported with its paths and an offer to land the work first
+  (`/commit-sections`, or `/commit` for one coherent change); continuing anyway is allowed but
+  Step 7 must then state that the review covered the committed diff only. Without this the two
+  halves of the flow disagreed about what "the change" is, and the quieter half won.
+
 ## [1.30.0] — 2026-08-27
 
 The Compose stability guidance in `compose-multiplatform` taught how to *read* the compiler reports

@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.0] — 2026-10-07
+
+Every rule this package installs was loaded into the consumer's context on every turn, and the only
+selector was the top-level directory = stack flag. An audit of a KMP consumer (Android + Desktop, no
+network, no iOS) found 1 377 always-loaded rule lines, some irrelevant to the project and a few
+contradicting it: a networking rule in a project with no network, a co-author line pinning a
+retired model, "never unit test DI modules" read as forbidding Koin `verify()`, an 80 % coverage
+floor with nothing measuring it.
+
+Rules can now be scoped to files and gated per rule. On that consumer's stack the always-loaded
+volume drops to 1 102 lines; 199 more load only next to the files they govern.
+
+| Rule | Selected by (1.32.0) |
+|---|---|
+| `common/*` | always |
+| `kotlin/kotlin-style` | `stack.kotlin` |
+| `kotlin/gradle-build` | `stack.kotlin` + `paths:` build files |
+| `kmp/*` (architecture, feature-structure, localization, modularization, navigation, persistence, testing, uikit) | `stack.kmp` |
+| `kmp/networking` | `stack.kmp` + `paths:` network code (`remote/`, `network/`, `*Api.kt`, `*Dto.kt`, `*HttpClient*.kt`) |
+| `kmp/component-architecture` | `stack.kmp` + **`stack.components`** (new, opt-in) |
+| `notion/feature-documentation` (moved from `common/`) | `stack.notion` |
+
+### Added
+
+- **Rule frontmatter: `paths:` and `requires:`.** Parsed by `lib/rules-loader.js` against a closed
+  key set — an unknown key or stack flag fails the install rather than shipping an unscoped rule.
+  `paths:` is translated per target: Claude Code path-scoped frontmatter, Windsurf `trigger: glob` +
+  `globs:`, and an `_Applies to: …_` line in codex `AGENTS.md`. `requires:` gates a single rule on top
+  of its directory and is never written to the consumer. Lock checksums cover the written text, so a
+  scoped rule re-installs without a false local-edit warning.
+- **`stack.components`** — opt-in flag for `kmp/component-architecture`. Requires `kmp: true`
+  (enforced by `config.schema.json`, validated by `doctor`'s `config-valid`); `init` asks only for a
+  KMP project.
+
+### Changed
+
+- **`kmp/component-architecture` is opt-in.** A KMP consumer that relies on it must add
+  `stack.components: true`; otherwise the next `install` removes the file (an untouched copy only —
+  a locally edited one is kept with a warning, as for any de-selected rule).
+- **`feature-documentation` moved to `rules/notion/`** and its wording is no longer bot-specific:
+  "command / role required" became "entry point (screen, command, endpoint, job) / access". The old
+  `common/feature-documentation.md` is removed on the next install.
+- **`kmp/testing`** no longer carries the `iosTest` row or iOS-specific phrasing; that guidance moved
+  to `skills/kmp-ios-interop` 1.1.0 (*Testing on iOS*). The `MockEngine` section moved to
+  `kmp/networking` (*Testing the network layer*), so it loads with network code only. Pointers in
+  `kmp-testing` 1.0.1 and `ktor-client-kmp` 1.0.1 follow it.
+
+### Fixed
+
+- **`common/git-workflow`** no longer pins `Co-Authored-By: Claude Sonnet 4.6`; Claude Code writes
+  the correct trailer itself. A test now rejects any shipped rule naming a model version.
+- **`common/testing` + `kmp/testing`**: a DI graph check (Koin `verify()` / `checkModules`, Spring
+  context test) is stated as the one test a module needs — a wiring test, not a behaviour unit test.
+  The 80 % line-coverage floor applies only when Kover or JaCoCo is configured.
+
 ## [1.31.0] — 2026-09-19
 
 A finished change of twenty files lands as one commit or not at all: `commit` takes the whole

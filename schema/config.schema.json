@@ -24,7 +24,8 @@
         "telegram": { "type": "boolean" },
         "notion":   { "type": "boolean" },
         "docker":   { "type": "boolean" },
-        "kmp":      { "type": "boolean" }
+        "kmp":      { "type": "boolean" },
+        "components": { "type": "boolean", "description": "Opt-in: screen-level component architecture rules for KMP projects. Requires kmp: true." }
       },
       "unevaluatedProperties": false
     },
@@ -71,6 +72,30 @@
     }
   },
   "allOf": [
+    {
+      "$comment": "Component architecture is a KMP refinement — components: true without kmp: true would select nothing and hide a misconfiguration.",
+      "if": {
+        "type": "object",
+        "properties": {
+          "stack": {
+            "type": "object",
+            "properties": { "components": { "const": true } },
+            "required": ["components"]
+          }
+        },
+        "required": ["stack"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "stack": {
+            "type": "object",
+            "properties": { "kmp": { "const": true } },
+            "required": ["kmp"]
+          }
+        }
+      }
+    },
     {
       "$comment": "A KMP project is by definition a Kotlin project — kmp: true without kotlin: true would silently drop every kotlin-flagged artifact the KMP track builds on.",
       "if": {

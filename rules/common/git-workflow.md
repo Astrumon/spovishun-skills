@@ -5,7 +5,6 @@ ALWAYS use Conventional Commits. Format: `type: short description`
 - Lowercase, imperative mood, no trailing period, max 72 chars
 - Allowed types: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `ci`, `build`, `perf`
 - NEVER use vague messages like "fix", "update", "changes", "wip"
-- Co-author line when Claude-assisted: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
 
 ## Branch Naming
 Format: `{{GIT_BRANCH_PREFIX}}-{N}-short-slug`

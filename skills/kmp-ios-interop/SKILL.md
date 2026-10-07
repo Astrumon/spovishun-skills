@@ -153,6 +153,22 @@ MainViewControllerKt.ComposeWithSwiftUI {
 Plain UIKit views (`MKMapView`, `WKWebView`, `AVCaptureSession`) need no Swift bridge — use
 `UIKitView(factory = { … })` from Kotlin.
 
+## Testing on iOS
+
+The source-set table in `.claude/rules/kmp/testing.md` covers the targets every KMP project shares;
+the iOS row lives here so projects without an iOS target never load it.
+
+| Source set | Framework | What goes here |
+|---|---|---|
+| `iosTest` | `kotlin.test` + `kotlinx-coroutines-test` | iOS `actual`s and Swift-facing behaviour of the boundary |
+
+- `commonTest` already runs on the iOS simulator target, so a behaviour that is not iOS-specific stays
+  there. `iosTest` is for the `actual`s and the exported surface.
+- Kotlin/Native has no MockK and no reflection-based mocking: fakes only, which `commonTest` already
+  requires.
+- Swift-side behaviour (SKIE `async` bridging, `AsyncSequence` cancellation) is covered from XCTest in
+  the iOS app, not from Kotlin — state that when it was not run.
+
 ## Do NOT
 
 - Do NOT answer any of this for a project with no iOS target — check first, then stop.

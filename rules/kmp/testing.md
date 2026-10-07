@@ -1,8 +1,8 @@
 # KMP Testing Rules
 
 **These rules supersede the Stack section of `common/testing.md` for this project.** The approach,
-coverage and naming rules there still apply; the tooling does not — JUnit 5 and MockK are JVM-only
-and cannot run in `commonTest` once iOS is a target.
+coverage and naming rules there still apply; the tooling does not — JUnit 5 and MockK are JVM-only,
+and `commonTest` stays portable to every target the project declares.
 
 ## Which source set
 
@@ -12,13 +12,13 @@ and cannot run in `commonTest` once iOS is a target.
 | `jvmTest` | `kotlin.test` (+ MockK allowed) | Desktop Compose UI tests, JVM-only integration |
 | `androidHostTest` | JUnit + MockK allowed | Android host-side tests |
 | `androidDeviceTest` | Compose UI test | instrumented UI tests on an emulator/device |
-| `iosTest` | `kotlin.test` | iOS-specific behaviour |
 
 - **Default to `commonTest`.** A test lands in a platform source set only when it genuinely needs
   that platform.
-- **No MockK in `commonTest`.** It does not support Kotlin/Native, so one such test breaks the iOS
-  target for the whole module. Write a hand-rolled fake implementing the domain interface instead —
-  it is faster, refactor-safe and readable.
+- **Fakes in `commonTest`, not MockK.** Write a hand-rolled fake implementing the domain interface —
+  it is faster, refactor-safe and readable, and it keeps `commonTest` compiling for a Kotlin/Native
+  target, which MockK does not support. A project with an iOS target: see the `kmp-ios-interop` skill
+  for `iosTest`.
 - **Compose UI tests never live in `commonTest`.** `runComposeUiTest` cannot run on the Android host
   target, so a UI test there breaks `allTests`. Put the Desktop suite in `jvmTest` and mirror the
   instrumented one in `androidDeviceTest`.
@@ -98,23 +98,6 @@ resumed before `advanceUntilIdle()` returns, so the list is still empty and the 
 reason that has nothing to do with the code under test. For several effects in sequence, use
 `async { vm.effect.take(n).toList() }` with the same `runCurrent()` placement.
 
-## Network
-
-Never mock the HTTP client. Use Ktor's `MockEngine` and assert against real serialization — that is
-what catches a wrong DTO field name, which a mocked client never will.
-
-```kotlin
-fun mockApi(status: HttpStatusCode = HttpStatusCode.OK, body: String) = HttpClient(MockEngine { request ->
-    respond(
-        content = body,
-        status = status,
-        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
-    )
-}) { install(ContentNegotiation) { json() } }
-```
-
-Keep the mock API and its fixtures in a `testkit` package, mirrored in each suite that needs it.
-
 ## Compose UI tests
 
 - Desktop suite in `jvmTest`, runs headless as part of `allTests`.
@@ -129,10 +112,13 @@ Keep the mock API and its fixtures in a `testkit` package, mirrored in each suit
 
 - DO test the failure paths — offline, unauthorized, empty — as typed states.
 - DO name tests `should_doX_when_conditionY()`.
-- DON'T unit test DI modules, generated resource accessors, or platform entry points.
+- DO verify the DI graph with one Koin `verify()` (or `checkModules`) test — it checks wiring, not
+  behaviour, and is the only test a module definition needs. Behaviour is tested on the classes it
+  wires; generated resource accessors and platform entry points get no unit tests.
 - DON'T use `Thread.sleep` or `delay` to wait for a result; advance the test scheduler.
 - DON'T add MockK to `commonTest` "just for this one test".
 
 ## Related rules
 
-`common/testing.md` (approach, coverage, naming) · `architecture.md` · `feature-structure.md`
+`common/testing.md` (approach, coverage, naming) · `architecture.md` · `feature-structure.md` ·
+`networking.md` (testing HTTP code with `MockEngine`)

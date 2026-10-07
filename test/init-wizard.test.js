@@ -100,6 +100,18 @@ test('kmp question is skipped for a non-Kotlin project and stack.kmp stays false
   assert.equal(parsed.stack.kmp, false);
 });
 
+test('components answer is written only for a kmp project', async () => {
+  const kmpDir = makeTmpDir();
+  await runInit({ cwd: kmpDir, prompter: makePrompter({ ...happyAnswers, stack_kotlin: true, stack_kmp: true, stack_components: true }), out: silentOut() });
+  assert.equal(parseYaml(readFileSync(join(kmpDir, 'spovishun-skills.config.yaml'), 'utf8')).stack.components, true);
+
+  // The question's when-guard drops the answer without kmp, so the schema's
+  // components → kmp rule can never be violated by the wizard.
+  const jvmDir = makeTmpDir();
+  await runInit({ cwd: jvmDir, prompter: makePrompter({ ...happyAnswers, stack_kotlin: true, stack_kmp: false, stack_components: true }), out: silentOut() });
+  assert.equal(parseYaml(readFileSync(join(jvmDir, 'spovishun-skills.config.yaml'), 'utf8')).stack.components, false);
+});
+
 test('notion enabled: config includes notion section', async () => {
   const cwd = makeTmpDir();
   await runInit({ cwd, prompter: makePrompter(notionAnswers), out: silentOut() });

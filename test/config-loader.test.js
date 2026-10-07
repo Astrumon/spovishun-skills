@@ -62,6 +62,22 @@ test('fail: stack.kmp without stack.kotlin is rejected', () => {
   assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
 });
 
+test('happy: stack.components with kmp passes validation', () => {
+  const cfg = baseNotionConfig();
+  cfg.stack.kotlin = true;
+  cfg.stack.kmp = true;
+  cfg.stack.components = true;
+  assert.doesNotThrow(() => validateConfig(cfg));
+});
+
+test('fail: stack.components without stack.kmp is rejected', () => {
+  const cfg = baseNotionConfig();
+  cfg.stack.kotlin = true;
+  cfg.stack.kmp = false;
+  cfg.stack.components = true;
+  assert.throws(() => validateConfig(cfg), (err) => err instanceof ConfigError);
+});
+
 test('happy: minimal config (all stack=false, no notion section) loads ok', () => {
   const cfg = loadConfig(fix('valid-minimal-no-notion.yaml'));
   assert.equal(cfg.project.name, 'MinimalProject');

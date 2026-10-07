@@ -35,7 +35,7 @@ feature/
     <Name>Intent.kt
     <Name>Effect.kt
     <Name>Format.kt        # optional: internal non-composable formatting helpers
-    components/            # only past the component-architecture.md threshold
+    components/            # opt-in: stack.components, see component-architecture.md
       <Region>Component.kt
       <Region>Ui.kt        # takes the component, collects its state
     viewcomponents/        # ONE composable per file
@@ -68,7 +68,7 @@ feature/
   lambdas upward. No layout logic beyond the dispatch.
 - Views are `internal`, stateless and hoisted: value in, events out. No DI, no ViewModel, no theme
   wrapper inside. That is `viewcomponents/`; a composable that collects a component's state is a
-  separate category and lives in `components/` — see `component-architecture.md`.
+  separate category and lives in `components/` — see `component-architecture.md` (`stack.components`).
 - `@Preview`s live next to the view they preview.
 
 ```kotlin

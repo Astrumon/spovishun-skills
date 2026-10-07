@@ -613,3 +613,25 @@ test('two artifacts flattening to the same filename warn instead of clobbering s
     'the manifest must describe what is actually on disk'
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule frontmatter: `paths:` becomes a Windsurf glob-triggered rule
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('a path-scoped rule is written as a trigger: glob rule and re-installs silently', async () => {
+  const pkg = makeRulesPkg();
+  writeFileSync(
+    join(pkg, 'rules', 'common', 'gradle.md'),
+    '---\npaths:\n  - "**/*.gradle.kts"\n  - "build-logic/**"\n---\n\n# Gradle\n',
+    'utf8'
+  );
+  const consumer = makeConsumerDir();
+  const { lockEntries } = await installAndLock(consumer, pkg);
+
+  const written = readFileSync(join(getRulesDir(consumer), 'common--gradle.md'), 'utf8');
+  assert.equal(written, '---\ntrigger: glob\nglobs: **/*.gradle.kts, build-logic/**\n---\n\n# Gradle\n');
+  assert.deepEqual([...loadWindsurfFiles(consumer).keys()].sort(), keysOf(lockEntries));
+
+  const { warn } = await installAndLock(consumer, pkg);
+  assert.equal(warn.text(), '', 'frontmatter is part of the locked checksum — no false local-edit warning');
+});

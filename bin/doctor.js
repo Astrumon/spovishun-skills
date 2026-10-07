@@ -415,8 +415,8 @@ function checkSettingsJsonHooks(ctx) {
  * local edits are a supported workflow (update classifies them LOCAL_ONLY /
  * CONFLICT); a missing file, however, means the install is broken.
  *
- * Rules are checked here too. They carry no YAML frontmatter, so the
- * `x-spovishun` provenance marker does not apply to them and ownership can only
+ * Rules are checked here too. Their frontmatter, when present, carries only
+ * `paths:` — never the `x-spovishun` provenance marker — and ownership can only
  * be decided by checksum equality — which is exactly what this check compares.
  */
 function checkInstalledArtifacts(ctx) {
@@ -493,8 +493,8 @@ function checkOwnershipAnomalies(ctx) {
     const sep = key.indexOf(':');
     const kind = key.slice(0, sep);
     const id = key.slice(sep + 1);
-    // Markers only live on skills and agents. Templates and rules have no
-    // frontmatter to carry one, so orphaned-marker and renamed-folder anomalies
+    // Markers only live on skills and agents. Templates and rules never carry
+    // one, so orphaned-marker and renamed-folder anomalies
     // are undetectable for them by construction — their integrity is covered by
     // the checksum comparison in checkInstalledArtifacts instead.
     if (kind !== 'skill' && kind !== 'agent') continue;

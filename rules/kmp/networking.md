@@ -1,8 +1,17 @@
+---
+paths:
+  - "**/remote/**"
+  - "**/network/**"
+  - "**/*Api.kt"
+  - "**/*Dto.kt"
+  - "**/*HttpClient*.kt"
+---
+
 # KMP Networking Rules
 
-Applies to Kotlin Multiplatform projects (`stack.kmp: true`). Governs where network concerns may
-appear and what may cross a layer boundary. Technique — plugin ordering, auth refresh, `MockEngine` —
-lives in the `ktor-client-kmp` skill.
+Applies to Kotlin Multiplatform projects (`stack.kmp: true`) and loads only next to network code
+(the paths above). Governs where network concerns may appear and what may cross a layer boundary.
+Technique — plugin ordering, auth refresh, `MockEngine` setup — lives in the `ktor-client-kmp` skill.
 
 ## The repository is the error boundary
 
@@ -70,6 +79,23 @@ runs. Both models are defensible; a codebase using both is not.
 - A long-lived connection (WebSocket, SSE) is collected inside a scope the consumer owns, so that
   cancelling the consumer closes the connection. A collection started in a scope that outlives the
   screen is a leak no test will catch.
+
+## Testing the network layer
+
+Test against Ktor's `MockEngine` with the real `ContentNegotiation` setup — real serialization is
+what catches a wrong DTO field name. Never substitute a mocked `HttpClient`: it would pass that bug.
+
+```kotlin
+fun mockApi(status: HttpStatusCode = HttpStatusCode.OK, body: String) = HttpClient(MockEngine { request ->
+    respond(
+        content = body,
+        status = status,
+        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+    )
+}) { install(ContentNegotiation) { json() } }
+```
+
+Keep the mock API and its fixtures in a `testkit` package, mirrored in each suite that needs it.
 
 ## Do / Don't
 

@@ -12,7 +12,7 @@ one `expectSuccess` model project-wide, DTO→domain mapping at the boundary —
 |---|---|
 | Where the error boundary sits and what may cross it | `.claude/rules/kmp/networking.md` |
 | Which source set the engine `actual` belongs to | **`kmp-multiplatform-specialist`** |
-| How to assert against `MockEngine` in `commonTest` | `.claude/rules/kmp/testing.md`, then **`kmp-testing`** |
+| How to assert against `MockEngine` in `commonTest` | `.claude/rules/kmp/networking.md` (Testing the network layer), then **`kmp-testing`** |
 
 > **Verification status.** Every claim below is written against **Ktor 3.5.1**. Only
 > `ContentNegotiation` + per-platform engines are exercised by a consumer project today; the retry,

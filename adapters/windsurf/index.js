@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync } from 'node:
 import { join, relative, basename } from 'node:path';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { buildPlaceholderMap } from '../../lib/placeholder-map.js';
-import { collectRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
+import { collectRules, renderRule, formatRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
 import { readLockfile, LOCKFILE_NAME } from '../../lib/lockfile.js';
@@ -45,8 +45,9 @@ export function windsurfBaseId({ kind, id }) {
  * see lib/windsurf-manifest.js for why that guessing was unfixable.
  *
  * Every file goes through the same ownership model as claude, selected via
- * `ownership: 'checksum'`: windsurf bodies carry no YAML frontmatter and are
- * written without the `x-spovishun` marker, so content alone answers "is this
+ * `ownership: 'checksum'`: windsurf bodies are written without the
+ * `x-spovishun` marker (a path-scoped rule's `trigger: glob` frontmatter is
+ * plain content, covered by the checksum), so content alone answers "is this
  * ours?" — exactly the model claude already applies to rules. A locally edited
  * file is skipped with a warning; `--force` resets ours; a file at an id we
  * never locked is owner-authored and sacred even then.
@@ -173,7 +174,9 @@ function installRules({ rules, rulesDir, configMap, lockEntryMap, installed, pri
   const entries = [];
 
   for (const rule of rules) {
-    const rendered = renderRule(rule, configMap);
+    // A path-scoped rule becomes a `trigger: glob` rule; the checksum covers
+    // that frontmatter because it is part of the file Windsurf reads.
+    const rendered = formatRule(rule, renderRule(rule, configMap), 'windsurf');
     const freshEntry = ruleLockEntry(rule, rendered);
     const key = `rule:${rule.id}`;
     const owner = { kind: 'rule', id: rule.id, role: 'body' };

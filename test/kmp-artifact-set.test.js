@@ -85,11 +85,10 @@ test('compose-multiplatform ships its five references as supporting files', () =
   ]);
 });
 
-test('stack.kmp ships the whole rules/kmp group', () => {
+test('stack.kmp ships the rules/kmp group except the opt-in component rule', () => {
   const ids = collectRules(PKG_ROOT, KMP_ON).map((r) => r.id);
   assert.deepEqual(ids.filter((id) => id.startsWith('kmp/')).sort(), [
     'kmp/architecture',
-    'kmp/component-architecture',
     'kmp/feature-structure',
     'kmp/localization',
     'kmp/modularization',
@@ -99,4 +98,13 @@ test('stack.kmp ships the whole rules/kmp group', () => {
     'kmp/testing',
     'kmp/uikit',
   ]);
+});
+
+test('stack.components adds kmp/component-architecture on top of kmp', () => {
+  const ids = collectRules(PKG_ROOT, { ...KMP_ON, components: true }).map((r) => r.id);
+  assert.ok(ids.includes('kmp/component-architecture'));
+  assert.ok(
+    !collectRules(PKG_ROOT, { kotlin: true, components: true }).some((r) => r.id === 'kmp/component-architecture'),
+    'components without kmp must not ship a kmp/ rule — the group gate still holds'
+  );
 });

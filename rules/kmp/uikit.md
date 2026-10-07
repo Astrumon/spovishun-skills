@@ -19,7 +19,7 @@ that screen's `viewcomponents/` folder (see `feature-structure.md`).
 - Anything that reads a `UiState`, resolves DI, or knows a route. The design system is
   domain-agnostic: it renders what it is given.
 - Anything that takes a screen component or collects a `Flow`. That composable is feature-owned and
-  belongs in `components/` — see `component-architecture.md`.
+  belongs in `components/` — see `component-architecture.md` (`stack.components`).
 
 ## Extraction rule
 

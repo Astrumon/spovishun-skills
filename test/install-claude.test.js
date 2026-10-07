@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, cpSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -280,7 +280,9 @@ test('rule files are rendered into .claude/rules/ preserving subdirectory struct
   assert.ok(existsSync(join(rulesDir, 'common', 'git-workflow.md')));
   assert.ok(existsSync(join(rulesDir, 'common', 'security.md')));
   assert.ok(existsSync(join(rulesDir, 'common', 'testing.md')));
-  assert.ok(existsSync(join(rulesDir, 'common', 'feature-documentation.md')));
+  // feature-documentation is a Notion rule: gated on stack.notion, off in this fixture.
+  assert.ok(!existsSync(join(rulesDir, 'common', 'feature-documentation.md')));
+  assert.ok(!existsSync(join(rulesDir, 'notion')), 'notion/ rules must not install without stack.notion');
   // This fixture is kotlin: false — flag-named rule groups are gated, common/ is not.
   assert.ok(!existsSync(join(rulesDir, 'kotlin')), 'kotlin/ rules must not install without stack.kotlin');
   assert.ok(!existsSync(join(rulesDir, 'kmp')), 'kmp/ rules must not install without stack.kmp');
@@ -301,7 +303,6 @@ test('flag-named rule groups install when their stack flag is active', async () 
   // when this test was written — a rule added without an install path is invisible.
   const kmpRules = [
     'architecture.md',
-    'component-architecture.md',
     'feature-structure.md',
     'localization.md',
     'modularization.md',
@@ -314,6 +315,8 @@ test('flag-named rule groups install when their stack flag is active', async () 
   for (const rule of kmpRules) {
     assert.ok(existsSync(join(rulesDir, 'kmp', rule)), `stack.kmp should install kmp/${rule}`);
   }
+  // component-architecture is opt-in on top of kmp (requires: [components]).
+  assert.ok(!existsSync(join(rulesDir, 'kmp', 'component-architecture.md')), 'components is off in this fixture');
 });
 
 test('rule placeholders are rendered from config (not copied verbatim)', async () => {
@@ -777,4 +780,81 @@ test('a user-authored file under .claude/rules/ is never removed', async () => {
   await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
 
   assert.ok(existsSync(minePath), 'files at ids the plugin never shipped are not candidates for removal');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule frontmatter: `paths:` is written as Claude Code path scoping, `requires:`
+// gates install and is never written.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeScopedRulesPkg() {
+  const root = makeRulesPkg();
+  writeFileSync(
+    join(root, 'rules', 'kmp', 'networking.md'),
+    '---\npaths:\n  - "**/remote/**"\n---\n\n# Networking\n{{PROJECT_NAME}} net.\n',
+    'utf8'
+  );
+  writeFileSync(
+    join(root, 'rules', 'kmp', 'components.md'),
+    '---\nrequires:\n  - components\n---\n\n# Components\n',
+    'utf8'
+  );
+  return root;
+}
+
+test('a path-scoped rule is written with Claude Code paths frontmatter, rendered body below', async () => {
+  const pkg = makeScopedRulesPkg();
+  const consumer = makeConsumerDir();
+  const { lockEntries } = await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+
+  const written = readFileSync(RULE_PATH(consumer, 'kmp/networking'), 'utf8');
+  assert.equal(written, '---\npaths:\n  - "**/remote/**"\n---\n\n# Networking\nFixtureKmpProject net.\n');
+  assert.equal(
+    lockEntries.find((e) => e.id === 'kmp/networking').checksum,
+    sha256(written),
+    'the checksum covers the frontmatter too — it is part of the file on disk'
+  );
+});
+
+test('re-installing path-scoped rules is idempotent and silent', async () => {
+  const pkg = makeScopedRulesPkg();
+  const consumer = makeConsumerDir();
+  await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+  const { warn } = await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+  assert.equal(warn.text(), '', 'a frontmatter-bearing rule must not read back as a local edit');
+});
+
+test('requires: an opt-in rule installs with its flag and is removed when the flag goes off', async () => {
+  const pkg = makeScopedRulesPkg();
+  const consumer = makeConsumerDir();
+
+  await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+  assert.ok(!existsSync(RULE_PATH(consumer, 'kmp/components')), 'kmp alone does not select it');
+
+  await installRulesFixture(consumer, pkg, 'install-config-kmp-components.yaml');
+  const written = readFileSync(RULE_PATH(consumer, 'kmp/components'), 'utf8');
+  assert.equal(written, '# Components\n', 'requires: is package-side and never written');
+
+  const { lockEntries, warn } = await installRulesFixture(consumer, pkg, 'install-config-kmp.yaml');
+  assert.ok(!existsSync(RULE_PATH(consumer, 'kmp/components')), 'de-selected opt-in rule removed');
+  assert.ok(!lockEntries.some((e) => e.id === 'kmp/components'));
+  assert.match(warn.text(), /Removed stale rule file/);
+});
+
+test('a rule moved to another group is removed from its old id on the next install', async () => {
+  // rules/common/feature-documentation.md → rules/notion/ in 1.32.0: the old id
+  // is no longer shipped, so only its lock entry can prove the file is ours.
+  const pkg = makeRulesPkg();
+  writeFileSync(join(pkg, 'rules', 'common', 'docs.md'), '# Docs\n', 'utf8');
+  const consumer = makeConsumerDir();
+  await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+  assert.ok(existsSync(RULE_PATH(consumer, 'common/docs')));
+
+  mkdirSync(join(pkg, 'rules', 'notion'), { recursive: true });
+  renameSync(join(pkg, 'rules', 'common', 'docs.md'), join(pkg, 'rules', 'notion', 'docs.md'));
+  const { lockEntries } = await installRulesFixture(consumer, pkg, 'install-config-no-notion.yaml');
+
+  assert.ok(!existsSync(RULE_PATH(consumer, 'common/docs')), 'old id removed');
+  assert.ok(!existsSync(RULE_PATH(consumer, 'notion/docs')), 'new id gated on stack.notion');
+  assert.ok(!lockEntries.some((e) => e.id === 'common/docs'));
 });

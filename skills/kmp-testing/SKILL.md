@@ -5,7 +5,8 @@ its two-schedulers trap, semantics-first selectors, choosing the smallest shape 
 behaviour, and keeping clocks and animations deterministic.
 
 Source-set placement, the no-MockK-in-`commonTest` rule, the fake-over-mock shape, MVI ViewModel and
-effect assertions, and `MockEngine` are normative — they live in `.claude/rules/kmp/testing.md`. This
+effect assertions are normative — they live in `.claude/rules/kmp/testing.md`; `MockEngine` testing
+lives in `.claude/rules/kmp/networking.md` (path-scoped to network code). This
 skill implements against that rule and does not restate it.
 
 ## Supersedes `unit-testing-kotlin` in KMP projects

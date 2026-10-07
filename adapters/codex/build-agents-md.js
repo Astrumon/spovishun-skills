@@ -1,5 +1,6 @@
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
+import { formatRule } from '../../lib/rules-loader.js';
 
 const HEADING_DEMOTE = 2;
 const SUPPORTING_DEMOTE = 3;
@@ -14,7 +15,7 @@ const SUPPORTING_DEMOTE = 3;
  *
  * @param {object} opts
  * @param {Array}   opts.artifacts     — stack-filtered artifacts (skills, agents, templates)
- * @param {Array}   [opts.rules]       — rule files: { id, body }; sorted by id
+ * @param {Array}   [opts.rules]       — rule files: { id, body, paths }; sorted by id
  * @param {object}  opts.config        — validated consumer config
  * @param {Map}     opts.configMap     — placeholder map from buildPlaceholderMap()
  * @param {string}  opts.pluginVersion — version string for the header
@@ -61,8 +62,10 @@ export function buildAgentsMd({ artifacts, rules = [], config, configMap, plugin
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
 
+// AGENTS.md has no path scoping: formatRule turns a rule's paths: into an
+// 'Applies to' line so the scope is at least stated.
 function renderRule(rule, configMap) {
-  const rendered = renderTemplate(rule.body, { configMap });
+  const rendered = formatRule(rule, renderTemplate(rule.body, { configMap }), 'codex');
   const demoted = demoteHeadings(rendered, HEADING_DEMOTE);
   return [`### ${rule.id}`, '', demoted.trimEnd(), ''];
 }

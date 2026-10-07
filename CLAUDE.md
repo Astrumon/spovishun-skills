@@ -90,13 +90,15 @@ bin/  →  adapters/registry.js  →  adapters/<target>/  →  lib/  →  read s
 
 **Windsurf provenance manifest (`lib/windsurf-manifest.js`).** `.windsurf/rules/` is flat, so the adapter flattens three id namespaces (`skill`, `rule`, supporting file) into one filename space, and `--` does double duty as path separator and id character. That mapping is **lossy and not injective** — the rule `common/style` and a skill named `common--style` produce the same filename (the adapter warns; last write wins). The reader must therefore never invert it by parsing: `install` emits `.windsurf/rules/.spovishun-manifest.json` mapping `filename → {kind, id, role: 'body'|'support', part?}` while writing, and `loadWindsurfFiles` reads that. Leading dot on purpose — Windsurf reads only `*.md` and every rule walker here skips dot-entries. Supporting files are recorded with `role: 'support'` and deliberately excluded from the ownership map: they carry no lock entry on any target and follow their body, exactly as in `installArtifact`. Installs predating the manifest fall back to filename parsing, disambiguated by the lockfile (`foo-part-1.md` is chunk 1 of `foo` unless `foo-part-1` is itself a locked id); drop that branch one minor release after 1.21.0.
 
-**Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion | docker | kmp`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`. The flag list lives in three places that must stay in sync: `STACK_FLAGS` in `lib/stack-filter.js`, the `requires` enum in `schema/manifest.schema.json`, and `stack` properties in `schema/config.schema.json`.
+**Stack filtering.** Manifest's `requires:` is an array of stack flags (`kotlin | postgres | telegram | notion | docker | kmp | components`). A skill installs iff all `requires:` ⊆ active flags in `spovishun-skills.config.yaml`. The flag list lives in three places that must stay in sync: `STACK_FLAGS` in `lib/stack-filter.js`, the `requires` enum in `schema/manifest.schema.json`, and `stack` properties in `schema/config.schema.json`.
 
 **Rules stack gating (directory = flag).** `rules/` files carry no manifest, so the top-level group name *is* the gate: `rules/<group>/` installs only when `<group>` is an active stack flag (`rules/kotlin/`, `rules/kmp/`). A group whose name is not a stack flag (`rules/common/`) always installs. Implemented in `lib/rules-loader.js`: `collectAllRules(pkgRoot, stackFlags)` walks `rules/` once and flags each rule `active`; `collectRules` is the active half and is what the adapters consume. The inactive half is not waste — `install` needs those bodies to prove a de-selected file on disk is one of ours before deleting it, which is why the package is never walked or rendered twice. Fails closed: no flags passed ⇒ only ungated groups. Turning a flag off removes the rules the plugin owns on the next `install`/`sync` (see Rules ownership below).
 
+**Rule frontmatter (`paths` / `requires`).** A rule may open with a YAML block holding exactly two keys, parsed by `parseRuleFrontmatter` in `lib/rules-loader.js` against a closed key set (a typo such as `path:` throws — it would otherwise ship an unscoped, always-loaded rule). `requires:` is package-side gating on top of the directory gate (`kmp/component-architecture` needs `components` as well as `kmp`) and is never written to the consumer. `paths:` is the scope, translated per target by `formatRule`: Claude Code path-scoped frontmatter (`paths:`) on claude, `trigger: glob` + `globs:` on windsurf, an `_Applies to: …_` line in codex `AGENTS.md`. Path-scope a rule that only matters next to certain files (build files, network code); use a flag when the concern is a project-level choice that globs cannot see. The lock checksum covers the formatted text — it is the file on disk — so a frontmatter-bearing rule re-installs silently. `components` is the one flag no rules group is named after: it exists only to gate single rules via `requires:`, and `config.schema.json` rejects it without `kmp`.
+
 **Lockfile.** `spovishun-skills.lock.yaml` in the consumer repo. Pins exact versions and checksums per artifact. Re-applied by `sync`, diffed by `update`. Kinds: `skill`, `agent`, `template`, `rule`. Rule entries always carry `version: 0.0.0` — a sentinel meaning "unversioned data artifact; the checksum is the identity". Deliberately not the plugin version: that would flip every rule to `AUTO_APPLY` on each release even when its body is byte-identical. `update` never touches `rule:` entries (rules have no manifest, so they never appear in the upstream artifact map); they are regenerated wholesale by `install`/`sync`.
 
-**Rules ownership.** Rules go through the same ownership model as skills and agents (`lib/update-classifier.js`), selected via `ownership: 'checksum'` rather than `'marker'`: they carry no YAML frontmatter, so the `x-spovishun` provenance marker does not apply and ownership is decided by **checksum equality alone**. `ADOPT` and `DISOWNED` are unreachable under that model — in particular a locked rule that was edited locally stays `LOCAL_ONLY` (entry kept, warned) and must never become `DISOWNED` (entry dropped). A rule whose on-disk body matches either the locked checksum or the current render is ours — `install` rewrites it and, when its group's flag goes off, deletes it. Anything else is owner-authored: `install` skips it with a warning (`--force` overwrites a *locked* edit; a file at an id we never locked is sacred even then), and the stale-rule pass leaves it on disk. Consumers upgrading from ≤ 1.15.0 have rules on disk and no `rule:` lock entries — those are adopted silently on the first `install`, because the on-disk body already equals the render.
+**Rules ownership.** Rules go through the same ownership model as skills and agents (`lib/update-classifier.js`), selected via `ownership: 'checksum'` rather than `'marker'`: their only frontmatter is a `paths:` scope, never the `x-spovishun` provenance marker, so the marker does not apply and ownership is decided by **checksum equality alone**. `ADOPT` and `DISOWNED` are unreachable under that model — in particular a locked rule that was edited locally stays `LOCAL_ONLY` (entry kept, warned) and must never become `DISOWNED` (entry dropped). A rule whose on-disk body matches either the locked checksum or the current render is ours — `install` rewrites it and, when its group's flag goes off, deletes it. Anything else is owner-authored: `install` skips it with a warning (`--force` overwrites a *locked* edit; a file at an id we never locked is sacred even then), and the stale-rule pass leaves it on disk. Consumers upgrading from ≤ 1.15.0 have rules on disk and no `rule:` lock entries — those are adopted silently on the first `install`, because the on-disk body already equals the render.
 
 **One classify-and-act path (`lib/install-planner.js`).** `install` classifies every artifact and every rule, on every target, through `planInstall` + the `INSTALL_HANDLERS` table, mirroring `ACTION_HANDLERS` in `bin/update.js`. It is **pure** — it decides, the adapter writes — and that split is deliberate: all targets need the same decisions but no two share a layout (claude writes `{id}/BODY.md` folders, windsurf chunked `-part-N.md` files). Sharing the decision while keeping the writes separate is what stops a second copy of the switch from appearing per adapter, which is exactly how windsurf ended up with no ownership model at all until #162. The loops differ only in where they write and in the hint a skipped local edit carries — rules say `install --force` because `update` genuinely cannot merge them (it skips every `rule:` lock entry). Warning strings are asserted by `test/install-claude.test.js` and `test/install-windsurf.test.js`; treat them as output contract.
 
@@ -132,6 +134,7 @@ stack:
   telegram: true
   notion: true
   kmp: false        # Kotlin/Compose Multiplatform; requires kotlin: true
+  components: false # opt-in component-architecture rule; requires kmp: true
 notion:
   token_env: "NOTION_TOKEN"
   database_id: "..."
@@ -178,21 +181,21 @@ This repo has no `.claude/rules/` directory of its own — it would only appear 
 
 The `rules/` directory at the repo root (NOT `.claude/rules/`) is **data**: canonical `.md` files that ship as part of the package and get installed into a consumer's `.claude/rules/` by the Claude adapter. They are configurable (support `{{KEY}}` placeholders) but not executed here.
 
-Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory name (see Key Patterns): put a rule in `rules/<stack-flag>/` to gate it, or in `rules/common/` to ship it to everyone.
+Rules have **no `manifest.yaml`** — they are flat data. Gating is by directory name (see Key Patterns): put a rule in `rules/<stack-flag>/` to gate it, or in `rules/common/` to ship it to everyone. A single rule can narrow that with `requires:` frontmatter, or be scoped to files with `paths:` (see *Rule frontmatter*).
 
 Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it the adapter splits the file into `-part-N.md` fragments that Windsurf then reads as independent rules. Enforced by `every shipped rule fits in one windsurf file` in `test/rules-stack-gating.test.js`. Keep rules normative and prose-only; long-form code belongs in a skill's `references/` (`kotlin/gradle-build.md` → `gradle-build-auditor`, `kmp/architecture.md` → `kmp-multiplatform-specialist`).
 
 | Rule | Source file | Gate | Status |
 |---|---|---|---|
 | Design principles | `rules/common/design-principles.md` | always | shipped |
-| Feature documentation | `rules/common/feature-documentation.md` | always | shipped |
+| Feature documentation (Notion Features pages) | `rules/notion/feature-documentation.md` | `stack.notion` | shipped |
 | Git workflow | `rules/common/git-workflow.md` | always | shipped |
 | Security | `rules/common/security.md` | always | shipped |
 | Testing | `rules/common/testing.md` | always | shipped |
 | Kotlin style | `rules/kotlin/kotlin-style.md` | `stack.kotlin` | shipped |
-| Gradle build (10 practices; deep audit via `gradle-build-auditor`) | `rules/kotlin/gradle-build.md` | `stack.kotlin` | shipped |
+| Gradle build (10 practices; deep audit via `gradle-build-auditor`) | `rules/kotlin/gradle-build.md` | `stack.kotlin` + `paths:` build files | shipped |
 | KMP architecture (layers, MVI contract, Compose stability; Kotlin-free — code lives in `kmp-multiplatform-specialist/references/mvi-and-stability.md`) | `rules/kmp/architecture.md` | `stack.kmp` | shipped |
-| KMP networking (repository as error boundary, one `expectSuccess` model; code in `ktor-client-kmp`) | `rules/kmp/networking.md` | `stack.kmp` | shipped |
+| KMP networking (repository as error boundary, one `expectSuccess` model; code in `ktor-client-kmp`) | `rules/kmp/networking.md` | `stack.kmp` + `paths:` network code | shipped |
 | KMP modularization (visibility ladder, `internal` impls behind `public` interfaces) | `rules/kmp/modularization.md` | `stack.kmp` | shipped |
 | KMP persistence (storage selection, schema history, migrations; code in `kmp-persistence`) | `rules/kmp/persistence.md` | `stack.kmp` | shipped |
 | KMP feature structure (modules, screen package) | `rules/kmp/feature-structure.md` | `stack.kmp` | shipped |
@@ -200,7 +203,7 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 | KMP design system | `rules/kmp/uikit.md` | `stack.kmp` | shipped |
 | KMP localization | `rules/kmp/localization.md` | `stack.kmp` | shipped |
 | KMP testing (supersedes the common stack section) | `rules/kmp/testing.md` | `stack.kmp` | shipped |
-| KMP component architecture (screen-level escalation: two or more independent state regions become components; effects stay on the ViewModel's channel. Code in `kmp-multiplatform-specialist/references/component-architecture.md`) | `rules/kmp/component-architecture.md` | `stack.kmp` | shipped |
+| KMP component architecture (screen-level escalation: two or more independent state regions become components; effects stay on the ViewModel's channel. Code in `kmp-multiplatform-specialist/references/component-architecture.md`) | `rules/kmp/component-architecture.md` | `stack.kmp` + `stack.components` | shipped |
 
 ## When to use scripts vs CLI
 
@@ -217,7 +220,7 @@ Every rule MUST stay under the Windsurf `CHAR_LIMIT` (6 000 chars) — past it t
 - **Canonical body** — single source file for a skill/agent/hook (`SKILL.md`, `AGENT.md`, executable script).
 - **Adapter** — code in `adapters/<target>/` that translates canonical bodies into target-specific files.
 - **Target** — supported AI assistant: `claude` | `codex` | `windsurf` | `cursor`.
-- **Stack flag** — boolean in consumer config (`stack.kotlin`, `stack.notion`, `stack.kmp`, …) that gates which `requires:`-tagged skills install, and which `rules/<group>/` directories ship.
+- **Stack flag** — boolean in consumer config (`stack.kotlin`, `stack.notion`, `stack.kmp`, …) that gates which `requires:`-tagged skills install, which `rules/<group>/` directories ship, and which single rules carrying `requires:` frontmatter ship.
 - **Placeholder** — `{{KEY}}` token in canonical bodies, resolved per `placeholders:` array in manifest.
 - **Lockfile** — `spovishun-skills.lock.yaml`, committed in consumer repo, pins installed versions for reproducibility.
 

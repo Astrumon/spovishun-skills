@@ -1,8 +1,14 @@
+---
+requires:
+  - components
+---
+
 # KMP Component Architecture Rules
 
 The escalation step for the **screen**. MVI stays as `architecture.md` defines it: the ViewModel is
 still the screen's only entry point, still the only effect emitter, still what `koinViewModel()`
-resolves. A component subdivides that ViewModel; it never replaces it.
+resolves. A component subdivides that ViewModel; it never replaces it. Opt-in: installed only with
+`stack.components: true`.
 
 ## Escalation
 

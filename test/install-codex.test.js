@@ -379,3 +379,28 @@ test('an install that would discard local edits to AGENTS.md declares it', async
   assert.match(text, /Edit the canonical bodies under skills\/ or rules\/ instead/);
   assert.doesNotMatch(readFileSync(outPath, 'utf8'), /My own section/, 'the edit is in fact discarded');
 });
+
+test('a path-scoped rule is inlined without frontmatter, its scope stated as an Applies-to line', () => {
+  const config = {
+    project: { name: 'TestProj', language: 'uk' },
+    stack: { kotlin: true },
+    git: { branch_prefix: 'feature/' },
+  };
+  const rules = [{ id: 'kotlin/gradle-build', body: '# Gradle Build Rules\n\nUse KTS.\n', paths: ['**/*.gradle.kts'] }];
+  const out = buildAgentsMd({ artifacts: [], rules, config, configMap: buildPlaceholderMap(config), pluginVersion: '1.2.3' });
+
+  assert.match(out, /### kotlin\/gradle-build\n\n_Applies to: `\*\*\/\*\.gradle\.kts`_\n\n### Gradle Build Rules/);
+  assert.doesNotMatch(out, /^paths:/m);
+});
+
+test('shipped path-scoped rules reach AGENTS.md without their frontmatter', async () => {
+  const consumer = makeConsumerDir();
+  copyConfig(consumer, 'install-config-kmp.yaml');
+  const config = loadConfig(join(consumer, 'spovishun-skills.config.yaml'));
+  await installCodex({ consumerCwd: consumer, pkgRoot: PKG_ROOT, config, artifacts: [], pluginVersion: PLUGIN_VERSION, warn: { write: () => {} } });
+
+  const out = readFileSync(join(consumer, AGENTS_MD_FILENAME), 'utf8');
+  assert.match(out, /_Applies to: `\*\*\/remote\/\*\*`/, 'networking scope stated');
+  assert.doesNotMatch(out, /^paths:$/m, 'no raw frontmatter leaks into AGENTS.md');
+  assert.doesNotMatch(out, /^requires:$/m);
+});

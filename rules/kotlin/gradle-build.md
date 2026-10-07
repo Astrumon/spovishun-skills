@@ -1,3 +1,13 @@
+---
+paths:
+  - "**/*.gradle.kts"
+  - "**/libs.versions.toml"
+  - "**/gradle.properties"
+  - "**/gradle-wrapper.properties"
+  - "**/buildSrc/**"
+  - "**/build-logic/**"
+---
+
 # Gradle Build Rules
 
 Applies whenever a build file is written or edited: `settings.gradle.kts`, any module

@@ -19,12 +19,16 @@
 - Domain layer (services): ALWAYS unit tested — mock repositories
 - Presentation layer (controllers): ALWAYS unit tested — mock services
 - Data layer (repositories): integration tested against real or in-memory DB, not unit mocked
-- NEVER unit test: DI modules, framework entry points, or database factory classes
+- DI modules: one graph check (Koin `verify()` / `checkModules`, Spring context test) proves the wiring;
+  it is a wiring test, not a unit test, and the module needs nothing more. Behaviour is tested on
+  the classes it wires
+- Framework entry points and database factory classes get no unit tests
 
 ## Coverage
-- Minimum 80% line coverage for domain and presentation layers
-- Every public function in a service or controller needs at least one test
+- Every public function in a service or controller has at least one test
 - Cover both success and failure paths
+- When the project measures coverage (Kover, JaCoCo), keep domain and presentation at ≥ 80% line
+  coverage. Without a configured tool there is no numeric target — the two rules above are the bar
 
 ## Naming
 - Pattern: `fun should_doX_when_conditionY()`

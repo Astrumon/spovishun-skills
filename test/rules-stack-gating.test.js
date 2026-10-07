@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { collectRules, collectAllRules } from '../lib/rules-loader.js';
+import { collectRules, collectAllRules, parseRuleFrontmatter, formatRule } from '../lib/rules-loader.js';
 import { STACK_FLAGS } from '../lib/stack-filter.js';
 import { CHAR_LIMIT } from '../adapters/windsurf/index.js';
 
@@ -104,14 +104,18 @@ test('every shipped rule fits in one windsurf file', () => {
   // fragments that are then read as independent rules, so a reader never sees
   // the rule whole. Rules stay terse on purpose — long-form code belongs in a
   // skill's references/, not in a rule.
+  //
+  // Measured on the windsurf-formatted text: a path-scoped rule carries its
+  // `trigger: glob` frontmatter inside the same file and the same budget.
   const allFlags = Object.fromEntries(STACK_FLAGS.map((flag) => [flag, true]));
   const rules = collectRules(PKG_ROOT, allFlags);
   assert.ok(rules.length > 0, 'no rules collected — the gate or the shipped rules/ tree is broken');
   for (const rule of rules) {
+    const text = formatRule(rule, rule.body, 'windsurf');
     assert.ok(
-      rule.body.length <= CHAR_LIMIT,
-      `rules/${rule.id}.md is ${rule.body.length} chars — ` +
-        `${rule.body.length - CHAR_LIMIT} over the ${CHAR_LIMIT} windsurf split threshold`
+      text.length <= CHAR_LIMIT,
+      `rules/${rule.id}.md is ${text.length} chars — ` +
+        `${text.length - CHAR_LIMIT} over the ${CHAR_LIMIT} windsurf split threshold`
     );
   }
 });
@@ -161,4 +165,121 @@ test('collectAllRules returns the same id set regardless of flags', () => {
   const root = makePkgRoot();
   const idsFor = (flags) => collectAllRules(root, flags).map((r) => r.id).sort();
   assert.deepEqual(idsFor({}), idsFor({ kotlin: true, kmp: true }));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule frontmatter — `paths:` (scope, translated per target) and `requires:`
+// (extra stack flags on top of the group gate).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('parseRuleFrontmatter: no frontmatter leaves the body untouched', () => {
+  assert.deepEqual(parseRuleFrontmatter('# Rule\n', 'x'), { body: '# Rule\n', paths: [], requires: [] });
+});
+
+test('parseRuleFrontmatter: paths and requires are read and stripped from the body', () => {
+  const src = '---\npaths:\n  - "**/*.kt"\nrequires:\n  - kmp\n---\n\n# Rule\n';
+  assert.deepEqual(parseRuleFrontmatter(src, 'x'), { body: '# Rule\n', paths: ['**/*.kt'], requires: ['kmp'] });
+});
+
+test('parseRuleFrontmatter: CRLF frontmatter parses', () => {
+  const src = '---\r\npaths:\r\n  - "a/**"\r\n---\r\n\r\n# Rule\r\n';
+  assert.deepEqual(parseRuleFrontmatter(src, 'x').paths, ['a/**']);
+});
+
+test('parseRuleFrontmatter: an unknown key is rejected, naming the rule and the key', () => {
+  assert.throws(
+    () => parseRuleFrontmatter('---\npath:\n  - a\n---\n# R\n', 'kmp/r'),
+    /kmp\/r: unknown frontmatter key "path"/
+  );
+});
+
+test('parseRuleFrontmatter: an unknown stack flag in requires is rejected', () => {
+  assert.throws(() => parseRuleFrontmatter('---\nrequires:\n  - ktor\n---\n# R\n', 'kmp/r'), /unknown stack flag "ktor"/);
+});
+
+test('parseRuleFrontmatter: paths must be a non-empty list of strings', () => {
+  assert.throws(() => parseRuleFrontmatter('---\npaths: "**/*.kt"\n---\n# R\n', 'r'), /non-empty list of strings/);
+  assert.throws(() => parseRuleFrontmatter('---\npaths: []\n---\n# R\n', 'r'), /non-empty list of strings/);
+});
+
+test('requires: gates a single rule on top of its group', () => {
+  const root = makePkgRoot();
+  writeFileSync(join(root, 'rules', 'kmp', 'opt.md'), '---\nrequires:\n  - components\n---\n\n# opt\n', 'utf8');
+  assert.ok(!ids(root, { kmp: true }).includes('kmp/opt'), 'flag off → skipped');
+  assert.ok(ids(root, { kmp: true, components: true }).includes('kmp/opt'), 'both on → collected');
+  assert.ok(!ids(root, { components: true }).includes('kmp/opt'), 'the group gate still applies');
+
+  const opt = collectAllRules(root, {}).find((r) => r.id === 'kmp/opt');
+  assert.equal(opt.active, false);
+  assert.equal(opt.body, '# opt\n', 'inactive rules keep a stripped, renderable body');
+});
+
+test('formatRule: an unscoped rule is identical on every target', () => {
+  for (const target of ['claude', 'windsurf', 'codex']) {
+    assert.equal(formatRule({ paths: [] }, '# R\n', target), '# R\n');
+  }
+});
+
+test("formatRule: paths become each target's own scoping", () => {
+  const rule = { paths: ['**/*.gradle.kts', 'build-logic/**'] };
+  assert.equal(
+    formatRule(rule, '# R\n', 'claude'),
+    '---\npaths:\n  - "**/*.gradle.kts"\n  - "build-logic/**"\n---\n\n# R\n'
+  );
+  assert.equal(
+    formatRule(rule, '# R\n', 'windsurf'),
+    '---\ntrigger: glob\nglobs: **/*.gradle.kts, build-logic/**\n---\n\n# R\n'
+  );
+  assert.equal(formatRule(rule, '# R\n', 'codex'), '_Applies to: `**/*.gradle.kts`, `build-logic/**`_\n\n# R\n');
+  assert.throws(() => formatRule(rule, '# R\n', 'cursor'), /unknown target/);
+});
+
+test('formatRule: the claude frontmatter round-trips through the parser', () => {
+  const rule = { paths: ['**/remote/**', '**/*Api.kt'] };
+  const parsed = parseRuleFrontmatter(formatRule(rule, '# R\n', 'claude'), 'x');
+  assert.deepEqual(parsed.paths, rule.paths);
+  assert.equal(parsed.body, '# R\n');
+});
+
+// Shipped rules: every frontmatter parses (collectAllRules throws otherwise),
+// and the installed set per representative stack is pinned.
+
+test('every shipped rule frontmatter parses', () => {
+  assert.doesNotThrow(() => collectAllRules(PKG_ROOT, {}));
+});
+
+test('shipped path-scoped and opt-in rules carry their frontmatter', () => {
+  const all = new Map(collectAllRules(PKG_ROOT, {}).map((r) => [r.id, r]));
+  assert.ok(all.get('kmp/networking').paths.includes('**/remote/**'));
+  assert.ok(all.get('kotlin/gradle-build').paths.includes('**/*.gradle.kts'));
+  assert.ok(all.get('kotlin/gradle-build').paths.includes('**/libs.versions.toml'));
+  assert.deepEqual(all.get('kmp/component-architecture').requires, ['components']);
+});
+
+test('installed rule set per representative stack', () => {
+  const common = ['common/design-principles', 'common/git-workflow', 'common/security', 'common/testing'];
+  const kotlin = ['kotlin/gradle-build', 'kotlin/kotlin-style'];
+  const kmp = [
+    'kmp/architecture', 'kmp/feature-structure', 'kmp/localization', 'kmp/modularization',
+    'kmp/navigation', 'kmp/networking', 'kmp/persistence', 'kmp/testing', 'kmp/uikit',
+  ];
+  const sorted = (xs) => [...xs].sort((a, b) => a.localeCompare(b));
+  const cases = [
+    [{}, common],
+    [{ kotlin: true }, [...common, ...kotlin]],
+    [{ kotlin: true, kmp: true }, [...common, ...kotlin, ...kmp]],
+    [{ kotlin: true, kmp: true, components: true }, [...common, ...kotlin, ...kmp, 'kmp/component-architecture']],
+    [{ notion: true }, [...common, 'notion/feature-documentation']],
+  ];
+  for (const [flags, expected] of cases) {
+    assert.deepEqual(ids(PKG_ROOT, flags), sorted(expected), `flags ${JSON.stringify(flags)}`);
+  }
+});
+
+test('no shipped rule pins a Claude model id', () => {
+  // A hardcoded model in a co-author line goes stale with the next model
+  // release and is then copied into every consumer commit.
+  for (const rule of collectAllRules(PKG_ROOT, {})) {
+    assert.ok(!/Claude (Sonnet|Opus|Haiku) \d/.test(rule.body), `rules/${rule.id}.md pins a model`);
+  }
 });

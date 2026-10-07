@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
-import { collectAllRules, renderRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
+import { collectAllRules, renderRule, formatRule, ruleLockEntry, RULE_LOCK_VERSION } from '../../lib/rules-loader.js';
 import { filterByStack } from '../../lib/stack-filter.js';
 import { renderTemplate } from '../../lib/template-renderer.js';
 import { renderArtifact, manifestPlaceholderKeys } from '../../lib/render-artifact.js';
@@ -240,16 +240,20 @@ function installHooks(pkgRoot, claudeDir, warn) {
  * ones to write, the de-selected ones to serve as reconcileStaleRules'
  * ownership oracle — so the package is never walked or rendered twice.
  *
+ * A rule's `paths:` scope is written as Claude Code path-scoped frontmatter
+ * (formatRule); the render map holds that final text, so checksums and the
+ * stale-rule oracle both compare against exactly what lands on disk.
+ *
  * Rules run through the same ownership model as skills and agents, with one
- * difference: they carry no YAML frontmatter, so there is no `x-spovishun`
- * provenance marker to consult. Ownership is decided by CHECKSUM EQUALITY
+ * difference: their frontmatter (when present) carries only `paths:`, never an
+ * `x-spovishun` provenance marker. Ownership is decided by CHECKSUM EQUALITY
  * ALONE — see the OWNERSHIP MODELS block in lib/update-classifier.js.
  *
  * @returns {Array<{kind, id, version, checksum}>} lock entries for the rules we own
  */
 function installRules({ pkgRoot, consumerCwd, claudeDir, configMap, stackFlags, lockEntryMap, installed, force, warn }) {
   const allRules = collectAllRules(pkgRoot, stackFlags);
-  const renders = new Map(allRules.map((rule) => [rule.id, renderRule(rule, configMap)]));
+  const renders = new Map(allRules.map((rule) => [rule.id, formatRule(rule, renderRule(rule, configMap), 'claude')]));
   const entries = [];
 
   for (const rule of allRules.filter((r) => r.active)) {
@@ -257,8 +261,8 @@ function installRules({ pkgRoot, consumerCwd, claudeDir, configMap, stackFlags, 
     const rendered = renders.get(rule.id);
     const freshEntry = ruleLockEntry(rule, rendered);
 
-    // ownership: 'checksum' — rules carry no frontmatter and therefore no
-    // provenance marker, so content alone answers "is this ours?". ADOPT and
+    // ownership: 'checksum' — rules carry no provenance marker, so content
+    // alone answers "is this ours?". ADOPT and
     // DISOWNED are unreachable under that model; see lib/update-classifier.js.
     const { writeBody, lock } = planInstall({
       key,

@@ -1,0 +1,28 @@
+id: comment-hygiene
+version: 1.0.0
+category: universal
+description: Removes AI-generated comment noise from the task diff — banners, step narration, vague TODOs, signature-echo KDoc, emoji, end markers — while keeping comments that carry intent. Never touches code or tooling directives; applies edits only after confirmation, never commits.
+placeholders:
+  - key: GIT_DEVELOP_BRANCH
+    description: Base branch the task diff is computed against (default develop).
+  - key: PROJECT_LANGUAGE
+    description: Language of the report to the user (e.g. "uk", "en"). Comes from project.language in the consumer config.
+provides:
+  - Comment noise removal scoped to the task diff
+  - Comment-only verification of applied edits
+triggers:
+  en:
+    - "comment hygiene"
+    - "clean up comments"
+    - "remove AI comments"
+    - "comment slop"
+  uk:
+    - "почисти коментарі"
+    - "гігієна коментарів"
+    - "прибери зайві коментарі"
+source:
+  repo: miqdadbadjuber/anti-slop
+  ref: 91f12ec67e9de6043cfd93b846404986ba73c3f4
+  files:
+    - path: skills/antislop-code/SKILL.md
+      sha: 3d5efdbcc7b491f2c22578e1b8d1199f98d94b9a

@@ -171,6 +171,48 @@ repository's `LICENSE` file.
 
 ---
 
+## miqdadbadjuber/anti-slop
+
+- **Repository:** https://github.com/miqdadbadjuber/anti-slop
+- **License:** MIT
+- **Adapted at ref:** `91f12ec67e9de6043cfd93b846404986ba73c3f4` (tag `v3.2.20`)
+
+`skills/comment-hygiene` ports only the `antislop-code` rules. The `antislop` core, its contrast MCP
+server, the installer and the `CLAUDE.md` pointer block are not included. The examples were rewritten
+for Kotlin, and the skill adds a tooling-directive allowlist, task-diff scoping and a comment-only check.
+
+| Artifact | Upstream path | Blob SHA |
+|---|---|---|
+| `skills/comment-hygiene` | `skills/antislop-code/SKILL.md` | `3d5efdbcc7b491f2c22578e1b8d1199f98d94b9a` |
+
+### Upstream license (verbatim)
+
+```
+MIT License
+
+Copyright (c) 2026 Miqdad Badjuber (antislop)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## Vendored dependencies
 
 | File | Upstream | License |

@@ -1,7 +1,8 @@
 # Finish Task
 
-Runs the task-completion gate symmetric to the "start new task" flow: a **blocking**
-quality gate (tests → build → lint), then an **advisory** code review on the task diff,
+Runs the task-completion gate symmetric to the "start new task" flow: a **non-blocking**
+comment-hygiene pass, a **blocking** quality gate (tests → build → lint), then an
+**advisory** code review on the task diff,
 before offering push / PR / Notion status update. Closes with a plain-language summary in
 the project's own language. Never auto-merges and never sets a task to `Done` automatically.
 
@@ -54,6 +55,21 @@ Read the build/test/lint commands from the consumer's `CLAUDE.md` **`## Commands
 If `CLAUDE.md` documents no commands, **stop and ask the user** which test, build and lint
 commands to run. Do not infer a build tool from the file tree — a guessed command that
 silently does nothing reports a green gate on unverified code.
+
+### Step 2b: Comment hygiene (non-blocking)
+
+If the `comment-hygiene` skill is available (same presence check as Step 5b), invoke it scoped
+to the task diff `{{GIT_DEVELOP_BRANCH}}...HEAD`. If it is not available, skip this step
+silently.
+
+It proposes comment edits as a diff and applies them only after the user confirms. Nothing
+here stops the flow: a declined proposal, an empty one or a file it restored all continue to
+Step 3.
+
+It runs **before** the gate on purpose: Step 3 runs on the working tree, so a removal that
+leaves a blank line ktlint rejects is caught there. Applied edits stay **uncommitted** — they
+are outside the committed diff Step 5 reviews and outside the PR — so right after they are
+applied, offer `/commit` to land them. Never commit them yourself.
 
 ### Step 3: Blocking gate (tests → build → lint), in order
 
@@ -213,7 +229,8 @@ English names given here for reference):
    when Step 5 was skipped, and say that it covered the committed diff only when Step 1d
    found a dirty tree and the user continued anyway.
 4. **What is left for you to do** — concrete next actions: fix X, push, open a PR,
-   acknowledge a Critical finding, set Notion `Done` after the merge.
+   acknowledge a Critical finding, set Notion `Done` after the merge. If Step 2b applied
+   comment edits that are still uncommitted, say so here.
 
 ## Review boundaries
 
@@ -240,6 +257,8 @@ Who writes what, so nothing is reviewed twice:
 - Do **not** skip Step 7 when the blocking gate fails — that is exactly when the summary is
   most useful.
 - Do **not** push, open a PR, merge, or set Notion `Status = Done` without the user asking.
+- Do **not** commit the Step 2b comment edits, and do **not** let that pass change code — it
+  is comments-only, and it is not a review axis.
 
 ## Example run
 
@@ -264,6 +283,7 @@ Expected outcome:
 
 ## Related Skills
 
+- `comment-hygiene` — the comment pass invoked in Step 2b.
 - `code-reviewer` — the review pass invoked in Step 5c; owns the report format.
 - `commit` — committing the work before the gate runs.
 - `commit-sections` — slicing a large finished change into ordered commits before the gate

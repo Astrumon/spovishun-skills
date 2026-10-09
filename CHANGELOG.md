@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.33.0] — 2026-10-09
+
+### Added
+
+- **`skills/comment-hygiene`** — removes AI-generated noise from comments added or changed in the
+  task diff (`git diff <develop>...HEAD`): banners, `// Step N:` narration, empty labels, vague TODOs,
+  KDoc that echoes the signature, emoji, `} // end if`. Comments that carry business rules,
+  workarounds, contracts or concurrency notes stay. Tooling directives and legal text are never
+  touched: `// region`, `// language=`, `//noinspection`, `@formatter`, ktlint and detekt
+  suppressions, `@Suppress` justifications, licence headers and DB migrations. Edits are proposed as
+  a diff, applied only after confirmation and never committed. After applying, a comment-only check
+  restores any file whose code changed. Adapted from the `antislop-code` rules of
+  [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) v3.2.20 (MIT; see
+  `NOTICE.md`). The anti-slop core, MCP server and installer are not included.
+
+### Changed
+
+- **`finish-task` 1.3.0** runs `comment-hygiene` as a non-blocking Step 2b before the blocking gate,
+  so a blank line left by a removed comment still goes through ktlint. Applied edits stay
+  uncommitted. The skill offers `/commit` for them, and the summary flags them if they are still
+  uncommitted.
+
 ## [1.32.0] — 2026-10-07
 
 Every rule this package installs was loaded into the consumer's context on every turn, and the only

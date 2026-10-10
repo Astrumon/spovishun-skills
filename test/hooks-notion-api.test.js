@@ -35,7 +35,9 @@ function fakeHttps(scenario) {
             const res = new EventEmitter();
             res.statusCode = scenario.status ?? 200;
             onResponse(res);
-            res.emit('data', scenario.raw ?? JSON.stringify(scenario.body ?? {}));
+            for (const chunk of scenario.chunks ?? [scenario.raw ?? JSON.stringify(scenario.body ?? {})]) {
+              res.emit('data', chunk);
+            }
             res.emit('end');
           });
         };
@@ -56,6 +58,15 @@ test('a successful response resolves as parsed JSON', async () => {
   const { httpsImpl } = fakeHttps({ body: { object: 'list', results: [1, 2] } });
   const data = await hook.notionRequest('tok', 'GET', '/v1/pages/x', null, { httpsImpl });
   assert.deepEqual(data, { object: 'list', results: [1, 2] });
+});
+
+test('a multibyte character split across two chunks survives decoding', async () => {
+  const hook = hookWith();
+  const bytes = Buffer.from(JSON.stringify({ summary: '🤖 prompt', title: 'Офлайн' }));
+  const splitInsideEmoji = bytes.indexOf(Buffer.from('🤖')) + 2;
+  const { httpsImpl } = fakeHttps({ chunks: [bytes.subarray(0, splitInsideEmoji), bytes.subarray(splitInsideEmoji)] });
+  const data = await hook.notionRequest('tok', 'GET', '/v1/pages/x', null, { httpsImpl });
+  assert.deepEqual(data, { summary: '🤖 prompt', title: 'Офлайн' });
 });
 
 test('auth headers and Content-Length are set from the request itself', async () => {

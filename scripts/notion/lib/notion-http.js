@@ -1,6 +1,7 @@
 'use strict';
 
 const https = require('https');
+const { StringDecoder } = require('string_decoder');
 const { NOTION_VERSION } = require('./constants');
 
 // Prevents a hung socket from blocking a CLI script forever.
@@ -32,9 +33,13 @@ function request(token, method, apiPath, body, opts = {}) {
     };
 
     const req = httpsImpl.request(options, (res) => {
+      // A socket cuts the body at arbitrary byte offsets; `+=` decodes each chunk
+      // alone and turns a character split across two of them into U+FFFD.
+      const decoder = new StringDecoder('utf8');
       let data = '';
-      res.on('data', chunk => data += chunk);
+      res.on('data', chunk => { data += decoder.write(chunk); });
       res.on('end', () => {
+        data += decoder.end();
         try {
           resolve(JSON.parse(data));
         } catch {

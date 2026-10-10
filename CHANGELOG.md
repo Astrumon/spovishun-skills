@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.1] — 2026-10-10
+
+### Fixed
+
+- **Notion responses decode correctly across chunk boundaries.** `scripts/notion/lib/notion-http.js`
+  and `hooks/notion-api.js` decoded each socket chunk separately. A multibyte character split
+  between two chunks therefore came back as `�`. A legacy task whose `🤖 prompt` toggle landed on
+  such a boundary was read with an empty `legacyPrompt`, and its prompt was parsed as DoD items.
+  Cyrillic task text was exposed the same way. Both transports now decode through a `StringDecoder`.
+
 ## [1.34.0] — 2026-10-10
 
 Tasks used to be written twice: a body plus an English prompt in a `🤖 prompt` toggle, and the

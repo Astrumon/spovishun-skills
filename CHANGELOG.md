@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.0] — 2026-10-10
+
+Tasks used to be written twice: a body plus an English prompt in a `🤖 prompt` toggle, and the
+copies drifted apart. Task format v2 makes the body the only spec, for people and agents alike.
+
+### Added
+
+- **`templates/task-page`** — the one canonical description of task format v2. It defines the
+  properties and the section order (🎯 Навіщо → ✅ DoD → 🌿 Гілка → 📍 Контекст → 📋 Кроки → 🧭 Межі,
+  then 🕳 / 🚫 when needed). Every step is marked `[agent]` / `[manual]`, and step 0 checks the
+  task's references against the code. DoD items are checkboxes with a verification command, with
+  EARS for behaviour. Boundaries come in three tiers. There is no stored English prompt.
+- **`get-task.js --format=json` → `sections`** (`scripts/notion/lib/task-sections.js`). It splits
+  the body by heading emoji, so it reads v2 and legacy tasks in any language. A legacy `🤖 prompt`
+  toggle (or `## 🤖` heading) comes back as `legacyPrompt`. The JSON also carries `type`,
+  `appetite` and `repo`, which are null when the board lacks them.
+- **`get-board.js --next-number`** prints `{"next": N}`: the maximum task number over the 25 newest
+  tasks, plus 1. Both `feature/<prefix>-N:` and bare `<prefix>-N:` titles count. It exits 1
+  instead of guessing when no title carries a number.
+- **`get-board.js --properties`** lists the options of `Type` / `Appetite` / `Repo` when the board
+  has those properties.
+- **`create-task.js`** accepts `type`, `appetite` and `repo`. It reads the board schema only when
+  one is passed. A property the board lacks is skipped with a note, and a value outside the
+  board's options is an error. No option list is hardcoded.
+
+### Changed
+
+- **New tasks default to `Status = To do`.** The default was `Not started`. It is now a single
+  constant, `DEFAULT_TASK_STATUS` in `hooks/notion-constants.js`. `Stage = Backlog` already marks
+  ungroomed work, and the v2 schema retires `Not started`. The `get-board.js` default still lists
+  the whole to_do group, so legacy `Not started` tasks stay visible. No status option is removed.
+- **`newtask` 1.2.0, `task-decomposer` 1.2.0, `notion-spovishun-task-manager` 1.3.0,
+  `notion-task-board-manager` 1.1.0** write task bodies per the template and carry no copy of
+  it. They number through `--next-number` and ask for Type / Appetite / Repo only when the board
+  has them.
+- **`notion-task-to-code` 1.3.0** builds the prompt from a v2 body. `[agent]` steps become the
+  work and `[manual]` steps are listed as "do not perform". Boundaries and DoD commands are copied
+  verbatim. Legacy tasks still use their prompt toggle.
+- **`task-to-code-prompt` template 1.1.0** gains Human steps and Boundaries sections.
+
 ## [1.33.0] — 2026-10-09
 
 ### Added

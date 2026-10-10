@@ -8,16 +8,23 @@ const { queryByPriorityTier, statusClause, TODO_GROUP_STATUSES } = require('./li
 const { richText } = require('./lib/format-task');
 const { deriveBranchFromName } = require('./lib/extract-branch');
 const { resolveRelationIds, extractRelationIds } = require('./lib/resolve-relations');
+const { nextTaskNumber } = require('./lib/next-task-number');
+const { optionalSelectOptions } = require('./lib/task-properties');
 
 const VALID_STATUSES = ['Not started', 'To do', 'In progress', 'Done'];
 const VALID_FORMATS = ['json', 'md', 'text'];
 // Board v2 (Scrum) Stage select. Boards without the property (Board v1) yield
 // stage = null and the md/text renderers drop the column entirely.
 const VALID_STAGES = ['Backlog', 'Sprint', 'Archive'];
+// How many of the newest tasks --next-number scans. Wider than --latest's 10 so
+// a burst of out-of-sequence titles cannot hide the real maximum.
+const NEXT_NUMBER_WINDOW = 25;
 
 function parseArgs(argv) {
   let priorityTier = false;
   let latest = false;
+  let nextNumber = false;
+  let properties = false;
   // null = no --status given: the default filter is the whole to_do group, not
   // one option of it. Kept as a sentinel rather than a second `statusExplicit`
   // flag — one value cannot desync from itself.
@@ -28,6 +35,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--priority-tier') { priorityTier = true; }
     else if (argv[i] === '--latest') { latest = true; }
+    else if (argv[i] === '--next-number') { nextNumber = true; }
+    else if (argv[i] === '--properties') { properties = true; }
     else if (argv[i] === '--status' && argv[i + 1]) { status = argv[++i]; }
     else if (argv[i].startsWith('--format=')) { format = argv[i].slice(9); }
     else if (argv[i] === '--format' && argv[i + 1]) { format = argv[++i]; }
@@ -36,7 +45,7 @@ function parseArgs(argv) {
     else if (argv[i].startsWith('--stage=')) { stage = argv[i].slice(8); }
     else if (argv[i] === '--stage' && argv[i + 1]) { stage = argv[++i]; }
   }
-  return { priorityTier, latest, status, format, epicFilter, stage };
+  return { priorityTier, latest, nextNumber, properties, status, format, epicFilter, stage };
 }
 
 function mapPageRaw(page) {
@@ -112,10 +121,11 @@ function renderText(tasks, stageFilter) {
 }
 
 // status === null means no --status was given. The default is then the whole
-// to_do group ("To do" OR "Not started"), because create-task.js lands new
-// tasks on "Not started" — filtering on "To do" alone hid every freshly
-// created task from the bare `get-board.js`. Membership lives in one place:
-// TODO_GROUP_STATUSES in hooks/notion-constants.js, shared with the picker.
+// to_do group ("To do" OR "Not started"). create-task.js now lands new tasks
+// on DEFAULT_TASK_STATUS ("To do"), but legacy tasks still sit on
+// "Not started", and filtering on one option alone once hid every freshly
+// created task. Membership and the default live in one place:
+// hooks/notion-constants.js, shared with the picker.
 //
 // When --epic is set without an explicit --status, the epic relation is the
 // real filter, so the status filter is dropped entirely — otherwise an
@@ -164,7 +174,36 @@ async function main() {
     process.exit(2);
   }
 
-  const { priorityTier, latest, status, format, epicFilter, stage } = parseArgs(process.argv.slice(2));
+  const { priorityTier, latest, nextNumber, properties, status, format, epicFilter, stage } = parseArgs(process.argv.slice(2));
+
+  if (properties) {
+    const db = await http.get(token, `/v1/databases/${constants.DATABASE_ID}`);
+    if (db?.object === 'error') {
+      process.stderr.write(`Notion API error: ${db.message || db.code}\n`);
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify(optionalSelectOptions(db.properties)) + '\n');
+    return;
+  }
+
+  if (nextNumber) {
+    const result = await http.post(token, `/v1/databases/${constants.DATABASE_ID}/query`, {
+      sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+      page_size: NEXT_NUMBER_WINDOW,
+    });
+    if (result?.object === 'error') {
+      process.stderr.write(`Notion API error: ${result.message || result.code}\n`);
+      process.exit(1);
+    }
+    const titles = (result?.results || []).map(p => richText(p.properties?.Name?.title));
+    const next = nextTaskNumber(titles);
+    if (next === null) {
+      process.stderr.write('Error: none of the newest tasks carries a task number in its Name — refusing to guess\n');
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify({ next }) + '\n');
+    return;
+  }
 
   if (!latest && status !== null && !VALID_STATUSES.includes(status)) {
     process.stderr.write(`Error: invalid status "${status}". Valid: ${VALID_STATUSES.join(', ')}\n`);

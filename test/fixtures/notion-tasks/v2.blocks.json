@@ -1,0 +1,373 @@
+[
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🎯 Навіщо",
+          "text": {
+            "content": "🎯 Навіщо"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "paragraph",
+    "paragraph": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Задачі зараз пишуться двічі: українське тіло і англійський промпт у toggle. Мета — тіло задачі як єдина специфікація.",
+          "text": {
+            "content": "Задачі зараз пишуться двічі: українське тіло і англійський промпт у toggle. Мета — тіло задачі як єдина специфікація."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "✅ Definition of Done",
+          "text": {
+            "content": "✅ Definition of Done"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Є один канонічний опис формату v2 — grep по скілах не знаходить секції 🤖 prompt",
+          "text": {
+            "content": "Є один канонічний опис формату v2 — grep по скілах не знаходить секції 🤖 prompt"
+          }
+        }
+      ],
+      "checked": false
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "WHEN останні задачі мають назви feature/project-N і project-N вперемішку THE SYSTEM SHALL брати наступний номер як максимум N + 1 — npm test",
+          "text": {
+            "content": "WHEN останні задачі мають назви feature/project-N і project-N вперемішку THE SYSTEM SHALL брати наступний номер як максимум N + 1 — npm test"
+          }
+        }
+      ],
+      "checked": true
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "npm test і npm run lint зелені",
+          "text": {
+            "content": "npm test і npm run lint зелені"
+          }
+        }
+      ],
+      "checked": false
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🌿 Гілка",
+          "text": {
+            "content": "🌿 Гілка"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "paragraph",
+    "paragraph": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "feature/project-201-task-template-v2",
+          "text": {
+            "content": "feature/project-201-task-template-v2"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "📍 Контекст",
+          "text": {
+            "content": "📍 Контекст"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "scripts/notion/get-board.js — номер із Name",
+          "text": {
+            "content": "scripts/notion/get-board.js — номер із Name"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Дослідження і шаблон v2 — посилання",
+          "text": {
+            "content": "Дослідження і шаблон v2 — посилання"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "📋 Кроки",
+          "text": {
+            "content": "📋 Кроки"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "[agent] Звірити з кодом усі шляхи, скрипти і назви скілів із цієї задачі. Розбіжність → повідомити і зупинитись.",
+          "text": {
+            "content": "[agent] Звірити з кодом усі шляхи, скрипти і назви скілів із цієї задачі. Розбіжність → повідомити і зупинитись."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "[agent] Канонічний опис v2 в одному місці.",
+          "text": {
+            "content": "[agent] Канонічний опис v2 в одному місці."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "[manual] Додати в схему борду властивості Type, Appetite, Repo.",
+          "text": {
+            "content": "[manual] Додати в схему борду властивості Type, Appetite, Repo."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🧭 Межі",
+          "text": {
+            "content": "🧭 Межі"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "✅ Завжди: правки лише в spovishun-skills; старі задачі з toggle лишаються читабельними.",
+          "text": {
+            "content": "✅ Завжди: правки лише в spovishun-skills; старі задачі з toggle лишаються читабельними."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "⚠️ Спитай: перед зміною формату Name; перед видаленням опцій статусу.",
+          "text": {
+            "content": "⚠️ Спитай: перед зміною формату Name; перед видаленням опцій статусу."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🚫 Ніколи: ручні правки .claude/ у споживачі; масове переписування наявних задач.",
+          "text": {
+            "content": "🚫 Ніколи: ручні правки .claude/ у споживачі; масове переписування наявних задач."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🕳 Пастки",
+          "text": {
+            "content": "🕳 Пастки"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Номер парситься з Name. Будь-яка зміна формату назви ламає нумерацію.",
+          "text": {
+            "content": "Номер парситься з Name. Будь-яка зміна формату назви ламає нумерацію."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🚫 Поза скоупом",
+          "text": {
+            "content": "🚫 Поза скоупом"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Перехід нумерації на unique_id.",
+          "text": {
+            "content": "Перехід нумерації на unique_id."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  }
+]

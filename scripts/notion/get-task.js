@@ -5,6 +5,7 @@ const http = require('./lib/notion-http');
 const { loadToken } = require('./lib/load-token');
 const constants = require('./lib/constants');
 const { richText, extractBlocks } = require('./lib/format-task');
+const { parseTaskSections } = require('./lib/task-sections');
 const { fetchBlockTree } = require('./lib/block-tree');
 const { extractBranchFromBlocks, deriveBranchFromName } = require('./lib/extract-branch');
 const { toDashed } = require('./lib/page-id');
@@ -141,8 +142,15 @@ async function main() {
       ? { id: epicIds[0], title: titleMap.get(epicIds[0]) ?? null }
       : null,
     blockedBy: blockedByIds.map(id => ({ id, title: titleMap.get(id) ?? null })),
+    // Task format v2 optional selects; null on boards without the property.
+    type: props.Type?.select?.name ?? null,
+    appetite: props.Appetite?.select?.name ?? null,
+    repo: props.Repo?.select?.name ?? null,
     content: extractBlocks(blocks),
   };
+  // JSON only — md/text already print the body itself. notion-task-to-code reads
+  // this to build its prompt from a v2 body or a legacy prompt toggle.
+  task.sections = parseTaskSections(task.content);
 
   if (format === 'md') {
     process.stdout.write(renderMd(task) + '\n');

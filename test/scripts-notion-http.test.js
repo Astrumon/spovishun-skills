@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 const notionHttp = require(join(here, '..', 'scripts', 'notion', 'lib', 'notion-http.js'));
 
 // Fake `https` whose .request() captures the options and feeds back a JSON body.
-function fakeHttps(responseBody) {
+function fakeHttps(responseBody, chunks = [JSON.stringify(responseBody)]) {
   const calls = [];
   const httpsImpl = {
     request(options, onResponse) {
@@ -24,7 +24,7 @@ function fakeHttps(responseBody) {
         const res = new EventEmitter();
         res.statusCode = 200;
         onResponse(res);
-        res.emit('data', JSON.stringify(responseBody));
+        for (const chunk of chunks) res.emit('data', chunk);
         res.emit('end');
       };
       req.destroy = () => {};
@@ -56,4 +56,15 @@ test('POST sets Content-Length and keeps the User-Agent header', async () => {
   const { headers } = calls[0];
   assert.equal(headers['User-Agent'], 'spovishun-skills-notion-cli');
   assert.equal(headers['Content-Length'], Buffer.byteLength(JSON.stringify(body)));
+});
+
+// A real socket hands over Buffers cut at arbitrary byte offsets; decoding each
+// chunk on its own turns a character split across two of them into U+FFFD.
+test('a multibyte character split across two chunks survives decoding', async () => {
+  const body = { summary: '🤖 prompt', title: 'Офлайн' };
+  const bytes = Buffer.from(JSON.stringify(body));
+  const splitInsideEmoji = bytes.indexOf(Buffer.from('🤖')) + 2;
+  const { httpsImpl } = fakeHttps(body, [bytes.subarray(0, splitInsideEmoji), bytes.subarray(splitInsideEmoji)]);
+  const data = await notionHttp.get('tok', '/v1/pages/x', { httpsImpl });
+  assert.deepEqual(data, body);
 });

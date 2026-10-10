@@ -38,59 +38,49 @@ node .claude/scripts/notion/get-claude-md.js --section testing        # just Tes
 node .claude/scripts/notion/get-claude-md.js                          # full read — only when overview needed
 ```
 
-### Step 3: Extract task fields
-From the fetched task page, extract:
-- **Goal** — what the task is about
-- **Branch name** — `feature/{{PROJECT_PREFIX}}-N-xxx`
-- **Steps** — ordered list of implementation steps
-- **Definition of Done** — completion condition
-- **prompt toggle** — existing AI prompt if present (use as base, expand if needed)
+### Step 3: Read the task sections
+`get-task.js --format=json` returns `sections` — the body split per task format v2
+(`.claude/_templates/task-page/TEMPLATE.md`). A cached `task.json` carries only `content`; in that
+case run `get-task.js <id> --format=json` once to get `sections`.
+
+- `sections.format === "v2"` — the body is the spec. There is no stored prompt; build it from:
+  `why`, `dod[]` (`text`, `checked`), `branch`, `context`, `steps[]` (`n`, `marker`: `agent` |
+  `manual` | null, `text`), `boundaries` (`always[]`, `ask[]`, `never[]`), `pitfalls`, `outOfScope`.
+- `sections.format === "legacy"` — a pre-v2 task (`🎯 Goal` / `🌿 Branch name` / `📋 Steps` / `✅ DoD`,
+  often extra sections). `sections.legacyPrompt` holds the old `🤖 prompt` toggle text when present:
+  use it as the base and expand it from `content`, as before. Do not rewrite the Notion page.
+
+Also take from the task JSON:
 - **epic** — parent Epic title and id, if any
 - **blockedBy** — list of blocker tasks (title + id)
 
-When generating the prompt, inject into the Context section:
+### Step 4: Generate the final prompt
+
+Fill `.claude/_templates/task-to-code-prompt/TEMPLATE.md` and output it as a fenced code block.
+
+For a **v2** task:
+- **Steps** — the `agent` steps in order, step 1 (the reference check) first and unchanged: the
+  agent verifies every path and symbol the task names and stops on a mismatch.
+- **Human steps — do not perform** — every `manual` step, verbatim, so the agent knows they exist
+  and leaves them to a person.
+- **Definition of Done** — every `dod` item with its verification command; skip items already checked.
+- **Boundaries** — `boundaries.always` / `ask` / `never` copied verbatim as Always / Ask first / Never.
+- **Context** — `context`, plus `pitfalls` and `outOfScope` when present.
+- Do not add conventions CLAUDE.md already states; the agent reads CLAUDE.md itself.
+
+For a **legacy** task: as before — Goal, Branch, Steps, DoD from `sections` / `content`, with
+`legacyPrompt` as the base when present.
+
+In both cases inject into the Context section:
 - "This task belongs to Epic: **<epic.title>**" — if epic is present
 - "Blocked by (must verify before starting): <comma-separated blocker titles>" — if blockedBy is non-empty
 
-### Step 4: Generate the final prompt
-
-Fill the prompt template from all extracted task fields. Output as a fenced code block.
-
-Template structure:
-```
-You are implementing a feature for the {{PROJECT_NAME}} project.
-
-## Context
-[Tech stack, architecture layer, key existing patterns]
-[This task belongs to Epic: <epic.title>] (if applicable)
-[Blocked by: <blockers>] (if applicable)
-
-## Task
-[Task title and number]
-
-## Goal
-[What this task should accomplish]
-
-## Steps
-1. [Step 1]
-2. [Step 2]
-3. Write/update tests
-
-## Definition of Done
-- [ ] [Condition 1]
-- [ ] [Condition 2]
-- [ ] All existing tests pass
-- [ ] Code follows Clean Architecture layer rules
-
-## Key files
-- `path/to/RelevantFile.kt` — [why it matters]
-
-## Constraints
-[Project-specific architectural constraints from CLAUDE.md]
-```
+Write the prompt in English unless the user asks otherwise; identifiers stay as in the task.
 
 ### Step 5: Present the output
-Show the prompt in a code block and offer to update the prompt toggle in Notion.
+Show the prompt in a code block. Do **not** offer to store it in Notion for a v2 task — the body
+stays the single source and the prompt is regenerated on demand. For a legacy task, offering to
+update its prompt toggle is still fine.
 
 ### Step 6: Grill (optional), then enter Plan Mode
 After presenting the prompt:

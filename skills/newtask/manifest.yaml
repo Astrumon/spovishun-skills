@@ -1,9 +1,9 @@
 id: newtask
-version: 1.1.0
+version: 1.2.0
 category: stack-specific
 requires:
   - notion
-description: Creates a new task on the project Notion board and prepares the corresponding git branch. Covers task numbering, branch naming, epic linking, blocker wiring, and 5-section page structure (Goal/Branch/Steps/DoD/prompt).
+description: Creates a new task on the project Notion board and prepares the corresponding git branch. Covers task numbering (get-board.js --next-number), branch naming, epic linking, blocker wiring, optional Type/Appetite/Repo, and the task format v2 page body defined in templates/task-page.
 placeholders:
   - key: NOTION_CLAUDE_MD_PAGE_ID
     description: Notion page ID of the CLAUDE.md page to fetch project context

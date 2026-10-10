@@ -1,9 +1,9 @@
 id: notion-task-to-code
-version: 1.2.0
+version: 1.3.0
 category: stack-specific
 requires:
   - notion
-description: Converts a Notion task into a ready-to-use AI agent prompt. Fetches task from cache or Notion API, extracts Goal/Branch/Steps/DoD, injects Epic and blocker context, outputs a fenced prompt, and enters Plan Mode.
+description: Converts a Notion task into a ready-to-use AI agent prompt. Fetches task from cache or Notion API, builds the prompt from the task format v2 body (or a legacy prompt toggle), injects Epic and blocker context, outputs a fenced prompt, and enters Plan Mode.
 placeholders:
   - key: PROJECT_PREFIX
     description: Project branch prefix used in task numbering (e.g. myproject)

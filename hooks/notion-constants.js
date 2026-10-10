@@ -30,9 +30,16 @@ const PICKER_TIER_LIMIT = 5;
 // The Notion `to_do` status group — every status a task carries before work
 // starts. Order is PREFERENCE order: task-picker.js offers [0] first and falls
 // back through the rest, while get-board.js ORs the whole list as its default
-// filter. Both must read the membership from here: create-task.js lands new
-// tasks on "Not started", so a board default of "To do" alone hid every
+// filter. Both must read the membership from here: create-task.js once landed
+// new tasks on "Not started", so a board default of "To do" alone hid every
 // freshly created task (spovishun-193).
 const TODO_GROUP_STATUSES = ['To do', 'Not started'];
 
-module.exports = { NOTION_VERSION, PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES };
+// The Status create-task.js gives a new task when the caller passes none. It is
+// the group's preferred member — the one the picker offers first and the one the
+// task format v2 keeps once "Not started" is retired (templates/task-page). The
+// get-board.js default still ORs the whole group, so legacy "Not started" tasks
+// stay visible.
+const DEFAULT_TASK_STATUS = TODO_GROUP_STATUSES[0];
+
+module.exports = { NOTION_VERSION, PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES, DEFAULT_TASK_STATUS };

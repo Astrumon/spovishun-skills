@@ -1,0 +1,412 @@
+[
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🎯 Goal",
+          "text": {
+            "content": "🎯 Goal"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "paragraph",
+    "paragraph": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Хотфікс: проковтнуте скасування ламає graceful shutdown шедулерів. Тут лишається тільки код застосунку.",
+          "text": {
+            "content": "Хотфікс: проковтнуте скасування ламає graceful shutdown шедулерів. Тут лишається тільки код застосунку."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "divider",
+    "divider": {},
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🔴 Bug A — проковтнуте скасування ламає shutdown шедулерів",
+          "text": {
+            "content": "🔴 Bug A — проковтнуте скасування ламає shutdown шедулерів"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "table",
+    "table": {
+      "table_width": 3,
+      "has_column_header": true,
+      "has_row_header": false
+    },
+    "has_children": true,
+    "children": [
+      {
+        "object": "block",
+        "type": "table_row",
+        "table_row": {
+          "cells": [
+            [
+              {
+                "type": "text",
+                "plain_text": "Сайт",
+                "text": {
+                  "content": "Сайт"
+                }
+              }
+            ],
+            [
+              {
+                "type": "text",
+                "plain_text": "Контекст",
+                "text": {
+                  "content": "Контекст"
+                }
+              }
+            ],
+            [
+              {
+                "type": "text",
+                "plain_text": "Наслідок",
+                "text": {
+                  "content": "Наслідок"
+                }
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "object": "block",
+        "type": "table_row",
+        "table_row": {
+          "cells": [
+            [
+              {
+                "type": "text",
+                "plain_text": "BirthdayGreetingScheduler.kt:85",
+                "text": {
+                  "content": "BirthdayGreetingScheduler.kt:85"
+                }
+              }
+            ],
+            [
+              {
+                "type": "text",
+                "plain_text": "всередині for (member in members)",
+                "text": {
+                  "content": "всередині for (member in members)"
+                }
+              }
+            ],
+            [
+              {
+                "type": "text",
+                "plain_text": "цикл іде далі після скасування",
+                "text": {
+                  "content": "цикл іде далі після скасування"
+                }
+              }
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "object": "block",
+    "type": "callout",
+    "callout": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "НЕ порушення — не чіпати. TelegramBot.kt:71 і DatabaseFactory.kt:52 роблять throw після логування.",
+          "text": {
+            "content": "НЕ порушення — не чіпати. TelegramBot.kt:71 і DatabaseFactory.kt:52 роблять throw після логування."
+          }
+        }
+      ],
+      "icon": {
+        "type": "emoji",
+        "emoji": "⛔"
+      }
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_3",
+    "heading_3": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "runCatching навколо Telegram-викликів",
+          "text": {
+            "content": "runCatching навколо Telegram-викликів"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "bulleted_list_item",
+    "bulleted_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "PickerKeyboard.kt:34,56,75",
+          "text": {
+            "content": "PickerKeyboard.kt:34,56,75"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "divider",
+    "divider": {},
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🌿 Branch name",
+          "text": {
+            "content": "🌿 Branch name"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "paragraph",
+    "paragraph": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "feature/project-190-swallowed-cancellation-schedulers",
+          "text": {
+            "content": "feature/project-190-swallowed-cancellation-schedulers"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "divider",
+    "divider": {},
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "📋 Steps",
+          "text": {
+            "content": "📋 Steps"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Виправити Bug A: додати catch (e: CancellationException) { throw e } перед широким catch.",
+          "text": {
+            "content": "Виправити Bug A: додати catch (e: CancellationException) { throw e } перед широким catch."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Тест на регресію: скасувати скоуп шедулера посеред пасу.",
+          "text": {
+            "content": "Тест на регресію: скасувати скоуп шедулера посеред пасу."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "numbered_list_item",
+    "numbered_list_item": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Додати секцію coroutines: у config/detekt/detekt.yml.",
+          "text": {
+            "content": "Додати секцію coroutines: у config/detekt/detekt.yml."
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "divider",
+    "divider": {},
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "✅ Definition of Done",
+          "text": {
+            "content": "✅ Definition of Done"
+          }
+        }
+      ]
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "CancellationException ре-кидається у всіх трьох сайтах шедулерів",
+          "text": {
+            "content": "CancellationException ре-кидається у всіх трьох сайтах шедулерів"
+          }
+        }
+      ],
+      "checked": true
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "Є тест, який падав до фіксу",
+          "text": {
+            "content": "Є тест, який падав до фіксу"
+          }
+        }
+      ],
+      "checked": false
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "to_do",
+    "to_do": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "./gradlew detekt ktlintCheck test → чисто",
+          "text": {
+            "content": "./gradlew detekt ktlintCheck test → чисто"
+          }
+        }
+      ],
+      "checked": false
+    },
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "divider",
+    "divider": {},
+    "has_children": false
+  },
+  {
+    "object": "block",
+    "type": "toggle",
+    "toggle": {
+      "rich_text": [
+        {
+          "type": "text",
+          "plain_text": "🤖 prompt",
+          "text": {
+            "content": "🤖 prompt"
+          }
+        }
+      ]
+    },
+    "has_children": true,
+    "children": [
+      {
+        "object": "block",
+        "type": "code",
+        "code": {
+          "rich_text": [
+            {
+              "type": "text",
+              "plain_text": "Fix a live coroutine cancellation bug and add the detekt ruleset\nthat should have caught it.\n\n=== PART A: the bug (do this first) ===\n\nRethrow CancellationException before the broad catch.",
+              "text": {
+                "content": "Fix a live coroutine cancellation bug and add the detekt ruleset\nthat should have caught it.\n\n=== PART A: the bug (do this first) ===\n\nRethrow CancellationException before the broad catch."
+              }
+            }
+          ],
+          "language": "plain text"
+        },
+        "has_children": false
+      }
+    ]
+  }
+]

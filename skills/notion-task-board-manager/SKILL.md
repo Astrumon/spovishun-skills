@@ -24,7 +24,7 @@ notion-search(
 
 Note: `notion-search` returns titles only — Status not included. Fetch each page individually for Status.
 
-Status values: `Not started` → `In progress` → `Done`
+Status values: `To do` → `In progress` → `Done` (older boards may also carry `Not started`)
 
 (`Backlog` is NOT a Status — it is a value of the separate Board v2 `Stage` select. See `notion-spovishun-task-manager` for the Stage model.)
 
@@ -37,7 +37,7 @@ notion-update-page(
 )
 ```
 
-Status flow: `Not started -> In progress -> Done`
+Status flow: `To do -> In progress -> Done` (use the board's own options — fetch the schema)
 
 <details>
 <summary>Extended: creating a task (full template), critical rules</summary>
@@ -52,7 +52,7 @@ notion-create-pages(
   pages: [{
     properties: {
       "Title": "Task title",
-      "Status": "Not started"
+      "Status": "To do"
     },
     icon: "...",
     content: "<structured content>"
@@ -60,19 +60,11 @@ notion-create-pages(
 )
 ```
 
-Every task page must include:
-
-```
-## Goal
-What this task achieves and why it matters.
-
-## Steps
-1. First step
-2. Second step
-
-## Definition of Done
-Clear condition — when is this task considered complete.
-```
+The page body follows task format v2, defined once in `.claude/_templates/task-page/TEMPLATE.md`:
+🎯 why → ✅ verifiable DoD (checkboxes, EARS for behaviour) → 🌿 branch → 📍 context → 📋 steps
+marked `[agent]` / `[manual]`, step 0 = check the task's references against the code → 🧭 boundaries
+(always / ask / never). No separate English prompt. Read the template before writing a body; on a
+board whose schema differs, keep the body format and map only the properties.
 
 ## Critical Rules
 - Use `data_source_id` parent — never `database_id`

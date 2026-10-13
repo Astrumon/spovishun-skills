@@ -18,24 +18,27 @@ Do not announce this step.
 
 Ask the user (if not already provided):
 1. **Task title** — short, imperative, describes the outcome (e.g., "Add member ban command")
-2. **Task description** — what is the goal, why it's needed, and expected outcome (2–5 sentences)
+2. **Task description** — the problem, the desired outcome, and how we will know it is done
 
 If the user already supplied both in their message, use them directly — do NOT ask again.
+
+Read the task format before composing anything: `.claude/_templates/task-page/TEMPLATE.md`
+(task format v2). It is the single definition of properties, section order and rules — this skill
+does not repeat it.
 
 ---
 
 ## Step 2: Determine next task number
 
-Query the 10 most recently created tasks:
 ```bash
-node .claude/scripts/notion/get-board.js --latest --format json
+node .claude/scripts/notion/get-board.js --next-number
 ```
 
-Iterate through the returned array in order. Find the first `title` that matches the pattern
-`feature/{{PROJECT_PREFIX}}-{N}:` and extract N. Next task number = N + 1.
+Prints `{"next": N}` — the maximum task number over the newest tasks + 1, counting both
+`feature/{{PROJECT_PREFIX}}-N:` and bare `{{PROJECT_PREFIX}}-N:` titles. An empty board gives 1.
 
-If no task matches the pattern — stop and inform the user. Do NOT guess or invent a number.
-If the array is empty (board has no tasks) — start from 1.
+If the script exits non-zero (no recent task carries a number) — stop and inform the user. Do NOT
+guess or invent a number.
 
 ---
 
@@ -44,7 +47,7 @@ If the array is empty (board has no tasks) — start from 1.
 | Field | Value |
 |---|---|
 | Name (property) | `feature/{{PROJECT_PREFIX}}-{N}: {task title}` |
-| Status | `Not started` |
+| Status | `To do` (the script default) |
 | Stage | `Backlog` (default) or `Sprint` — see Step 3.7 |
 | icon | `✨` (default; user may override) |
 
@@ -91,33 +94,35 @@ Save the answer as `stage`. On Board v1 (the board has no Stage property) set `s
 
 ---
 
+## Step 3.8: Type / Appetite / Repo (only if the board has them)
+
+```bash
+node .claude/scripts/notion/get-board.js --properties
+```
+
+Prints the options of whichever of `Type`, `Appetite`, `Repo` the board has (`{}` when none).
+For each property present, infer the value from the task and confirm it with the user in the same
+question as the Stage; pick only from the printed options. Skip the properties the board lacks —
+do not ask about them.
+
+If the task comes out as Appetite `L`, or spans more than 3 phases or more than 2 architectural
+layers, suggest splitting it (`task-decomposer`) before creating it.
+
+---
+
 ## Step 4: Build page content
 
-Every new task page must include all five sections:
+Write the body exactly as the **Body** section of `.claude/_templates/task-page/TEMPLATE.md`
+prescribes: 🎯 → ✅ → 🌿 → 📍 → 📋 → 🧭, then 🕳 / 🚫 only when there is something to say.
 
-```
-## 🎯 Goal
-{Goal in 1-3 sentences. What result is expected?}
-
-## 🌿 Branch name
-feature/{{PROJECT_PREFIX}}-{N}-{slug}
-
-## 📋 Steps
-1. {First implementation step}
-2. {Second implementation step}
-3. ...
-
-## ✅ Definition of Done
-> {A concrete, testable condition — when is this task complete?}
-
-🤖 prompt  ← toggle (collapsible)
-  {Professional AI agent prompt in English. Include: task context, tech stack, relevant files/modules, expected output, conventions from CLAUDE.md.}
-```
-
-Rules:
-- No emoji in the Name property — emoji goes in `icon` only
-- AI prompt must be in **English**, professional, precise — suitable for autonomous agent execution
-- Steps should match the architectural layers involved
+Checklist before moving on:
+- 🌿 holds `feature/{{PROJECT_PREFIX}}-{N}-{slug}`
+- step 1 is the `[agent]` reference check; every step is marked `[agent]` or `[manual]`
+- every DoD item is a `- [ ]` checkbox with a command or test; behaviour is phrased in EARS
+- 🧭 has all three tiers (✅ always / ⚠️ ask / 🚫 never)
+- no English prompt, no toggle, and nothing CLAUDE.md already says (commit style, base branch,
+  stack) unless the task deviates from it
+- no emoji in the Name property — the emoji goes in `icon`
 
 ---
 
@@ -132,11 +137,16 @@ echo '{
   "stage": "<Backlog | Sprint from Step 3.7; null on Board v1>",
   "epicId": "<page-id from Step 3.5 or null>",
   "blockedBy": ["<page-id>", ...],
+  "type": "<from Step 3.8; omit if the board has no Type>",
+  "appetite": "<from Step 3.8; omit if the board has no Appetite>",
+  "repo": "<from Step 3.8; omit if the board has no Repo>",
   "content": "{full page content from Step 4 — markdown is parsed, not flattened}"
 }' | node .claude/scripts/notion/create-task.js
 ```
 
-The script sets `Status = "Not started"` automatically — do not pass `status` unless the user explicitly asks for a different starting status.
+The script sets `Status = "To do"` automatically — do not pass `status` unless the user explicitly
+asks for a different starting status. `type` / `appetite` / `repo` are checked against the board
+schema: a property the board lacks is skipped with a note, a value outside its options is an error.
 
 Alternatively (MCP path, if no relations needed):
 ```
@@ -145,7 +155,7 @@ notion-create-pages(
   pages: [{
     properties: {
       "Name": "feature/{{PROJECT_PREFIX}}-{N}: {task title}",
-      "Status": "Not started",
+      "Status": "To do",
       "Stage": "<Backlog | Sprint from Step 3.7>"   // omit if the board has no Stage property (Board v1)
     },
     icon: "✨",
@@ -196,4 +206,6 @@ Report:
 - Do NOT create a git branch for Backlog tasks unless explicitly requested
 - Do NOT branch from `main` — always from `{{GIT_DEVELOP_BRANCH}}`
 - Do NOT guess the task number — always fetch the board first
-- Do NOT skip any of the five page sections (Goal, Branch, Steps, DoD, prompt)
+- Do NOT skip a required v2 section (🎯, ✅, 🌿, 📍, 📋, 🧭) — a 15-minute chore may omit 📍 and 🧭
+- Do NOT write a separate English prompt or a `🤖` toggle — `notion-task-to-code` generates one from the body
+- Do NOT copy the template into the task beyond its skeleton; the rules live in the template

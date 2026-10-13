@@ -5,7 +5,7 @@ const constants = require('./constants');
 // Single source: hooks/notion-constants.js. The tier list and page size used to
 // be declared here AND in the hook, under a "MUST stay in sync" comment and a
 // guard test — which earned its keep when the hook grew a phantom 'Normal' tier.
-const { PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES } = require('../../../hooks/notion-constants.js');
+const { PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES, DEFAULT_TASK_STATUS } = require('../../../hooks/notion-constants.js');
 
 // One status → a plain equals clause; several → an OR. Notion's status filter
 // has no group condition, so a whole status group is expressed as an OR of its
@@ -46,4 +46,4 @@ async function queryByPriorityTier(http, token, statusFilter, excludePageIds, ex
   return { candidates, tier: null };
 }
 
-module.exports = { queryByPriorityTier, statusClause, PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES };
+module.exports = { queryByPriorityTier, statusClause, PRIORITY_TIERS, PICKER_TIER_LIMIT, TODO_GROUP_STATUSES, DEFAULT_TASK_STATUS };

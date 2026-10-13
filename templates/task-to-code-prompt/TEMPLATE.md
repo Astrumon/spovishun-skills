@@ -16,16 +16,26 @@ You are working on {{PROJECT_NAME}}.
 Branch: <branch name>
 
 ## Goal
-<goal from 🎯 section>
+<🎯 section — sections.why>
 
 ## Steps
-<numbered steps from 📋 section>
+<v2: the [agent] steps in order, step 1 = verify every path / module / symbol this task names
+against the code; on a mismatch, report it and stop. Legacy: the numbered 📋 steps>
+
+## Human steps — do not perform
+<v2: every [manual] step, verbatim. Omit the section when there are none>
 
 ## Definition of Done
-<DoD from ✅ section>
+<✅ items that are still unchecked, each with its verification command>
+
+## Boundaries
+- Always: <sections.boundaries.always>
+- Ask first: <sections.boundaries.ask>
+- Never: <sections.boundaries.never>
+<omit the section for a legacy task without 🧭>
 
 ## Key files / modules
-<inferred from steps and architecture>
+<📍 context, 🕳 pitfalls and 🚫 out-of-scope from the task; inferred from steps for legacy tasks>
 
 ## Constraints & conventions
 - Follow the architecture rules documented in the consumer's CLAUDE.md

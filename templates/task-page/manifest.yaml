@@ -1,0 +1,9 @@
+id: task-page
+version: 1.0.0
+category: stack-specific
+requires:
+  - notion
+description: Canonical task page format v2 — one spec for people and agents. Properties, section order (Навіщо → DoD → Гілка → Контекст → Кроки → Межі), step 0, EARS, three-tier boundaries, no separate English prompt. Used by newtask, task-decomposer and notion-task-to-code.
+placeholders:
+  - key: PROJECT_PREFIX
+    description: Project branch prefix used in task numbering (e.g. myproject)

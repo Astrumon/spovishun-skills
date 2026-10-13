@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 // `require.main === module` guard, so requiring them runs no CLI.
 const createTask = require(join(here, '..', 'scripts', 'notion', 'create-task.js'));
 const getBoard = require(join(here, '..', 'scripts', 'notion', 'get-board.js'));
-const { TODO_GROUP_STATUSES } = require(join(here, '..', 'hooks', 'notion-constants.js'));
+const { TODO_GROUP_STATUSES, DEFAULT_TASK_STATUS } = require(join(here, '..', 'hooks', 'notion-constants.js'));
 
 /** Evaluates a Notion filter tree against a single Status value. */
 function matchesStatus(filter, status) {
@@ -68,4 +68,18 @@ test('every to_do group member is a valid board status', () => {
 // Growing the group means teaching the picker to loop, not just adding a string.
 test('the to_do group has exactly the two phases task-picker.js walks', () => {
   assert.deepEqual(TODO_GROUP_STATUSES, ['To do', 'Not started']);
+});
+
+// One default, declared once (spovishun-201): create-task.js must not grow its
+// own literal again, and the default must be the group's preferred member — the
+// status the picker offers first and the one task format v2 keeps.
+test('create-task.js takes its default from DEFAULT_TASK_STATUS', () => {
+  assert.equal(createTask.DEFAULT_STATUS, DEFAULT_TASK_STATUS);
+  assert.equal(defaultCreatedStatus(), DEFAULT_TASK_STATUS);
+});
+
+test('DEFAULT_TASK_STATUS is the preferred to_do member and a valid board status', () => {
+  assert.equal(DEFAULT_TASK_STATUS, TODO_GROUP_STATUSES[0]);
+  assert.ok(getBoard.VALID_STATUSES.includes(DEFAULT_TASK_STATUS));
+  assert.ok(createTask.VALID_STATUSES.includes(DEFAULT_TASK_STATUS));
 });

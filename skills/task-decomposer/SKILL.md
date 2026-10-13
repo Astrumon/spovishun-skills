@@ -8,14 +8,17 @@ Break a solution into atomic, Notion-compatible tasks. Input: Solution Decision 
 Fetch CLAUDE.md and the current board state to determine the next task number. Do not announce this step.
 
 ```bash
-node .claude/scripts/notion/get-board.js --latest --format json   # 10 newest tasks — use to find max task number
+node .claude/scripts/notion/get-board.js --next-number   # {"next": N} — the first task of this run gets N
+node .claude/scripts/notion/get-board.js --properties    # options of Type / Appetite / Repo, if the board has them
 ```
 
 ```
 notion-fetch(id: "{{NOTION_CLAUDE_MD_PAGE_ID}}")
 ```
 
-`get-board.js --latest` queries the board via REST `/databases/{{NOTION_DATABASE_ID}}/query` sorted by `created_time` descending and returns the 10 newest tasks with their `Name` property, from which the highest existing task number N is extracted. New tasks start at N+1. `--latest` is required here: without it the board applies its default status filter, so tasks in other statuses are missing and N comes out too low.
+`--next-number` takes the maximum task number over the newest tasks (both `feature/{{PROJECT_PREFIX}}-N:` and bare `{{PROJECT_PREFIX}}-N:` titles) and adds 1. It exits non-zero when no recent task carries a number — stop and ask; never guess. Number the tasks of this run consecutively from N.
+
+Also read `.claude/_templates/task-page/TEMPLATE.md` — task format v2, the single definition of the task page. Every card below follows it.
 
 (MCP `notion-search` with `data_source_url: "collection://<id>"` is an alternative, but it requires the live data_source_id of the board — fetch it from the database first; do not interpolate it from config.)
 
@@ -64,12 +67,13 @@ Break the solution into atomic tasks using these rules:
 - Tests belong **in the same task** as the code they test — never a separate "write tests" task
 - DI wiring is a separate task only if non-trivial (e.g., new module, new scope)
 - Order by dependency: tasks that block others come first
-- Each task should be completable in **one focused session (~1–4 hours)**
-- If a task seems larger than 4 hours, split it further
+- Each task should be completable in **one focused session (~1–4 hours)** — Appetite `S` or `M`
+- If a task seems larger than 4 hours, or spans more than 3 phases or 2 layers (Appetite `L`), split it further
 
 ### Step 3: Format
-For each task produce the full 5-section Notion card (see Output Template below).
-AI prompt in the collapsible toggle must be in **English**.
+For each task produce a task format v2 card (see Output Template below and the template file).
+No English prompt and no toggle — the body is the spec; `notion-task-to-code` generates a prompt
+from it when an agent picks the task up.
 
 ### Step 4: Present
 Show the **Overview Table** first (compact), then the full **Task Cards**.
@@ -82,7 +86,8 @@ For each task in order:
    - `priority` = inferred from the overview table (default `Medium`)
    - `epicId` = the Epic chosen in Step 0.5 (or `null` if skipped)
    - `blockedBy` = page IDs of preceding tasks **already created in this run**
-   - `content` = the full 5-section markdown
+   - `type` / `appetite` / `repo` = only for properties `--properties` listed (Appetite from the Size column)
+   - `content` = the full v2 card body
 2. Call:
    ```bash
    echo '<json>' | node .claude/scripts/notion/create-task.js
@@ -119,49 +124,32 @@ Then suggest starting implementation with `notion-task-to-code` on that task.
 
 ### Per-Task Card (repeat for each task)
 
+The card body is exactly the **Body** skeleton of `.claude/_templates/task-page/TEMPLATE.md`,
+filled for this task:
+
 ```markdown
 ---
-### Task {{PROJECT_PREFIX}}-{N}: {Task name}
+### Task {{PROJECT_PREFIX}}-{N}: {Task name}   ← card title in the chat only; Name in Notion is feature/{{PROJECT_PREFIX}}-{N}: {Task name}
 
-## 🎯 Goal
-[What this task accomplishes and why it's needed]
-
-## 🌿 Branch name
-feature/{{PROJECT_PREFIX}}-{N}-{slug}
-
-## 📋 Steps
-1. [Concrete implementation step with file/function names]
-2. [...]
-3. Write/update tests for [specific behavior]
-
-## ✅ Definition of Done
-- [ ] [Verifiable condition 1]
-- [ ] [Verifiable condition 2]
-- [ ] All existing tests pass
-- [ ] Code follows Clean Architecture layer rules
-
-<details>
-<summary>🤖 prompt</summary>
-
-[Professional English prompt for AI agent execution.
-Include: task context, tech stack, relevant files, expected output, architectural constraints.]
-
-</details>
+## 🎯 …        problem → outcome, 1–3 sentences
+## ✅ …        - [ ] checkbox + verification command per item; EARS for behaviour; "existing tests pass" as a command
+## 🌿 …        feature/{{PROJECT_PREFIX}}-{N}-{slug}
+## 📍 …        file:line references, related tasks (#K of this run by its number)
+## 📋 …        1. [agent] reference check · 2. [agent] … with file/function names · tests in the same task · [manual] for host/console steps
+## 🧭 …        ✅ always / ⚠️ ask / 🚫 never
 ```
-
----
 
 ## Critical Constraints
 
 **MUST DO:**
 - Fetch the board to get the correct next task number (never guess or hardcode)
-- Every task card MUST have all 5 sections: Goal, Branch, Steps, DoD, AI prompt
+- Every task card follows task format v2: 🎯, ✅, 🌿, 📍, 📋, 🧭 (🕳 / 🚫 when there is something to say)
 - Steps must be **concrete**: include file names, function names, not vague instructions
-- DoD conditions must be **verifiable/testable**, not subjective
+- Step 1 of every card is the `[agent]` reference check; every step is marked `[agent]` or `[manual]`
+- DoD conditions must be **verifiable/testable** checkboxes with a command, not subjective
 - Branch slug: max 3 words, kebab-case, from `{{GIT_DEVELOP_BRANCH}}`
-- AI prompt inside `<details>` toggle must be in **English**
 - Order tasks by dependency — earlier tasks unblock later ones
-- Include `"All existing tests pass"` in every DoD
+- Include an "all existing tests pass" item with its command in every DoD
 - Present the overview table for user confirmation before creating anything in Notion
 
 **MUST NOT DO:**

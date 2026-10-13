@@ -21,15 +21,15 @@ function build(input = {}) {
   });
 }
 
-test('default Status is "Not started" (newtask contract — tasks land in Backlog view)', () => {
+test('default Status is "To do" (task format v2 — "Not started" is being retired)', () => {
   const props = build();
-  assert.equal(props.Status.status.name, 'Not started');
-  assert.equal(createTask.DEFAULT_STATUS, 'Not started');
+  assert.equal(props.Status.status.name, 'To do');
+  assert.equal(createTask.DEFAULT_STATUS, 'To do');
 });
 
 test('explicit status overrides the default', () => {
-  const props = build({ status: 'To do' });
-  assert.equal(props.Status.status.name, 'To do');
+  const props = build({ status: 'Not started' });
+  assert.equal(props.Status.status.name, 'Not started');
 });
 
 test('default Stage is "Backlog"', () => {

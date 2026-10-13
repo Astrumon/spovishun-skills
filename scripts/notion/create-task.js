@@ -6,6 +6,8 @@ const { loadToken } = require('./lib/load-token');
 const constants = require('./lib/constants');
 const { toDashed } = require('./lib/page-id');
 const { markdownToBlocks } = require('./lib/markdown-to-blocks');
+const { buildOptionalSelects } = require('./lib/task-properties');
+const { DEFAULT_TASK_STATUS } = require('./lib/query-tasks');
 
 const VALID_PRIORITIES = ['High', 'Medium', 'Low'];
 // Board v2 (Scrum) Stage. New tasks default to Backlog so they appear in the
@@ -14,10 +16,11 @@ const VALID_PRIORITIES = ['High', 'Medium', 'Low'];
 // should set `stage: null` to omit the Stage field entirely.
 const VALID_STAGES = ['Backlog', 'Sprint', 'Archive'];
 const DEFAULT_STAGE = 'Backlog';
-// New tasks default to 'Not started' (matches the newtask skill contract and
-// the Backlog grooming flow). Pass `status` on stdin to override.
+// New tasks default to DEFAULT_TASK_STATUS ("To do"), declared once in
+// hooks/notion-constants.js next to the to_do group get-board.js filters on.
+// Pass `status` on stdin to override.
 const VALID_STATUSES = ['Not started', 'To do', 'In progress', 'Done'];
-const DEFAULT_STATUS = 'Not started';
+const DEFAULT_STATUS = DEFAULT_TASK_STATUS;
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -86,7 +89,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { title, priority, content, icon, epicId, blockedBy, stage, status } = input;
+  const { title, priority, content, icon, epicId, blockedBy, stage, status, type, appetite, repo } = input;
 
   if (!title || typeof title !== 'string' || !title.trim()) {
     process.stderr.write('Error: "title" is required and must be a non-empty string\n');
@@ -115,6 +118,26 @@ async function main() {
 
   const blockedByIds = normalizeRelationIds(blockedBy, 'blockedBy');
   const properties = buildProperties({ title, priority, status, stage, epicId, blockedByIds });
+
+  // Type / Appetite / Repo (task format v2) are optional and board-dependent.
+  // The schema is fetched only when the caller asked for one of them, so a
+  // plain create stays one request.
+  if ([type, appetite, repo].some(v => v !== undefined && v !== null)) {
+    const db = await http.get(token, `/v1/databases/${constants.DATABASE_ID}`);
+    if (db?.object === 'error') {
+      process.stderr.write(`Notion API error reading the board schema: ${db.message || db.code}\n`);
+      process.exit(1);
+    }
+    const optional = buildOptionalSelects(db.properties, { type, appetite, repo });
+    if (optional.error) {
+      process.stderr.write(`Error: ${optional.error}\n`);
+      process.exit(1);
+    }
+    if (optional.skipped.length > 0) {
+      process.stderr.write(`Note: the board has no ${optional.skipped.join(', ')} property — skipped\n`);
+    }
+    Object.assign(properties, optional.properties);
+  }
 
   const body = {
     parent: { database_id: constants.DATABASE_ID },

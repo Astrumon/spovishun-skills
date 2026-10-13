@@ -1,9 +1,9 @@
 id: notion-task-board-manager
-version: 1.0.1
+version: 1.1.0
 category: stack-specific
 requires:
   - notion
-description: Manages tasks on a Notion Kanban board — fetches schema, creates tasks with Goal/Steps/DoD structure, updates statuses, and reads board state. Generic board skill; does not assume any specific project schema.
+description: Manages tasks on a Notion Kanban board — fetches schema, creates tasks in task format v2 (templates/task-page), updates statuses, and reads board state. Generic board skill; does not assume any specific project schema.
 triggers:
   en:
     - "create a task in Notion"

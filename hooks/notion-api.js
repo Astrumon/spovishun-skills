@@ -8,6 +8,7 @@
 // re-exported from here by scripts/notion/lib/constants.js.
 
 const https = require('https');
+const { StringDecoder } = require('string_decoder');
 const { TOKEN_SOURCE } = require('./hook-config.js');
 const { NOTION_VERSION } = require('./notion-constants.js');
 
@@ -65,9 +66,13 @@ function notionRequest(token, method, urlPath, body, opts = {}) {
     if (data) options.headers['Content-Length'] = Buffer.byteLength(data);
 
     const req = httpsImpl.request(options, res => {
+      // A socket cuts the body at arbitrary byte offsets; `+=` decodes each chunk
+      // alone and turns a character split across two of them into U+FFFD.
+      const decoder = new StringDecoder('utf8');
       let raw = '';
-      res.on('data', c => { raw += c; });
+      res.on('data', c => { raw += decoder.write(c); });
       res.on('end', () => {
+        raw += decoder.end();
         try {
           resolve(parseNotionBody(raw, res.statusCode, method, urlPath, tokenSource));
         } catch (err) {

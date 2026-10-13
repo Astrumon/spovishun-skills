@@ -8,7 +8,7 @@ Task management for a project board in Notion with project-specific conventions 
 
 ### Task numbering
 - Format: `feature/{{PROJECT_PREFIX}}-N-short-description`
-- `N` — next sequential number (always fetch board to find max N)
+- `N` — next sequential number: `node .claude/scripts/notion/get-board.js --next-number` (max over the newest tasks + 1, both `feature/{{PROJECT_PREFIX}}-N` and bare `{{PROJECT_PREFIX}}-N` titles)
 - `short-description` — maximum 3 words in kebab-case
 
 ### Task title in Notion
@@ -25,9 +25,9 @@ node .claude/scripts/notion/get-board.js --epic "<name|id>"    # tasks linked to
 node .claude/scripts/notion/get-board.js --stage Backlog       # filter by Stage (Backlog | Sprint | Archive)
 ```
 
-Display statuses: In progress / Not started / Done (last 3). The board table includes `Epic` and `Blocked by` columns; a `Stage` column appears on Board v2 (when stage data exists).
+Display statuses: In progress / To do / Done (last 3). The board table includes `Epic` and `Blocked by` columns; a `Stage` column appears on Board v2 (when stage data exists).
 
-By default the board shows the whole `to_do` status group — both `To do` and `Not started` — so a task created by `create-task.js` (which defaults to `Not started`) is visible without arguments. Pass `--status` to narrow to a single option. `--epic` overrides the status filter entirely: it lists the epic's tasks across **all** statuses (so a Backlog epic isn't falsely shown as empty). Pass `--status` alongside `--epic` to intersect (e.g. `--epic "<name>" --status Done`); `--stage` always composes (AND).
+By default the board shows the whole `to_do` status group — both `To do` (the `create-task.js` default) and the legacy `Not started` — so every not-yet-started task is visible without arguments. Pass `--status` to narrow to a single option. `--epic` overrides the status filter entirely: it lists the epic's tasks across **all** statuses (so a Backlog epic isn't falsely shown as empty). Pass `--status` alongside `--epic` to intersect (e.g. `--epic "<name>" --status Done`); `--stage` always composes (AND).
 
 ## Epics
 
@@ -48,7 +48,7 @@ notion-update-page(
 )
 ```
 
-Status flow: `Not started -> To do -> In progress -> Done`
+Status flow: `To do -> In progress -> Done` (legacy tasks may still start at `Not started`)
 
 ## Stage Workflows (Board v2)
 
@@ -61,70 +61,33 @@ node .claude/scripts/notion/update-status.js <task-id> --stage Sprint
 # Sprint close: archive a completed task (optionally finish it in the same call)
 node .claude/scripts/notion/update-status.js <task-id> Done --stage Archive
 
-# Grooming: list backlog candidates
-node .claude/scripts/notion/get-board.js --stage Backlog --status "Not started" --format=md
+# Grooming: list backlog candidates (the default to_do group covers To do and Not started)
+node .claude/scripts/notion/get-board.js --stage Backlog --format=md
 ```
 
 `update-status.js` accepts a status, a `--stage`, or both — at least one is required. Note: `archive-task.js` is different — it moves the page to Notion Trash, while `--stage Archive` keeps it on the board in the Archive view.
 
 <details>
-<summary>Extended: creating a task (full 4-step workflow), common mistakes</summary>
+<summary>Extended: creating a task, common mistakes</summary>
 
 ## Creating a Task
 
-### Step 1: Next number
-Search the board; next N = max existing + 1.
+Use the `newtask` skill (one task) or `task-decomposer` (several). The page format — properties,
+section order, step 0, DoD, boundaries — is defined once in `.claude/_templates/task-page/TEMPLATE.md`
+(task format v2); follow it rather than any copy. The short version:
 
-### Step 2: Task data
+1. Next number: `node .claude/scripts/notion/get-board.js --next-number`.
+2. Name `feature/{{PROJECT_PREFIX}}-N: task name`; `Status` defaults to `To do`, `Stage` to `Backlog`.
+3. Body per the template: 🎯 → ✅ DoD → 🌿 → 📍 → 📋 (`[agent]` / `[manual]`, step 0 first) → 🧭.
+4. Create with `create-task.js` (stdin JSON; `type` / `appetite` / `repo` only if
+   `get-board.js --properties` lists them).
 
-| Field | Value |
-|---|---|
-| Name | `feature/{{PROJECT_PREFIX}}-N: task name` |
-| Status | `Not started` |
-
-### Step 3: Page content — all five sections required
-
-```
-## Goal
-What is the purpose of this task and what outcome is expected.
-
-## Branch name
-feature/{{PROJECT_PREFIX}}-{N}-short-description
-
-## Steps
-1. First step
-2. Second step
-
-## Definition of Done
-A concrete condition — when this task is considered complete.
-
-prompt  (toggle/collapsible)
-  Professional English prompt for AI agents (Claude Code / Windsurf).
-```
-
-### Step 4: Create with icon
-
-```
-notion-create-pages(
-  parent: { type: "database_id", database_id: "{{NOTION_DATABASE_ID}}" },
-  pages: [{
-    properties: {
-      "Name": "feature/{{PROJECT_PREFIX}}-N: task name",
-      "Status": "Not started",
-      "Stage": "Backlog"   // Board v2 only — omit on Board v1
-    },
-    icon: "...",
-    content: "..."
-  }]
-)
-```
-
-⚠️ `type: "database_id"` parent works only when the database has a single data source. For multi-source databases use the live-fetched `data_source_id` pattern from `notion-task-board-manager`.
+⚠️ MCP `notion-create-pages` with `type: "database_id"` parent works only when the database has a single data source. For multi-source databases use the live-fetched `data_source_id` pattern from `notion-task-board-manager`.
 
 ## Common Mistakes
 - Property name is **Name**, not Title
-- Missing any of the five page sections (Goal / Branch / Steps / DoD / prompt)
-- prompt toggle must be in English, professional tone
+- Writing a separate English prompt — v2 has none; `notion-task-to-code` generates one from the body
+- Skipping step 0 (the reference check) or leaving steps unmarked
 - Only one task In progress at a time — remind the user if they try to start another
 - Board v2: forgetting to set `Stage = "Backlog"` on creation — task ends up with empty Stage and falls outside both Backlog and Sprint views
 

@@ -62,10 +62,10 @@ node .claude/scripts/notion/update-status.js <task-id> Done --stage Archive
 ## Status transitions (unchanged from v1)
 
 ```
-Not started → To do → In progress → Done
+To do → In progress → Done
 ```
 
-`apply-pick` may promote `Not started → To do` before the picker proceeds; CI close moves `Done` regardless of Stage. Stage is never modified by the hook.
+New tasks land on `To do` (`DEFAULT_TASK_STATUS`). `Not started` survives only on legacy tasks and is due to be retired. `apply-pick` may promote `Not started → To do` before the picker proceeds; CI close moves `Done` regardless of Stage. Stage is never modified by the hook.
 
 ## Migrating from Board v1
 

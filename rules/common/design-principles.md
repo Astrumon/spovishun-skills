@@ -23,16 +23,12 @@ Depend on abstractions (`interface`), not on implementations (`Impl`).
 All dependencies must be injected — never instantiate dependencies directly inside a class.
 
 ## KISS
-- The simplest solution that solves the problem is the correct solution
-- If explaining the approach takes more than 2 sentences, it's probably too complex
-- NEVER add an abstraction layer without a concrete, immediate reason
+- Prefer the solution with the fewest parts and couplings for the problem as designed —
+  including mechanisms already planned, not only the current task
+- Designing ahead is welcome; express it as the smallest seam that keeps the planned
+  mechanism possible, not as its full implementation
+- Measure complexity by parts and couplings, not by how long the explanation is
 - Complex code requires a "why" comment; simple code requires nothing
-
-## YAGNI
-- NEVER implement functionality "for the future" without a current, specific need
-- No task ticket → no code. Period.
-- Generic/reusable solutions are justified only when 3+ concrete use cases already exist
-- If a feature is not in the current sprint, don't start implementing it
 
 ## Clean Code
 - Names must reveal intent: `getUserById` not `getU`, `isUserAdmin` not `flag`
@@ -44,6 +40,5 @@ All dependencies must be injected — never instantiate dependencies directly in
 ## Review Checklist
 Before proposing any change, verify:
 - [ ] Does this violate SRP? (name contains "and"/"or")
-- [ ] Does this add code not needed by the current task? (YAGNI)
 - [ ] Is there a simpler approach? (KISS)
 - [ ] Are all dependencies injected, not instantiated? (DIP)

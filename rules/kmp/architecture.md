@@ -83,7 +83,6 @@ is the default, because **a class from another module is Unstable** unless told 
 
 - A UseCase is required only when logic spans two or more repositories or two or more screens.
   Never a pass-through that forwards one call.
-- A shared `core/` module is created on the second consumer, not in anticipation of one.
 
 ## Don't
 

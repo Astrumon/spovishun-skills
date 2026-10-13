@@ -10,7 +10,7 @@ composeApp/              # thin shell: nav graph assembly + DI aggregation + pla
 core/
   designsystem/          # theme, reusable components, shared strings
   network/               # HTTP client factory, platform engines
-  <other>/               # added on the second consumer, never in anticipation
+  <other>/               # other shared modules
 feature/
   <name>/
     api/                 # ONLY the route type + navigateTo extension

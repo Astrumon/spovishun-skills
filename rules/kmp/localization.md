@@ -20,7 +20,6 @@ feature/logs/impl/src/commonMain/composeResources/
 
 - A feature's strings live in that feature's module. A new screen never edits a shared strings file,
   so it never rebuilds every module that depends on it.
-- A string moves to `core/designsystem` on its **second** consumer, not before.
 - Import the `Res` of the module you are in. A feature cannot read another feature's `Res` — if it
   needs the string, the string belongs one level down. `Res` is `internal` by default, which
   enforces exactly that; leave it internal.
@@ -75,8 +74,7 @@ internal fun LogsError.label(): String = when (this) {
 
 ## Non-string resources
 
-Drawables, fonts and raw files follow the same per-module rule and the same promotion rule: they
-start in the feature that uses them and move to `core/designsystem` on the second consumer.
+Drawables, fonts and raw files follow the same per-module rule.
 
 ## Do / Don't
 

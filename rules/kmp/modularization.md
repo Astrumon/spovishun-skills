@@ -26,9 +26,6 @@ A declaration becomes `public` when another module actually imports it — not b
 not because a test in the same module reads it (tests in the same module see `internal`), and not to
 silence a warning.
 
-The same rule applies to modules themselves: a `core/` module is created on the **second** consumer,
-never in anticipation of one (`architecture.md`).
-
 ## Implementations stay `internal` behind `public` interfaces
 
 The canonical shape for anything bound through DI:

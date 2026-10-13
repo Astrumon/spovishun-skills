@@ -109,7 +109,6 @@ Unstable by default. Keep parameters primitive or `@Immutable`, and prefer `() -
 - DO give every interactive component the semantics that make it reachable to accessibility services;
   that is part of the contract, not a testing detail.
 - DON'T let a design system component depend on `feature/*` or on `domain`.
-- DON'T add a component "for later". Ship it when the second caller exists.
 - DON'T hardcode a duration, an easing curve, or an opacity where a token exists.
 
 ## Related rules
